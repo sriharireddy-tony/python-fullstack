@@ -1,0 +1,210 @@
+/*
+ * Application styling on top of Bootstrap 5.3.
+ *
+ * Only tokens that Bootstrap does not already provide are defined here, and
+ * everything theme-dependent uses CSS custom properties so light and dark stay
+ * in sync automatically rather than needing a parallel stylesheet.
+ */
+
+:root {
+  --os-sidebar-width: 232px;
+  --os-sidebar-width-collapsed: 60px;
+  --os-topnav-height: 56px;
+  --os-transition: 160ms ease;
+}
+
+/* Density: a class-free switch driven by the data attribute on <html>, so
+   tables react without every component knowing about the setting. */
+:root[data-density='compact'] {
+  --os-row-padding-y: 0.3rem;
+  --os-row-padding-x: 0.5rem;
+  --os-font-size: 0.8125rem;
+}
+:root[data-density='comfortable'] {
+  --os-row-padding-y: 0.6rem;
+  --os-row-padding-x: 0.75rem;
+  --os-font-size: 0.875rem;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-size: 0.9375rem;
+}
+
+/* ---------------------------------------------------------------- shell */
+
+.os-shell {
+  display: grid;
+  grid-template-columns: var(--os-sidebar-width) 1fr;
+  grid-template-rows: var(--os-topnav-height) 1fr;
+  grid-template-areas:
+    'sidebar topnav'
+    'sidebar main';
+  height: 100vh;
+  transition: grid-template-columns var(--os-transition);
+}
+
+.os-shell[data-collapsed='true'] {
+  grid-template-columns: var(--os-sidebar-width-collapsed) 1fr;
+}
+
+.os-topnav {
+  grid-area: topnav;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--bs-border-color);
+  background-color: var(--bs-body-bg);
+}
+
+.os-sidebar {
+  grid-area: sidebar;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--bs-border-color);
+  background-color: var(--bs-tertiary-bg);
+  overflow-x: hidden;
+}
+
+.os-main {
+  grid-area: main;
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+
+/* --------------------------------------------------------------- brand */
+
+.os-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: var(--os-topnav-height);
+  padding: 0 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--bs-emphasis-color);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.os-brand-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--bs-primary);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------------ nav */
+
+.os-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0.5rem;
+  overflow-y: auto;
+}
+
+.os-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.45rem 0.625rem;
+  border-radius: 6px;
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  transition: background-color var(--os-transition), color var(--os-transition);
+}
+
+.os-nav-link:hover {
+  background-color: var(--bs-secondary-bg);
+  color: var(--bs-emphasis-color);
+}
+
+.os-nav-link.active {
+  background-color: var(--bs-primary-bg-subtle);
+  color: var(--bs-primary-text-emphasis);
+  font-weight: 500;
+}
+
+.os-nav-link .os-nav-icon {
+  flex: 0 0 16px;
+  display: grid;
+  place-items: center;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.os-nav-separator {
+  height: 1px;
+  margin: 0.5rem 0.25rem;
+  background-color: var(--bs-border-color);
+}
+
+.os-shell[data-collapsed='true'] .os-nav-label,
+.os-shell[data-collapsed='true'] .os-brand-text {
+  display: none;
+}
+
+/* --------------------------------------------------------------- misc */
+
+.os-search {
+  max-width: 380px;
+  flex: 1;
+}
+
+.os-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.os-page-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.os-page-subtitle {
+  margin: 0.2rem 0 0;
+  color: var(--bs-secondary-color);
+  font-size: 0.875rem;
+}
+
+.os-state {
+  display: grid;
+  place-items: center;
+  gap: 0.75rem;
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--bs-secondary-color);
+}
+
+/* Tables respond to the density setting without per-component knowledge. */
+.os-table > :not(caption) > * > * {
+  padding: var(--os-row-padding-y) var(--os-row-padding-x);
+  font-size: var(--os-font-size);
+}
+
+/* Respect users who have asked the OS for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

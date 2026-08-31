@@ -1,0 +1,83 @@
+[project]
+name = "os-tracker-backend"
+version = "0.1.0"
+description = "OS Tracker - operational support ticket tracker (backend)"
+requires-python = ">=3.12"
+
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "redis>=5.2",
+    "python-json-logger>=2.0",
+    # Phase 1 (authentication) - declared now so the lockfile is stable
+    "pyjwt>=2.10",
+    "argon2-cffi>=23.1",
+    "email-validator>=2.2",
+    # Phase 5 (uploads)
+    "python-multipart>=0.0.17",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.28",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+# ---------------------------------------------------------------- ruff
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["app"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "C4",   # comprehensions
+    "SIM",  # simplify
+    "RUF",
+]
+ignore = [
+    "B008",  # function call in default arg - required by FastAPI's Depends()
+]
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/*" = ["E501"]
+
+# ---------------------------------------------------------------- mypy
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+strict = true
+warn_unreachable = true
+# SQLAlchemy models use declarative magic that strict mode cannot always follow
+[[tool.mypy.overrides]]
+module = ["alembic.*"]
+ignore_errors = true
+
+# ---------------------------------------------------------------- pytest
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
