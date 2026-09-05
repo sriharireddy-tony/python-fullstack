@@ -14,6 +14,8 @@ from app.modules.clients.router import router as clients_router
 from app.modules.comments.router import router as comments_router
 from app.modules.identity.router import router as auth_router
 from app.modules.identity.users_router import router as users_router
+from app.modules.intelligence.chat_router import router as chat_router
+from app.modules.intelligence.router import router as intelligence_router
 from app.modules.teams.router import router as teams_router
 from app.modules.tickets.router import router as tickets_router
 
@@ -24,6 +26,13 @@ api_router.include_router(users_router, prefix="/users", tags=["users"])
 api_router.include_router(teams_router, prefix="/teams", tags=["teams"])
 api_router.include_router(clients_router, prefix="/clients", tags=["clients"])
 api_router.include_router(tickets_router, prefix="/tickets", tags=["tickets"])
+
+# The AI layer owns URLs under /tickets without the tickets module knowing it
+# exists -- the dependency points intelligence -> tickets, never back.
+api_router.include_router(intelligence_router, prefix="/tickets", tags=["intelligence"])
+
+# The assistant is not scoped to a ticket, so it gets its own prefix.
+api_router.include_router(chat_router, prefix="/chat", tags=["chat"])
 
 # Comments and attachments declare full paths of their own, because they hang
 # off both /tickets/{id}/... and /comments/{id}/... and a single prefix cannot

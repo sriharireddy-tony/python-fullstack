@@ -13,10 +13,12 @@ import {
 } from '@/api/hooks/useTickets'
 import { PriorityBadge, RelativeTime, StatusBadge, formatBytes, statusLabel } from '@/components/badges'
 import { EmptyState, ErrorState, LoadingState } from '@/components/states'
+import { AnalysisPanel } from '@/features/intelligence/components/AnalysisPanel'
+import { SimilarIssuesCard } from '@/features/intelligence/components/SimilarIssuesCard'
 import { TicketActions } from './TicketActions'
 import type { TicketDetail } from '@/api/types'
 
-type Tab = 'details' | 'conversation' | 'attachments' | 'history'
+type Tab = 'details' | 'conversation' | 'attachments' | 'history' | 'analysis'
 
 export function TicketDetailPage() {
   const { ticketRef } = useParams<{ ticketRef: string }>()
@@ -72,6 +74,9 @@ export function TicketDetailPage() {
                 <Nav.Item>
                   <Nav.Link eventKey="history">History</Nav.Link>
                 </Nav.Item>
+                <Nav.Item>
+                  <Nav.Link eventKey="analysis">Analysis</Nav.Link>
+                </Nav.Item>
               </Nav>
             </Card.Header>
 
@@ -80,6 +85,7 @@ export function TicketDetailPage() {
               {tab === 'conversation' && <ConversationTab ticket={ticket} />}
               {tab === 'attachments' && <AttachmentsTab ticket={ticket} />}
               {tab === 'history' && <HistoryTab ticketId={ticket.id} />}
+              {tab === 'analysis' && <AnalysisPanel reference={ticket.reference} />}
             </Card.Body>
           </Card>
         </Col>
@@ -137,6 +143,11 @@ export function TicketDetailPage() {
               )}
             </Card.Body>
           </Card>
+
+          {/* Below the ticket's own facts, not above them: this is a hint, and
+              a hint that outranks the record it annotates gets mistaken for
+              the record. */}
+          <SimilarIssuesCard reference={ticket.reference} />
         </Col>
       </Row>
     </>

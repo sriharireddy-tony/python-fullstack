@@ -33,6 +33,18 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     configure_logging()
     settings.assert_production_ready()
 
+    # Registered here rather than at import time so tests can control it, and
+    # so the AI layer stays genuinely optional: with AI_ENABLED false the
+    # handlers are registered but return immediately.
+    if settings.AI_ENABLED:
+        from app.modules.intelligence.subscribers import register as register_ai
+        from app.modules.intelligence.tracing import configure_tracing
+
+        register_ai()
+        # Must run before the first LangChain object is constructed, which is
+        # why it is here rather than lazily on first use.
+        configure_tracing()
+
     # Report dependency health at startup rather than failing to boot. A
     # database that is briefly unavailable should not prevent the process from
     # starting and then recovering -- readiness reports the real state.

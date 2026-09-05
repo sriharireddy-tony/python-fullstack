@@ -3,6 +3,7 @@ import { AppShell } from '@/layout/AppShell'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { ProfilePage } from '@/features/profile/ProfilePage'
+import { ChatPage } from '@/features/intelligence/pages/ChatPage'
 import { TicketListPage } from '@/features/tickets/TicketListPage'
 import { TicketDetailPage } from '@/features/tickets/TicketDetailPage'
 import { CreateTicketPage } from '@/features/tickets/CreateTicketPage'
@@ -78,6 +79,14 @@ export const router = createBrowserRouter([
               },
               { path: ':ticketRef', element: <TicketDetailPage /> },
             ],
+          },
+
+          {
+            // Only TICKET_READ: the assistant has no write tools, so it cannot
+            // do anything a viewer could not do by hand.
+            path: 'assistant',
+            element: <RequirePermission permission={Permission.TICKET_READ} />,
+            children: [{ index: true, element: <ChatPage /> }],
           },
 
           {

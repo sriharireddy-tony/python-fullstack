@@ -9,6 +9,7 @@ Create Date: 2026-08-31
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
 import sqlalchemy as sa
 from alembic import op
@@ -96,9 +97,20 @@ def upgrade() -> None:
     ):
         enum_type.create(bind, checkfirst=True)
 
-    ts = lambda: sa.Column(  # noqa: E731
-        "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
-    )
+    def ts() -> sa.Column[Any]:
+        """A fresh `created_at` column object.
+
+        A function rather than a shared instance: a `Column` binds to the first
+        table it is added to, so reusing one object across `create_table` calls
+        silently attaches the column to only one of them. It returns a new one
+        each call for the same reason SQLAlchemy makes columns stateful.
+        """
+        return sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        )
 
     # ------------------------------------------------------------ clients
     op.create_table(

@@ -30,9 +30,47 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+#: Schemas Alembic must not touch.
+#:
+#: LangGraph's `AsyncPostgresSaver` creates and owns its own tables through its
+#: own migration mechanism. Alembic's autogenerate does not know about them, so
+#: it sees unknown tables and proposes to **drop** them -- and the failure mode
+#: is a migration that silently deletes every saved conversation.
+#:
+#: Giving the checkpointer its own schema and excluding that schema is the
+#: whole fix, and it is a two-line fix for a data-loss bug, which is a good
+#: trade. This was documented before it was implemented; the doc was checked
+#: against the code and the code was missing it.
+FOREIGN_SCHEMAS = {"langgraph"}
+
+#: Tables Alembic owns the existence of but not the content.
+UNMANAGED_TABLES = {"alembic_version"}
+
+
 def include_object(obj, name, type_, reflected, compare_to):  # type: ignore[no-untyped-def]
-    """Keep autogenerate focused on our own schema."""
-    return not (type_ == "table" and name in {"alembic_version"})
+    """Keep autogenerate focused on our own schema.
+
+    Excludes by *schema* as well as by name, because a table-name filter would
+    have to enumerate every table another tool creates -- and would then be
+    wrong the next time that tool adds one.
+    """
+    schema = getattr(obj, "schema", None)
+    if schema in FOREIGN_SCHEMAS:
+        return False
+    return not (type_ == "table" and name in UNMANAGED_TABLES)
+
+
+def include_name(name, type_, parent_names):  # type: ignore[no-untyped-def]
+    """Filter at the schema level, before reflection.
+
+    Needed as well as `include_object`: with `include_schemas` enabled Alembic
+    reflects each schema before objects are filtered, so excluding only objects
+    still pays the reflection cost and can still surface diffs. This stops the
+    checkpointer's schema being read at all.
+    """
+    if type_ == "schema":
+        return name not in FOREIGN_SCHEMAS
+    return True
 
 
 def run_migrations_offline() -> None:
@@ -44,6 +82,7 @@ def run_migrations_offline() -> None:
         compare_type=True,
         compare_server_default=True,
         include_object=include_object,
+        include_name=include_name,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -56,6 +95,7 @@ def do_run_migrations(connection: Connection) -> None:
         compare_type=True,
         compare_server_default=True,
         include_object=include_object,
+        include_name=include_name,
     )
     with context.begin_transaction():
         context.run_migrations()

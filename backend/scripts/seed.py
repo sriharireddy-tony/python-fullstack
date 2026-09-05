@@ -167,10 +167,13 @@ async def seed() -> None:
 
         clients: dict[str, uuid.UUID] = {}
         for name, code, tier in CLIENTS:
-            existing = (
+            # A distinct name per entity type, rather than rebinding one
+            # `existing`: reusing it made the checker infer `Team | None` for
+            # a `Client`, which is the sort of thing that stays wrong quietly.
+            existing_client = (
                 await db.execute(select(Client).where(Client.code == code))
             ).scalar_one_or_none()
-            if existing is None:
+            if existing_client is None:
                 client = Client(
                     tenant_id=tenant_id, name=name, code=code, tier=tier, is_active=True
                 )
@@ -179,15 +182,15 @@ async def seed() -> None:
                 clients[name] = client.id
                 print(f"created  client          {name}")
             else:
-                clients[name] = existing.id
+                clients[name] = existing_client.id
 
         users: dict[str, uuid.UUID] = {}
         for email, full_name, role, team_name in USERS:
-            existing = (
+            existing_user = (
                 await db.execute(select(User).where(User.email == email))
             ).scalar_one_or_none()
-            if existing is not None:
-                users[email] = existing.id
+            if existing_user is not None:
+                users[email] = existing_user.id
                 continue
 
             user = User(

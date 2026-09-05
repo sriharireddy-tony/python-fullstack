@@ -31,10 +31,17 @@ async def live() -> dict[str, str]:
 
 @router.get("/health/ready", summary="Readiness probe")
 async def ready(response: Response) -> dict[str, Any]:
-    checks = {
+    checks: dict[str, Any] = {
         "database": await check_database(),
         "redis": await check_redis(),
     }
+
+    # Reported but never fatal: no AI call sits on a write path, so Ollama or
+    # Chroma being down degrades an AI feature rather than the service.
+    if settings.AI_ENABLED:
+        from app.modules.intelligence.deps import ai_health
+
+        checks.update(await ai_health())
 
     # Redis degradation is not fatal: caches fail open and fall through to
     # Postgres. Without a database there is nothing to serve.

@@ -64,6 +64,144 @@ class Settings(BaseSettings):
     # validation, so a plain comma-separated list works in .env as well as JSON.
     CORS_ORIGINS: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
 
+    # --- AI layer ------------------------------------------------------
+    # Every AI capability is individually switchable. If one turns out weak in
+    # practice it can be disabled without losing the others.
+    AI_ENABLED: bool = True
+    AI_SIMILARITY_ENABLED: bool = True
+    AI_RERANK_ENABLED: bool = False  # opt-in: costs an LLM call per query
+    AI_ANALYSIS_ENABLED: bool = True
+    AI_CHAT_ENABLED: bool = True
+
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_EMBED_MODEL: str = "qwen3-embedding"
+    OLLAMA_CHAT_MODEL: str = "qwen3:8b"
+    #: Let the local reasoning model emit chain-of-thought before answering.
+    #: Off by default: it costs ~20x the output tokens for text that is
+    #: discarded, because the answer is schema-constrained anyway. See
+    #: `adapters/ollama_chat.py`.
+    OLLAMA_THINKING: bool = False
+
+    #: Qwen3-Embedding is asymmetric: queries carry a task instruction,
+    #: documents do not. Both strings are part of the embedding identity and go
+    #: into source_hash, so changing either forces a re-embed rather than
+    #: leaving a corpus half in each convention.
+    EMBED_QUERY_INSTRUCTION: str = (
+        "Instruct: Given a software bug report, retrieve other bug reports "
+        "describing the same underlying problem\nQuery: "
+    )
+    EMBED_DOCUMENT_INSTRUCTION: str = ""
+    EMBED_INSTRUCTION_VERSION: str = "v1"
+    EMBED_BATCH_SIZE: int = 16
+    EMBED_TITLE_MAX: int = 300
+    EMBED_DESCRIPTION_MAX: int = 2000
+    EMBED_STEPS_MAX: int = 1000
+
+    CHROMA_HOST: str = "localhost"
+    CHROMA_PORT: int = 8001
+
+    #: Over-fetch then truncate. Cheap insurance against a selective filter
+    #: leaving too few results after post-filtering.
+    RETRIEVAL_SEMANTIC_LIMIT: int = 50
+    RETRIEVAL_LEXICAL_LIMIT: int = 50
+    RETRIEVAL_CANDIDATES: int = 20
+    RRF_K: int = 60
+    #: How two rankings become one: "cascade", "weighted_rrf", or "rrf".
+    #: Cascade ships because RRF was measured and lost -- `domain/fusion.py`
+    #: carries the numbers and the derivation.
+    FUSION_MODE: str = "cascade"
+    RRF_SECONDARY_WEIGHT: float = 0.5
+    #: Look literal identifiers up exactly and pin the unique matches.
+    #: Measured to take the identifier query family from 0.417 recall to 1.000.
+    EXACT_IDENTIFIER_PROBE: bool = True
+    #: Below this fused score a candidate is not worth showing. A floor tuned to
+    #: "always return something" is how this feature loses trust.
+    SIMILARITY_FLOOR: float = 0.012
+    RERANK_CONFIDENCE_FLOOR: float = 0.55
+    #: Per-candidate description budget in the rerank prompt. Twenty candidates
+    #: times an unbounded description overflows the context window, and the
+    #: symptom is a model that appears to ignore half its input.
+    RERANK_DESCRIPTION_MAX: int = 600
+    #: Per-user rate limit on the similar-issues endpoint. Generous, because a
+    #: cached page refresh should not hit it; the model quota is the real
+    #: backstop.
+    AI_RATE_LIMIT_PER_MINUTE: int = 20
+    #: Analysis runs per user per hour. Much tighter than the similarity
+    #: limit, because each run is several LLM calls rather than one cached
+    #: lookup -- and on a 500-a-day quota, twenty runs is a meaningful
+    #: fraction of the day's budget.
+    AI_ANALYSIS_LIMIT_PER_HOUR: int = 10
+    #: Chat turns per user per hour. Between the two other limits: a turn is
+    #: one or two model calls, so more generous than an analysis run and
+    #: tighter than a cached similarity lookup.
+    AI_CHAT_LIMIT_PER_HOUR: int = 60
+    #: Monthly hosted-model spend allowed per tenant, in the same units as
+    #: `ai_usage.estimated_cost`. Zero disables the cap.
+    #:
+    #: Independent of the per-model daily limits, which cap a model across the
+    #: whole installation. Without a per-tenant cap, one busy workspace can
+    #: consume the entire day's quota and every other tenant silently gets the
+    #: degraded path. Over the cap, a tenant keeps the feature on the local
+    #: model rather than losing it.
+    AI_TENANT_MONTHLY_COST_CAP: float = 5.0
+    #: How long a similar-issues result is cached. The key already carries the
+    #: ticket's version, so an edit invalidates it immediately -- this TTL is
+    #: only there to bound how long a result computed against an *older corpus*
+    #: survives, since a newly filed duplicate should not stay invisible.
+    AI_CACHE_TTL_SECONDS: int = 900
+    MAX_QUERY_REWRITES: int = 2
+
+    GOOGLE_API_KEY: str = ""
+    #: Model names verified against the live API, not assumed. `gemini-2.5-flash`
+    #: and `gemini-2.5-flash-lite` both return 404 "no longer available to new
+    #: users" on a key issued now -- which is exactly why the model registry
+    #: exists: correcting this was a two-line configuration change rather than
+    #: a hunt through call sites.
+    #:
+    #: Measured on the rerank prompt: `gemini-3.5-flash` ~9s, the lite models
+    #: ~1s. Both inside the 25s interactive deadline, and both far ahead of the
+    #: local 8B model's ~20s.
+    #:
+    #: `gemini-3.5-flash` is *not* the strong model here, despite being the
+    #: stronger model. Its free-tier quota exhausted within a day of use
+    #: (429 RESOURCE_EXHAUSTED), while the lite tier kept answering -- so on
+    #: this plan the nominally weaker model is the one that is actually
+    #: available, and an unavailable model is not a better model. Swap this
+    #: back on a paid plan.
+    GEMINI_MODEL_STRONG: str = "gemini-3.5-flash-lite"
+    GEMINI_MODEL_CHEAP: str = "gemini-flash-lite-latest"
+    #: Falls back to the local Ollama model when the hosted quota is gone, so
+    #: development is never blocked. Never applied to the evaluator role.
+    AI_LOCAL_FALLBACK: bool = True
+
+    AGENT_MAX_TURNS: int = 8
+    AGENT_TIMEOUT_SECONDS: int = 300
+    AGENT_MAX_TOOL_CALLS: int = 24
+    #: Cost ceiling for one analysis run, in the same units as `ai_usage`.
+    #: Catches the failure the turn cap and the clock both miss: a loop that is
+    #: cheap per turn and long.
+    AGENT_MAX_COST: float = 0.05
+
+    #: One call, one ceiling. A local 8B model on CPU is genuinely slow, so this
+    #: is generous -- but unbounded would let one request hold a worker forever.
+    LLM_TIMEOUT_SECONDS: int = 120
+    #: Deadline for the reranker, which runs while someone waits for a page.
+    #: A hosted model answers in 2-4s; a local 8B model takes 60-90s, so this
+    #: cuts it off and the panel falls back to the fused order. Measured, not
+    #: guessed -- see `registry.py`.
+    RERANK_TIMEOUT_SECONDS: int = 25
+    #: The rewrite happens before the rerank on the same request, so its
+    #: deadline has to leave room for one.
+    REWRITE_TIMEOUT_SECONDS: int = 12
+    #: LangSmith. Off unless a key is set -- a trace carries prompt text, so
+    #: sending it to a third party is a deliberate decision, not a default.
+    LANGSMITH_API_KEY: str = ""
+    LANGSMITH_PROJECT: str = "os-tracker"
+    LANGSMITH_ENDPOINT: str = ""
+
+    LLM_CACHE_PATH: str = "./var/llm_cache.db"
+    CHAT_RETENTION_DAYS: int = 30
+
     # --- logging -------------------------------------------------------
     LOG_LEVEL: LogLevel = "INFO"
     LOG_JSON: bool = True

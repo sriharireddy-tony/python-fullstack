@@ -27,9 +27,11 @@ from app.modules.clients.models import Client
 from app.modules.identity.models import User
 from app.modules.teams.models import Team
 from app.modules.tenancy.models import Tenant, TenantCounter
-from sqlalchemy import select, text
+from app.modules.tickets.models import Ticket
+from sqlalchemy import delete, or_, select, text
 
 PASSWORD = "ChangeMe123!dev"
+TENANT_CODE = "keka"
 OTHER_TENANT_CODE = "othercorp"
 OTHER_USER_EMAIL = "admin@othercorp.local"
 
@@ -129,6 +131,36 @@ async def ensure_second_tenant() -> None:
         ).scalar_one_or_none()
         if client is None:
             db.add(Client(tenant_id=tenant_id, name="Other Client", code="OTHC", is_active=True))
+
+
+#: Titles this script creates. Hard-deleted at the end so the run leaves the
+#: database as it found it.
+PROBE_TITLE_PREFIXES = (
+    "Payslip PDF is blank for contractors",
+    "Concurrency probe",
+    "Idempotency probe",
+)
+
+
+async def drop_probe_tickets() -> int:
+    """Hard-delete the tickets this script created.
+
+    A hard delete, not the soft delete the API performs: a soft-deleted ticket
+    still counts towards the row totals other scripts assert on.
+    """
+    async with session_scope(tenant_id=None) as db:
+        tenant_id = await db.scalar(select(Tenant.id).where(Tenant.code == TENANT_CODE))
+    if tenant_id is None:
+        return 0
+
+    async with session_scope(tenant_id=tenant_id) as db:
+        conditions = [Ticket.title.startswith(prefix) for prefix in PROBE_TITLE_PREFIXES]
+        rows = await db.execute(select(Ticket.id).where(or_(*conditions)))
+        ids = list(rows.scalars().all())
+        if not ids:
+            return 0
+        await db.execute(delete(Ticket).where(Ticket.id.in_(ids)))
+    return len(ids)
 
 
 async def main() -> None:
@@ -418,6 +450,18 @@ async def main() -> None:
         (await logout_session.get("/api/v1/auth/me")).status_code == 401,
         "after logout the access token is denied immediately",
     )
+
+    # ================================================== cleanup
+    #
+    # The tickets this script creates have to go. They are not merely clutter:
+    # the AI layer asserts that every live ticket has an embedding, and tickets
+    # created here are never embedded, so leaving them behind makes
+    # `verify_ai.py` fail for a reason that has nothing to do with the AI
+    # layer. That is exactly what happened — fourteen orphans across two runs,
+    # and the invariant check pointed at the wrong thing.
+    print("\n=== cleanup ===")
+    removed = await drop_probe_tickets()
+    check(removed >= 0, f"removed {removed} probe ticket(s) created by this run")
 
     # ================================================== summary
     print("\n" + "=" * 66)

@@ -40,6 +40,9 @@ export const NAV_ITEMS: NavItem[] = [
     badgeKey: 'awaitingClosure',
   },
   { label: 'All Tickets', path: '/tickets', icon: 'list', permission: Permission.TICKET_READ },
+  // Reading tickets is the only permission it needs: the assistant has no
+  // write tools, so it can never do anything the viewer could not do by hand.
+  { label: 'Assistant', path: '/assistant', icon: 'chat', permission: Permission.TICKET_READ },
 
   {
     label: 'Clients',

@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import Cache, CacheKey
 from app.core.errors import NotFoundError, ValidationFailedError, VersionConflictError
+from app.core.events import DomainEvent, emit
 from app.core.logging import get_logger
 from app.core.pagination import Page, PageParams
 from app.modules.audit.models import AuditAction
@@ -182,6 +183,16 @@ class TicketService:
         )
         await self._invalidate_dashboards()
 
+        # Emitted rather than calling the AI layer directly: tickets must not
+        # depend on intelligence. The handler writes its outbox row in THIS
+        # transaction, so the job and the ticket commit together.
+        await emit(
+            DomainEvent.TICKET_CREATED,
+            self._session,
+            self._tenant_id,
+            ticket.id,
+        )
+
         logger.info(
             "ticket created",
             extra={
@@ -235,6 +246,16 @@ class TicketService:
             after=after,
             ip_address=(meta or RequestMeta()).ip_address,
         )
+
+        # Only re-embed when embedded fields changed. source_hash would skip a
+        # no-op anyway, but not enqueueing avoids the pointless job entirely.
+        if any(field in after for field in ("title", "description", "steps_to_reproduce")):
+            await emit(
+                DomainEvent.TICKET_CONTENT_CHANGED,
+                self._session,
+                self._tenant_id,
+                ticket.id,
+            )
         return ticket
 
     # ----------------------------------------------------------- actions

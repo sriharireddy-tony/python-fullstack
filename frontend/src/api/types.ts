@@ -189,3 +189,140 @@ export interface TicketFilters {
   page?: number
   page_size?: number
 }
+
+// ---------------------------------------------------------------- AI layer
+
+/** Which search found a result. Shown to the reader, not just logged. */
+export type RetrievalSource = 'semantic' | 'lexical' | 'reference'
+
+/** The reranker's verdict on a candidate. Null when no model ran. */
+export type Relation = 'duplicate' | 'related' | 'recurring' | 'unrelated'
+
+export interface SimilarTicket {
+  ticket_id: string
+  reference: string
+  title: string
+  status: string
+  priority: string
+  team_id: string
+  client_id: string
+  created_at: string
+  closed_at: string | null
+  /** First part of the resolution notes, when the ticket was closed. */
+  resolution_summary: string | null
+  /** Fused rank score. Comparable within one response only. */
+  score: number
+  sources: RetrievalSource[]
+  /** True when more than one search returned it — the strongest cheap signal. */
+  agreed: boolean
+
+  /** Set when this result was judged and stored, so it can be accepted or rejected. */
+  suggestion_id: string | null
+  /** Null when no model ran: the result is a search hit, not a claim. */
+  relation: Relation | null
+  confidence: number | null
+  reason: string | null
+}
+
+export interface SimilarTicketsResponse {
+  ticket_id: string
+  results: SimilarTicket[]
+  total_candidates: number
+  /** Ticket numbers named explicitly in the text, e.g. from "same as OS-142". */
+  references: number[]
+  /** Which retrieval nodes ran and what each returned. Diagnostics. */
+  trace: string[]
+  /** True when one retriever was unavailable and results came from the other. */
+  degraded: boolean
+  /** Non-empty only when an input guardrail refused the request. */
+  blocked_reason: string
+  /** How retrieval was graded: good, weak, or empty. */
+  grade: string
+  /** How many corrective rewrite cycles ran. */
+  rewrites: number
+  /** Which model judged these. Null means retrieval only, no LLM involved. */
+  rerank_model: string | null
+  from_cache: boolean
+}
+
+export interface SuggestionDecisionResult {
+  id: string
+  ticket_id: string
+  related_ticket_id: string | null
+  relation: Relation | null
+  confidence: number | null
+  reason: string | null
+  model: string | null
+  status: 'pending' | 'accepted' | 'rejected' | 'expired'
+  decided_at: string | null
+}
+
+export interface AnalysisStep {
+  turn: number
+  tool_name: string | null
+  tool_args: Record<string, unknown> | null
+  result_summary: string | null
+  created_at: string
+}
+
+export interface AnalysisReport {
+  summary: string
+  likely_area: string
+  is_recurring: boolean
+  related_references: string[]
+  suggested_next_steps: string[]
+  confidence: number
+}
+
+export type AnalysisStatus =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'budget_exceeded'
+  | 'timed_out'
+
+export interface AnalysisRun {
+  id: string
+  ticket_id: string
+  status: AnalysisStatus
+  /** Null while queued or running. */
+  report: AnalysisReport | null
+  /** True when a limit stopped the run; the report is what it had by then. */
+  partial: boolean
+  stop_reason: string | null
+  model: string | null
+  /** True when a weaker fallback model produced this. */
+  used_fallback_model: boolean
+  turns: number
+  tool_calls: number
+  estimated_cost: number
+  latency_ms: number | null
+  helpful: boolean | null
+  steps: AnalysisStep[]
+  trace: string[]
+}
+
+export interface Conversation {
+  id: string
+  title: string | null
+  message_count: number
+  created_at: string
+  last_message_at: string | null
+  expires_at: string
+}
+
+export interface ChatTurn {
+  answer: string
+  model: string | null
+  tool_calls: number
+  trace: string[]
+  blocked_reason: string
+  /** False when the checkpointer is unavailable and the thread forgets on restart. */
+  persistent: boolean
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}

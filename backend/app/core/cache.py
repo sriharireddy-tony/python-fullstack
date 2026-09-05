@@ -93,6 +93,18 @@ class CacheKey:
         return cls.tenant(tenant_id, namespace, "*")
 
     @classmethod
+    def similar_tickets(cls, tenant_id: uuid.UUID, ticket_id: uuid.UUID, version: int) -> str:
+        """Cache key for a ticket's similar-issue results.
+
+        Keyed by the ticket's **version**, not by time. The optimistic-locking
+        counter already increments on every content change, so an edited ticket
+        gets a new key automatically and a stale suggestion can never be
+        served. A TTL alone would leave a window where the panel describes text
+        that no longer exists.
+        """
+        return cls.tenant(tenant_id, "ai", "similar", str(ticket_id), f"v{version}")
+
+    @classmethod
     def idempotency(cls, key: str) -> str:
         return cls.global_("idem", key)
 

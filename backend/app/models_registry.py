@@ -15,15 +15,32 @@ from app.modules.audit.models import AuditLog
 from app.modules.clients.models import Client
 from app.modules.comments.models import Comment
 from app.modules.identity.models import RefreshToken, User, UserTeam
+from app.modules.intelligence.models import (
+    AiAnalysisRun,
+    AiAnalysisStep,
+    AiEvalPair,
+    AiJob,
+    AiSuggestion,
+    AiUsage,
+    Conversation,
+    TicketVectorState,
+)
 from app.modules.teams.models import Team
 from app.modules.tenancy.models import PlatformAdmin, Tenant, TenantCounter
 from app.modules.tickets.models import Ticket, TicketStatusHistory
 
 __all__ = [
+    "AiAnalysisRun",
+    "AiAnalysisStep",
+    "AiEvalPair",
+    "AiJob",
+    "AiSuggestion",
+    "AiUsage",
     "Attachment",
     "AuditLog",
     "Client",
     "Comment",
+    "Conversation",
     "PlatformAdmin",
     "RefreshToken",
     "Team",
@@ -31,6 +48,7 @@ __all__ = [
     "TenantCounter",
     "Ticket",
     "TicketStatusHistory",
+    "TicketVectorState",
     "User",
     "UserTeam",
 ]
@@ -43,6 +61,12 @@ __all__ = [
 #: the quality gates.
 TENANT_SCOPED_TABLES: frozenset[str] = frozenset(
     {
+        "ticket_vector_state",
+        "ai_suggestions",
+        "ai_analysis_runs",
+        "ai_analysis_steps",
+        "ai_eval_pairs",
+        "ai_conversations",
         "users",
         "teams",
         "clients",
@@ -71,6 +95,12 @@ UNSCOPED_TABLES: frozenset[str] = frozenset(
         "refresh_tokens",
         "user_teams",
         "audit_logs",
+        # ai_jobs: the worker runs with no tenant context and reads the scope
+        # FROM the row, so RLS would make it unclaimable.
+        "ai_jobs",
+        # ai_usage: tenant_id is nullable for platform-level calls; scoped in
+        # the query layer instead.
+        "ai_usage",
         "alembic_version",
     }
 )

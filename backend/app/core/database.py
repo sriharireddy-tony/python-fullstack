@@ -93,6 +93,37 @@ async def apply_tenant_scope(session: AsyncSession, tenant_id: uuid.UUID | None)
     )
 
 
+async def commit_preserving_scope(session: AsyncSession, tenant_id: uuid.UUID | None) -> None:
+    """Commit, then restore the RLS tenant scope.
+
+    ## Why this function has to exist
+
+    `set_config(..., true)` is the third argument being `is_local` -- the
+    setting lives for the **transaction**, not the session. So a commit ends
+    the transaction and the tenant scope reverts to unset, and because the RLS
+    policies read `current_setting(..., true)` an unset scope matches *no
+    rows*.
+
+    Almost nothing in this codebase notices, because the rule is that services
+    never commit: a request runs in one transaction and `session_scope` sets
+    the scope once at the start. The agent breaks that rule for a good reason
+    -- it commits each step so the polling endpoint can show progress while the
+    run is still going -- and the failure was spectacular in a quiet way:
+
+    * the step INSERT was rejected with "new row violates row-level security
+      policy", because `tenant_id` no longer matched the (now unset) scope;
+    * and before that, the agent's own tools returned "ticket not found" for a
+      ticket that plainly exists, because every SELECT was being filtered to
+      nothing.
+
+    Two different symptoms, one cause, and neither points at the commit. Hence
+    a named function: anywhere that legitimately commits mid-flow calls this
+    instead of `session.commit()`, and the reason travels with it.
+    """
+    await session.commit()
+    await apply_tenant_scope(session, tenant_id)
+
+
 async def get_db() -> AsyncIterator[AsyncSession]:
     """FastAPI dependency yielding a request-scoped session.
 

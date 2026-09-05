@@ -25,6 +25,7 @@ to stay useful as a reference while the application is built.
 | 09 | [Logging & Caching](09-logging-and-caching.md) | Structured logging, redaction, Redis usage and boundaries |
 | 10 | [Roadmap](10-roadmap.md) | Delivery phases, scope per phase, definition of done |
 | 11 | [Decisions & Risks](11-decisions-and-risks.md) | Decision log with alternatives, accepted risks, parked work |
+| — | [**Agentic AI**](agentic-ai/README.md) | The AI layer: RAG, LangGraph, agent, chatbot, guardrails, evaluation |
 
 ---
 
