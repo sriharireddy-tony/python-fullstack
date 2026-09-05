@@ -22,7 +22,7 @@ from __future__ import annotations
 import asyncio
 
 from app.core.logging import configure_logging, get_logger
-from app.modules.intelligence.checkpointer import (
+from app.modules.intelligence.pipelines.checkpointer import (
     CHECKPOINT_SCHEMA,
     CHECKPOINT_TABLES,
     psycopg_url,

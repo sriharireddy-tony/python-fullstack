@@ -9,7 +9,6 @@ internals free to change.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -19,19 +18,21 @@ from app.core.cache import Cache, CacheKey
 from app.core.config import settings
 from app.core.errors import NotFoundError
 from app.core.logging import get_logger
+from app.modules.intelligence.cache import from_cache, to_cache
 from app.modules.intelligence.deps import AiDeps, build_retrieval_deps
-from app.modules.intelligence.domain.query import build_query_text
-from app.modules.intelligence.domain.types import (
+from app.modules.intelligence.llm.registry import ModelRegistry
+from app.modules.intelligence.models import AiSuggestion, Relation
+from app.modules.intelligence.pipelines.similarity import run_similarity
+from app.modules.intelligence.pipelines.state import SimilarityState
+from app.modules.intelligence.query.parsing import build_query_text
+from app.modules.intelligence.repository import SuggestionRepository
+from app.modules.intelligence.schemas.types import (
     FusedCandidate,
     FusionMode,
     RetrievalSource,
+    SimilarityResult,
     SimilarTicket,
 )
-from app.modules.intelligence.graphs.similarity import run_similarity
-from app.modules.intelligence.graphs.state import SimilarityState
-from app.modules.intelligence.models import AiSuggestion, Relation
-from app.modules.intelligence.registry import ModelRegistry
-from app.modules.intelligence.repository import SuggestionRepository
 from app.modules.tickets.models import Ticket
 
 logger = get_logger(__name__)
@@ -47,55 +48,6 @@ ALL_SOURCES = frozenset({RetrievalSource.SEMANTIC, RetrievalSource.LEXICAL})
 #: Placeholder for a candidate the reranker did not judge, so the lookup
 #: below has one shape rather than a None check at three call sites.
 _NO_VERDICT: tuple[Relation | None, float | None, str | None] = (None, None, None)
-
-
-class SimilarityResult:
-    """What ``similar_tickets`` returns.
-
-    A small class rather than a tuple so the diagnostics travel with the
-    results and cannot be dropped by a caller that only wanted the list.
-    """
-
-    __slots__ = (
-        "blocked_reason",
-        "degraded",
-        "estimated_cost",
-        "from_cache",
-        "grade",
-        "references",
-        "rerank_model",
-        "results",
-        "rewrites",
-        "total_candidates",
-        "trace",
-    )
-
-    def __init__(
-        self,
-        results: list[SimilarTicket],
-        total_candidates: int,
-        references: tuple[int, ...],
-        trace: list[str],
-        degraded: bool,
-        *,
-        grade: str = "",
-        rewrites: int = 0,
-        rerank_model: str | None = None,
-        estimated_cost: float = 0.0,
-        blocked_reason: str = "",
-        from_cache: bool = False,
-    ) -> None:
-        self.results = results
-        self.total_candidates = total_candidates
-        self.references = references
-        self.trace = trace
-        self.degraded = degraded
-        self.grade = grade
-        self.rewrites = rewrites
-        self.rerank_model = rerank_model
-        self.estimated_cost = estimated_cost
-        self.blocked_reason = blocked_reason
-        self.from_cache = from_cache
 
 
 class IntelligenceService:
@@ -146,7 +98,7 @@ class IntelligenceService:
         if self._cache is not None and not force_refresh:
             cached = await self._cache.get_json(cache_key)
             if cached is not None:
-                return self._from_cache(cached, limit)
+                return from_cache(cached, limit)
 
         rerank = settings.AI_RERANK_ENABLED if with_rerank is None else with_rerank
         deps = build_retrieval_deps(
@@ -178,7 +130,9 @@ class IntelligenceService:
         catalogue = final.get("catalogue", {})
 
         ordered = _apply_judgements(candidates, judgements, catalogue)
-        hydrated = await self._hydrate(ordered[:limit], judgements, catalogue)
+        hydrated = await self._hydrate(
+            ordered[:limit], judgements, catalogue, final.get("vector_scores")
+        )
 
         result = SimilarityResult(
             results=hydrated,
@@ -204,7 +158,7 @@ class IntelligenceService:
 
         if self._cache is not None:
             await self._cache.set_json(
-                cache_key, self._to_cache(result), ttl_seconds=settings.AI_CACHE_TTL_SECONDS
+                cache_key, to_cache(result), ttl_seconds=settings.AI_CACHE_TTL_SECONDS
             )
         return result
 
@@ -246,7 +200,9 @@ class IntelligenceService:
         catalogue = final.get("catalogue", {})
         ordered = _apply_judgements(candidates, judgements, catalogue)
         return SimilarityResult(
-            results=await self._hydrate(ordered[:limit], judgements, catalogue),
+            results=await self._hydrate(
+                ordered[:limit], judgements, catalogue, final.get("vector_scores")
+            ),
             total_candidates=len(candidates),
             references=final.get("references", ()),
             trace=final.get("trace", []),
@@ -303,11 +259,12 @@ class IntelligenceService:
         candidates: list[FusedCandidate],
         judgements: list[Any],
         catalogue: dict[uuid.UUID, dict[str, Any]],
+        vector_scores: dict[uuid.UUID, float] | None = None,
     ) -> list[SimilarTicket]:
         """Load the display fields from Postgres, preserving fused order.
 
         Ticket text is read from Postgres and never from vector-store
-        metadata. Chroma holds ids, vectors, and filter metadata only, so
+        metadata. Pinecone holds ids, vectors, and filter metadata only, so
         sensitive content lives in exactly one place — one store to secure,
         back up, and satisfy a deletion request against.
         """
@@ -328,7 +285,7 @@ class IntelligenceService:
         for candidate in candidates:
             ticket = by_id.get(candidate.ticket_id)
             if ticket is None:
-                # In Chroma but not in Postgres: a ticket deleted since the
+                # In Pinecone but not in Postgres: a ticket deleted since the
                 # last reconcile. Skipped rather than surfaced as a broken row,
                 # and logged because a growing count means the reconciler is
                 # not running.
@@ -350,6 +307,10 @@ class IntelligenceService:
                     closed_at=ticket.closed_at,
                     resolution_summary=_summarise(ticket.resolution_notes),
                     score=candidate.score,
+                    # None, not 0.0, when only keyword search found it. There is
+                    # no vector comparison to report, and a zero would read as
+                    # "the meanings are unrelated" rather than "not measured".
+                    similarity=(vector_scores or {}).get(candidate.ticket_id),
                     ranks=candidate.ranks,
                     agreed=candidate.agreed,
                     relation=verdicts.get(ticket.reference, _NO_VERDICT)[0],
@@ -386,6 +347,13 @@ class IntelligenceService:
                     "reason": item.reason,
                     "payload": {
                         "score": item.score,
+                        # The similarity that produced this suggestion, kept so
+                        # accepted/rejected pairs can later be analysed against
+                        # the score that generated them. In `payload` because
+                        # the repository only reads the keys it names -- a
+                        # top-level key it does not know about is dropped
+                        # without complaint.
+                        "similarity": item.similarity,
                         "sources": [source.value for source in item.ranks],
                     },
                 }
@@ -429,95 +397,6 @@ class IntelligenceService:
 
     async def acceptance_rate(self, days: int = 30) -> dict[str, int]:
         return await self._suggestions.acceptance_rate(self._tenant_id, days)
-
-    # --------------------------------------------------------------- caching
-
-    def _to_cache(self, result: SimilarityResult) -> dict[str, Any]:
-        """Serialise a result for Redis.
-
-        Stores what the response needs and nothing more. Notably absent: the
-        candidate objects and the hydrated catalogue. Caching ticket *text* in
-        Redis would put the same sensitive content in a second store, which is
-        the property the rest of this design works to avoid -- so the cache
-        holds only what the panel displays.
-        """
-        return {
-            "results": [
-                {
-                    "ticket_id": str(item.ticket_id),
-                    "reference": item.reference,
-                    "title": item.title,
-                    "status": item.status,
-                    "priority": item.priority,
-                    "team_id": str(item.team_id),
-                    "client_id": str(item.client_id),
-                    "created_at": item.created_at.isoformat(),
-                    "closed_at": item.closed_at.isoformat() if item.closed_at else None,
-                    "resolution_summary": item.resolution_summary,
-                    "score": item.score,
-                    "sources": [source.value for source in item.ranks],
-                    "agreed": item.agreed,
-                    "relation": item.relation.value if item.relation else None,
-                    "confidence": item.confidence,
-                    "reason": item.reason,
-                }
-                for item in result.results
-            ],
-            "total_candidates": result.total_candidates,
-            "references": list(result.references),
-            "trace": result.trace,
-            "degraded": result.degraded,
-            "grade": result.grade,
-            "rewrites": result.rewrites,
-            "rerank_model": result.rerank_model,
-        }
-
-    def _from_cache(self, payload: dict[str, Any], limit: int) -> SimilarityResult:
-        """Rebuild a result from the cache.
-
-        The per-retriever ranks are *not* restored faithfully -- only which
-        retrievers found each result, in order. The exact rank numbers are
-        diagnostics for one run and would be misleading if replayed as if they
-        were this run's; what the UI actually uses is the source list and the
-        agreement flag, and both survive.
-        """
-        results = [
-            SimilarTicket(
-                ticket_id=uuid.UUID(item["ticket_id"]),
-                reference=item["reference"],
-                title=item["title"],
-                status=item["status"],
-                priority=item["priority"],
-                team_id=uuid.UUID(item["team_id"]),
-                client_id=uuid.UUID(item["client_id"]),
-                created_at=datetime.fromisoformat(item["created_at"]),
-                closed_at=(
-                    datetime.fromisoformat(item["closed_at"]) if item["closed_at"] else None
-                ),
-                resolution_summary=item["resolution_summary"],
-                score=item["score"],
-                ranks={
-                    RetrievalSource(source): index + 1
-                    for index, source in enumerate(item["sources"])
-                },
-                agreed=item["agreed"],
-                relation=Relation(item["relation"]) if item.get("relation") else None,
-                confidence=item.get("confidence"),
-                reason=item.get("reason"),
-            )
-            for item in payload["results"][:limit]
-        ]
-        return SimilarityResult(
-            results=results,
-            total_candidates=payload["total_candidates"],
-            references=tuple(payload["references"]),
-            trace=[*payload["trace"], "cache:hit"],
-            degraded=payload["degraded"],
-            grade=payload.get("grade", ""),
-            rewrites=payload.get("rewrites", 0),
-            rerank_model=payload.get("rerank_model"),
-            from_cache=True,
-        )
 
 
 def _apply_judgements(

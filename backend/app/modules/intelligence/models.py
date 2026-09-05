@@ -1,6 +1,6 @@
 """AI layer tables.
 
-Note what is absent: **no table stores ticket text.** Chroma holds vectors, ids,
+Note what is absent: **no table stores ticket text.** Pinecone holds vectors, ids,
 and filter metadata; Postgres holds the tickets. Results are hydrated from
 Postgres, so sensitive content lives in exactly one place — one store to back
 up, secure, and satisfy a deletion request against.
@@ -36,7 +36,7 @@ from app.core.models import (
     UUIDPrimaryKeyMixin,
     pg_enum,
 )
-from app.modules.intelligence.domain.types import Relation
+from app.modules.intelligence.schemas.types import Relation
 
 
 class AiJobKind(StrEnum):
@@ -85,7 +85,7 @@ class TicketVectorState(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampM
     """Bookkeeping for what has been embedded.
 
     This table is what makes reconciliation possible. Without it, answering
-    "which tickets are missing vectors?" means reading every id out of Chroma
+    "which tickets are missing vectors?" means reading every id out of Pinecone
     and diffing — neither transactional nor scalable.
 
     ``source_hash`` covers the model name, the instruction version, and the

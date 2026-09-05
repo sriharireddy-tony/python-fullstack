@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from app.core.database import session_scope
 from app.core.logging import configure_logging
 from app.modules.intelligence.deps import get_ai_deps
-from app.modules.intelligence.evals.datasets import load_golden_queries
+from app.modules.intelligence.eval.datasets import load_golden_queries
 from app.modules.intelligence.service import IntelligenceService
 from app.modules.tenancy.models import Tenant
 from sqlalchemy import select

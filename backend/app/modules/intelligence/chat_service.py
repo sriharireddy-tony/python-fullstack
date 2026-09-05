@@ -34,11 +34,11 @@ from app.core.config import settings
 from app.core.errors import NotFoundError, PermissionDeniedError
 from app.core.logging import get_logger
 from app.modules.identity.models import User
-from app.modules.intelligence.checkpointer import get_checkpointer
 from app.modules.intelligence.deps import AiDeps
-from app.modules.intelligence.graphs.chat import ChatDeps, ChatState, build_chat_graph
+from app.modules.intelligence.llm.registry import ModelRegistry
 from app.modules.intelligence.models import Conversation
-from app.modules.intelligence.registry import ModelRegistry
+from app.modules.intelligence.pipelines.chat import ChatDeps, ChatState, build_chat_graph
+from app.modules.intelligence.pipelines.checkpointer import get_checkpointer
 from app.modules.intelligence.tools.registry import build_tools
 from app.modules.intelligence.tools.tickets import ToolContext
 

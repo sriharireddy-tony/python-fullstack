@@ -38,7 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AppError
 from app.core.logging import get_logger
 from app.modules.intelligence.deps import AiDeps
-from app.modules.intelligence.guardrails.input import redact_pii
+from app.modules.intelligence.security.input import redact_pii
 from app.modules.intelligence.tools.analytics import AnalyticsTools
 from app.modules.intelligence.tools.schemas import (
     AnalyticsArgs,

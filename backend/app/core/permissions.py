@@ -37,6 +37,12 @@ class Permission(StrEnum):
     TICKET_TRANSFER_TEAM = "ticket:transfer_team"
     TICKET_OVERRIDE_PRIORITY = "ticket:override_priority"
 
+    #: Manage the vector index: embed, re-embed, and delete embeddings.
+    #: Separate from TICKET_UPDATE because it governs a different resource --
+    #: someone who may edit a ticket has no business rebuilding the index,
+    #: and someone who runs a model migration need not be able to edit text.
+    EMBEDDING_MANAGE = "embedding:manage"
+
     COMMENT_CREATE = "comment:create"
     ATTACHMENT_UPLOAD = "attachment:upload"
     AUDIT_READ = "audit:read"
@@ -98,6 +104,9 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.TICKET_TRANSFER_TEAM,
             Permission.COMMENT_CREATE,
             Permission.ATTACHMENT_UPLOAD,
+            # The embedding console. A team manager owns their team's corpus,
+            # so they are the role that backfills and repairs it.
+            Permission.EMBEDDING_MANAGE,
             # Scoped to their own team by resource policy.
             Permission.AUDIT_READ,
         }
@@ -132,3 +141,6 @@ assert Permission.TICKET_CREATE not in ROLE_PERMISSIONS[Role.DEVELOPER]
 assert Permission.TICKET_CLOSE not in ROLE_PERMISSIONS[Role.DEVELOPER]
 assert Permission.TICKET_CLOSE not in ROLE_PERMISSIONS[Role.TEAM_MANAGER]
 assert Permission.TENANT_MANAGE not in set().union(*ROLE_PERMISSIONS.values())
+# CS raises tickets but does not operate the index.
+assert Permission.EMBEDDING_MANAGE not in ROLE_PERMISSIONS[Role.CS_AGENT]
+assert Permission.EMBEDDING_MANAGE not in ROLE_PERMISSIONS[Role.DEVELOPER]

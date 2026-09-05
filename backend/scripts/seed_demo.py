@@ -42,7 +42,7 @@ from app.core.permissions import Role
 from app.core.security import hash_password
 from app.modules.clients.models import Client, ClientTier
 from app.modules.identity.models import User, UserTeam
-from app.modules.intelligence.evals.datasets import GOLDEN_CLUSTERS, Variant
+from app.modules.intelligence.eval.datasets import GOLDEN_CLUSTERS, Variant
 from app.modules.teams.models import Team
 from app.modules.tenancy.models import Tenant, TenantCounter
 from app.modules.tickets.enums import (
@@ -55,11 +55,14 @@ from app.modules.tickets.enums import (
 from app.modules.tickets.models import Ticket, TicketStatusHistory
 from sqlalchemy import delete, func, select
 
+from scripts.seed_detailed import DETAILED_SCENARIOS, DetailedScenario
 from scripts.seed_scenarios import SCENARIOS, Scenario
 
 RNG = random.Random(42)
 PASSWORD = "ChangeMe123!dev"
 TENANT_CODE = "keka"
+NL = chr(10)
+
 TICKET_COUNT = 100
 HISTORY_DAYS = 180
 
@@ -244,7 +247,10 @@ def _describe(body: str, identifier: str | None) -> str:
     return body + "\n\n" + identifier
 
 
-def build_ticket_plan(count: int) -> list[tuple[Scenario, Variant | None]]:
+PlanItem = tuple[Scenario, Variant | None, DetailedScenario | None]
+
+
+def build_ticket_plan(count: int, profile: str = "full") -> list[PlanItem]:
     """Every scenario exactly once, plus the near-duplicate variants.
 
     ## Why there is no sampling any more
@@ -270,17 +276,31 @@ def build_ticket_plan(count: int) -> list[tuple[Scenario, Variant | None]]:
     `seed_scenarios.py` rather than by sampling weights -- currently 9% P1,
     36% P2, 35% P3, 21% P4, which is the shape a healthy tracker has.
     """
-    plan: list[tuple[Scenario, Variant | None]] = []
+    if profile == "ten":
+        # The inspection corpus: ten hand-written tickets with full write-ups
+        # and their own reproduction steps. No duplicates, no sampling -- see
+        # `scripts/seed_detailed.py` for why this is a separate corpus rather
+        # than a smaller slice of the benchmark one.
+        return [
+            (
+                (d.team, d.title, d.description, d.severity, d.impact, d.workaround),
+                None,
+                d,
+            )
+            for d in DETAILED_SCENARIOS
+        ]
+
+    plan: list[PlanItem] = []
     by_title = {scenario[1]: scenario for scenario in SCENARIOS}
 
     # Every distinct bug, once.
-    plan.extend((scenario, None) for scenario in SCENARIOS)
+    plan.extend((scenario, None, None) for scenario in SCENARIOS)
 
     # Then the variants: the same defect, worded as another customer reported
     # it. A variant carries its own title *and* description.
     for base_title, variants in DUPLICATE_PARAPHRASES.items():
         base = by_title[base_title]
-        plan.extend((base, variant) for variant in variants)
+        plan.extend((base, variant, None) for variant in variants)
 
     if len(plan) != count:
         # Loud rather than silent. A mismatch means the scenario list and the
@@ -318,6 +338,16 @@ async def seed() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--reset", action="store_true", help="delete existing tickets first")
     parser.add_argument("--count", type=int, default=TICKET_COUNT)
+    parser.add_argument(
+        "--profile",
+        choices=("full", "ten"),
+        default="full",
+        help=(
+            "full: 100 tickets with known duplicate clusters, for evaluation. "
+            "ten: 10 long hand-written tickets with no duplicates, for working "
+            "on the index by hand."
+        ),
+    )
     args = parser.parse_args()
 
     async with session_scope(tenant_id=None) as db:
@@ -441,7 +471,7 @@ async def seed() -> None:
             )
             or 0
         )
-        if existing_tickets >= args.count:
+        if args.profile == "full" and existing_tickets >= args.count:
             print(
                 f"tickets: {existing_tickets} already present, leaving them alone "
                 f"(use --reset to rebuild)"
@@ -454,10 +484,11 @@ async def seed() -> None:
         now = datetime.now(UTC)
         # Top up to the target rather than always creating a full batch, so a
         # partially-seeded database converges instead of overshooting.
-        plan = build_ticket_plan(args.count - existing_tickets)
+        target = 10 if args.profile == "ten" else args.count - existing_tickets
+        plan = build_ticket_plan(target, profile=args.profile)
         status_tally: dict[str, int] = {}
 
-        for sequence, (scenario, variant) in enumerate(plan, start=1):
+        for sequence, (scenario, variant, detail) in enumerate(plan, start=1):
             team_name, title, description, severity, impact, workaround = scenario
             team = teams[team_name]
             client = RNG.choice(clients)
@@ -512,13 +543,26 @@ async def seed() -> None:
                     identifier_line(team_name, sequence),
                 ),
                 steps_to_reproduce=(
-                    "1. Sign in as an HR admin\n"
-                    f"2. Open the {team_name} module\n"
-                    "3. Perform the action described above\n"
-                    "4. Observe the incorrect result"
+                    detail.steps
+                    if detail
+                    else (
+                        "1. Sign in as an HR admin"
+                        + NL
+                        + f"2. Open the {team_name} module"
+                        + NL
+                        + "3. Perform the action described above"
+                        + NL
+                        + "4. Observe the incorrect result"
+                    )
                 ),
-                expected_result="The operation completes and the values shown are correct.",
-                actual_result="The operation fails or shows incorrect values.",
+                expected_result=(
+                    detail.expected
+                    if detail
+                    else "The operation completes and the values shown are correct."
+                ),
+                actual_result=(
+                    detail.actual if detail else "The operation fails or shows incorrect values."
+                ),
                 environment=RNG.choices(
                     [Environment.PRODUCTION, Environment.STAGING, Environment.UAT],
                     weights=[80, 12, 8],

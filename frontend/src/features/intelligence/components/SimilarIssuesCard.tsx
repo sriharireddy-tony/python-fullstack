@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Badge, Button, Card, OverlayTrigger, Spinner, Tooltip } from 'react-bootstrap'
-import { Link } from 'react-router-dom'
 import { RelativeTime, StatusBadge, statusLabel } from '@/components/badges'
+import { TicketPreviewModal } from '@/features/tickets/TicketPreviewModal'
 import type { Relation, SimilarTicket, TicketStatus } from '@/api/types'
 import { useDecideSuggestion, useSimilarTickets } from '../api/useSimilar'
 
@@ -25,6 +25,10 @@ export function SimilarIssuesCard({ reference }: { reference: string }) {
   const { data, isLoading, error } = useSimilarTickets(reference)
   const decide = useDecideSuggestion(reference)
   const [showTrace, setShowTrace] = useState(false)
+  // Which suggested ticket is open in the preview modal, if any. Held here
+  // rather than per row so only one can ever be open -- nested previews are
+  // how a comparison aid turns into a maze.
+  const [preview, setPreview] = useState<string | null>(null)
 
   return (
     <Card className="mt-3">
@@ -91,6 +95,7 @@ export function SimilarIssuesCard({ reference }: { reference: string }) {
               <SimilarRow
                 key={item.ticket_id}
                 item={item}
+                onOpen={() => setPreview(item.reference)}
                 onDecide={(accepted) => {
                   if (item.suggestion_id) {
                     void decide.mutateAsync({
@@ -140,26 +145,40 @@ export function SimilarIssuesCard({ reference }: { reference: string }) {
           </>
         )}
       </Card.Body>
+
+      <TicketPreviewModal reference={preview} onHide={() => setPreview(null)} />
     </Card>
   )
 }
 
 function SimilarRow({
   item,
+  onOpen,
   onDecide,
   busy,
 }: {
   item: SimilarTicket
+  onOpen: () => void
   onDecide: (accepted: boolean) => void
   busy: boolean
 }) {
   return (
     <div>
       <div className="d-flex align-items-center gap-2 flex-wrap">
-        <Link to={`/tickets/${item.reference}`} className="font-monospace">
+        {/* A button, not a link: this opens a preview beside the ticket being
+            read rather than navigating away from it. Comparing two tickets is
+            the entire job of this panel, and a navigation costs you one of
+            them. */}
+        <button
+          type="button"
+          className="btn btn-link p-0 font-monospace align-baseline"
+          style={{ fontSize: 'inherit' }}
+          onClick={onOpen}
+        >
           {item.reference}
-        </Link>
+        </button>
         <StatusBadge status={item.status as TicketStatus} />
+        <MatchScore similarity={item.similarity} />
         {item.relation ? (
           <RelationBadge relation={item.relation} confidence={item.confidence} />
         ) : (
@@ -167,7 +186,14 @@ function SimilarRow({
         )}
       </div>
 
-      <div className="fw-medium">{item.title}</div>
+      <button
+        type="button"
+        className="btn btn-link p-0 fw-medium text-start text-body d-block"
+        style={{ fontSize: 'inherit', textDecoration: 'none' }}
+        onClick={onOpen}
+      >
+        {item.title}
+      </button>
 
       {/* The model's justification, when a model ran. Shown because a
           classification without a reason is an assertion, and an assertion is
@@ -230,6 +256,62 @@ function SimilarRow({
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * How alike the two tickets are, as the vector store measured it.
+ *
+ * ## Why this is `similarity` and not `score`
+ *
+ * The response also carries a fused `score`, and it would be the obvious thing
+ * to show. It is the wrong thing: fusion ranks by *position*, not by distance,
+ * so every result lands near 0.016 whatever its actual likeness. Two tickets
+ * about the same bug and two about nothing in common produce nearly the same
+ * fused score. Shown to a human that is worse than showing nothing, because it
+ * looks like a measurement.
+ *
+ * `similarity` is the raw cosine from the vector store: 0 to 1, larger is
+ * closer, and it means what a reader assumes it means.
+ *
+ * ## Why the bands are cautious
+ *
+ * Cosine similarity between two pieces of ordinary English rarely goes below
+ * about 0.3 even when the texts are unrelated, so a naive percentage reads far
+ * too generously — 40% sounds like a weak match when it is really no match at
+ * all. The bands below are set against that floor, and the label carries the
+ * meaning while the number stays visible for anyone calibrating their own
+ * judgement.
+ *
+ * Absent for a keyword-only hit: nothing was compared in vector space, and
+ * showing 0% would claim the opposite of "not measured".
+ */
+function MatchScore({ similarity }: { similarity: number | null }) {
+  if (similarity === null) return null
+
+  const percent = Math.round(similarity * 100)
+  const { label, bg } =
+    similarity >= 0.8
+      ? { label: 'very close', bg: 'success' }
+      : similarity >= 0.65
+        ? { label: 'close', bg: 'primary' }
+        : similarity >= 0.5
+          ? { label: 'loose', bg: 'secondary' }
+          : { label: 'distant', bg: 'light' }
+
+  return (
+    <OverlayTrigger
+      overlay={
+        <Tooltip>
+          Cosine similarity {similarity.toFixed(3)} between the two tickets' embeddings. Above
+          about 0.8 the two usually describe the same problem; below 0.5 they rarely do.
+        </Tooltip>
+      }
+    >
+      <Badge bg={bg} text={bg === 'light' ? 'dark' : undefined}>
+        {percent}% · {label}
+      </Badge>
+    </OverlayTrigger>
   )
 }
 

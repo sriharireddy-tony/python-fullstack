@@ -69,12 +69,25 @@ class Settings(BaseSettings):
     # practice it can be disabled without losing the others.
     AI_ENABLED: bool = True
     AI_SIMILARITY_ENABLED: bool = True
+    #: Embed automatically when a ticket is created or its text changes.
+    #:
+    #: Off means nothing is embedded until someone asks for it from the
+    #: embedding console. The outbox path is unchanged and still the only way
+    #: work is queued -- this flag decides who pushes the button, not how the
+    #: work happens. Turn it on and the system is back to embedding on write,
+    #: which is what a production deployment should do.
+    AI_AUTO_EMBED_ON_WRITE: bool = False
     AI_RERANK_ENABLED: bool = False  # opt-in: costs an LLM call per query
     AI_ANALYSIS_ENABLED: bool = True
     AI_CHAT_ENABLED: bool = True
 
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_EMBED_MODEL: str = "qwen3-embedding"
+    #: The 0.6B Qwen3 embedding model, which emits 1024 dimensions natively.
+    #: The 8B tag ("qwen3-embedding") emits 4096 -- four times the storage and
+    #: index memory for a quality difference this corpus cannot measure. The
+    #: dimension is still probed from the model rather than configured, so
+    #: changing this line is the only edit a model swap needs.
+    OLLAMA_EMBED_MODEL: str = "qwen3-embedding:0.6b"
     OLLAMA_CHAT_MODEL: str = "qwen3:8b"
     #: Let the local reasoning model emit chain-of-thought before answering.
     #: Off by default: it costs ~20x the output tokens for text that is
@@ -97,8 +110,16 @@ class Settings(BaseSettings):
     EMBED_DESCRIPTION_MAX: int = 2000
     EMBED_STEPS_MAX: int = 1000
 
-    CHROMA_HOST: str = "localhost"
-    CHROMA_PORT: int = 8001
+    # --- Pinecone ------------------------------------------------------
+    #: Serverless, one index, one namespace per tenant. Pinecone bills per
+    #: index, so index-per-tenant does not survive contact with a free tier;
+    #: a namespace is a hard partition inside an index and costs nothing.
+    PINECONE_API_KEY: str = ""
+    PINECONE_INDEX: str = "os-tracker"
+    PINECONE_CLOUD: str = "aws"
+    PINECONE_REGION: str = "us-east-1"
+    #: How long to wait for a newly created serverless index to become ready.
+    PINECONE_READY_TIMEOUT: float = 60.0
 
     #: Over-fetch then truncate. Cheap insurance against a selective filter
     #: leaving too few results after post-filtering.

@@ -14,14 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.modules.intelligence.adapters.chroma_store import ChromaVectorStore
-from app.modules.intelligence.adapters.ollama_embeddings import OllamaEmbeddingProvider
-from app.modules.intelligence.catalogue import PostgresTicketCatalogue
-from app.modules.intelligence.domain.deps import RetrievalDeps
-from app.modules.intelligence.domain.types import FusionMode
-from app.modules.intelligence.lexical_repository import PostgresLexicalSearch
+from app.modules.intelligence.embeddings.embedder import OllamaEmbeddingProvider
+from app.modules.intelligence.lexical.postgres_fts import PostgresLexicalSearch
+from app.modules.intelligence.llm.registry import ModelRegistry
 from app.modules.intelligence.ports import EmbeddingProvider, VectorStore
-from app.modules.intelligence.registry import ModelRegistry
+from app.modules.intelligence.retrieval.catalogue import PostgresTicketCatalogue
+from app.modules.intelligence.retrieval.deps import RetrievalDeps
+from app.modules.intelligence.schemas.types import FusionMode
+from app.modules.intelligence.vectordb.pinecone_store import PineconeVectorStore
 
 logger = get_logger(__name__)
 
@@ -33,7 +33,7 @@ class AiDeps:
     """What every node and service needs from the outside world.
 
     Passed explicitly rather than imported, so a test constructs one with
-    fakes and the whole graph runs with no Ollama, no Chroma, and no API key.
+    fakes and the whole graph runs with no Ollama, no Pinecone, and no API key.
     """
 
     embeddings: EmbeddingProvider
@@ -46,17 +46,16 @@ def _embeddings() -> OllamaEmbeddingProvider:
 
 
 @lru_cache(maxsize=1)
-def _store() -> ChromaVectorStore:
-    return ChromaVectorStore()
+def _store() -> PineconeVectorStore:
+    return PineconeVectorStore()
 
 
 async def get_ai_deps() -> AiDeps:
     """Build the dependency bundle, warming the embedding model on first use.
 
-    `warm()` probes the dimension — which is the authority for the Chroma
-    collection width — and loads the model into Ollama's memory, so the first
-    real request does not pay the several-second model-load cost and look
-    broken.
+    `warm()` probes the dimension — which is the authority for the Pinecone
+    index width — and loads the model into Ollama's memory, so the first real
+    request does not pay the several-second model-load cost and look broken.
     """
     embeddings = _embeddings()
     await embeddings.warm()
@@ -114,18 +113,21 @@ async def ai_health() -> dict[str, dict[str, str | int]]:
     """Readiness detail for the AI dependencies.
 
     Reported separately from the application's own readiness: neither Ollama
-    nor Chroma being down should make the service unready, because no AI call
+    nor Pinecone being down should make the service unready, because no AI call
     sits on a write path.
     """
     embeddings = _embeddings()
     store = _store()
 
     ollama_ok = await embeddings.health()
-    chroma_ok = await store.health()
+    pinecone_ok = await store.health()
 
     out: dict[str, dict[str, str | int]] = {
         "ollama": {"status": "ok" if ollama_ok else "error", "model": settings.OLLAMA_EMBED_MODEL},
-        "chroma": {"status": "ok" if chroma_ok else "error"},
+        "pinecone": {
+            "status": "ok" if pinecone_ok else "error",
+            "index": settings.PINECONE_INDEX,
+        },
     }
     if ollama_ok:
         try:

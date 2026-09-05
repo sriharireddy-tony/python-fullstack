@@ -1,4 +1,4 @@
-"""Embed existing tickets, and reconcile Postgres against Chroma.
+"""Embed existing tickets, and reconcile Postgres against Pinecone.
 
     .venv\\Scripts\\python -m scripts.ai_backfill              # embed what is missing
     .venv\\Scripts\\python -m scripts.ai_backfill --reconcile   # report and fix drift
@@ -21,7 +21,7 @@ from app.core.config import settings
 from app.core.database import session_scope
 from app.core.logging import configure_logging
 from app.modules.intelligence.deps import get_ai_deps
-from app.modules.intelligence.embedding_service import EmbeddingService
+from app.modules.intelligence.embeddings.service import EmbeddingService
 from app.modules.intelligence.repository import VectorStateRepository
 from app.modules.tenancy.models import Tenant
 from app.modules.tickets.models import Ticket
@@ -68,7 +68,7 @@ async def backfill(tenant_id: uuid.UUID, name: str) -> None:
 
 
 async def reconcile(tenant_id: uuid.UUID, name: str, fix: bool) -> dict[str, int]:
-    """Compare Postgres against Chroma and report drift.
+    """Compare Postgres against Pinecone and report drift.
 
     Two stores means the vectors can diverge from the tickets — the price of
     not using pgvector. Three discrepancies are possible, and each has a
@@ -82,21 +82,21 @@ async def reconcile(tenant_id: uuid.UUID, name: str, fix: bool) -> dict[str, int
         live_tickets = set(rows.scalars().all())
         recorded = await VectorStateRepository(db).embedded_ids(model)
 
-    in_chroma = await deps.store.list_ids(tenant_id)
+    in_store = await deps.store.list_ids(tenant_id)
 
     missing = live_tickets - recorded  # tickets never embedded
-    orphaned = in_chroma - live_tickets  # vectors whose ticket is gone
-    unrecorded = in_chroma - recorded  # in Chroma, no bookkeeping row
-    lost = recorded - in_chroma  # bookkeeping says yes, Chroma says no
+    orphaned = in_store - live_tickets  # vectors whose ticket is gone
+    unrecorded = in_store - recorded  # in Pinecone, no bookkeeping row
+    lost = recorded - in_store  # bookkeeping says yes, Pinecone says no
 
     print(f"  {name}")
     print(f"    tickets            {len(live_tickets)}")
     print(f"    vector_state rows  {len(recorded)}")
-    print(f"    ids in chroma      {len(in_chroma)}")
+    print(f"    ids in store       {len(in_store)}")
     print(f"    missing vectors    {len(missing)}")
     print(f"    orphaned vectors   {len(orphaned)}")
     print(f"    unrecorded in pg   {len(unrecorded)}")
-    print(f"    lost from chroma   {len(lost)}")
+    print(f"    lost from store   {len(lost)}")
 
     if fix:
         if orphaned:
@@ -128,10 +128,13 @@ async def main() -> None:
     deps = await get_ai_deps()
     print("embedding model :", deps.embeddings.model_name)
     print("dimension       :", deps.embeddings.dimension)
-    print("chroma          :", f"{settings.CHROMA_HOST}:{settings.CHROMA_PORT}")
+    print(
+        "pinecone        :",
+        f"index={settings.PINECONE_INDEX} ({settings.PINECONE_CLOUD}/{settings.PINECONE_REGION})",
+    )
     if not await deps.store.health():
-        print("\nChroma is not reachable. Start it with:", file=sys.stderr)
-        print("  chroma run --path ./var/chroma --port 8001", file=sys.stderr)
+        print("\nPinecone is not reachable. Start it with:", file=sys.stderr)
+        print("  check PINECONE_API_KEY in backend/.env", file=sys.stderr)
         raise SystemExit(1)
     print()
 

@@ -37,8 +37,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # so the AI layer stays genuinely optional: with AI_ENABLED false the
     # handlers are registered but return immediately.
     if settings.AI_ENABLED:
+        from app.modules.intelligence.observability.tracing import configure_tracing
         from app.modules.intelligence.subscribers import register as register_ai
-        from app.modules.intelligence.tracing import configure_tracing
 
         register_ai()
         # Must run before the first LangChain object is constructed, which is

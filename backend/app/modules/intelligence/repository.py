@@ -166,7 +166,7 @@ class VectorStateRepository:
     """Bookkeeping for what has been embedded.
 
     This table is what makes reconciliation possible without reading every id
-    out of Chroma and diffing.
+    out of Pinecone and diffing.
     """
 
     def __init__(self, session: AsyncSession) -> None:

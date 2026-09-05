@@ -14,6 +14,7 @@ const ICONS: Record<string, string> = {
   building: '🏢',
   people: '👥',
   'person-gear': '⚙',
+  vector: '🧬',
   journal: '📋',
   diagram: '🗂',
 }

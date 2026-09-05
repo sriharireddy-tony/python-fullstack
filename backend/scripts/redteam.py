@@ -32,11 +32,11 @@ from app.core.database import session_scope
 from app.core.logging import configure_logging
 from app.modules.identity.models import User
 from app.modules.intelligence.deps import get_ai_deps
-from app.modules.intelligence.domain.reports import RelationJudgement
-from app.modules.intelligence.evals.redteam import ALL_CASES, Expectation, RedTeamCase
-from app.modules.intelligence.guardrails.input import guard_input
-from app.modules.intelligence.guardrails.output import guard_output
+from app.modules.intelligence.eval.redteam import ALL_CASES, Expectation, RedTeamCase
+from app.modules.intelligence.generation.grounded_answer import guard_output
 from app.modules.intelligence.models import Relation
+from app.modules.intelligence.schemas.reports import RelationJudgement
+from app.modules.intelligence.security.input import guard_input
 from app.modules.intelligence.tools.registry import (
     READ_ONLY_TOOLS,
     build_tools,

@@ -463,6 +463,20 @@ async def main() -> None:
     removed = await drop_probe_tickets()
     check(removed >= 0, f"removed {removed} probe ticket(s) created by this run")
 
+    # ================================================== cache round-trip
+    #
+    # Pure functions over a dataclass, so this needs no Ollama, no Pinecone and
+    # no Redis -- which is why it lives in this suite rather than in verify_ai.
+    #
+    # It exists because the failure it catches is silent. The cache is only
+    # consulted on the *second* request for a ticket, and only when Redis is
+    # configured, so a field that `to_cache` forgets to write degrades nothing
+    # in development and returns null in production. That has already happened
+    # once, to the similarity score: the read half was written and the write
+    # half was not, and every gate passed.
+    print("\n=== cache round-trip ===")
+    await check_cache_round_trip()
+
     # ================================================== summary
     print("\n" + "=" * 66)
     print(f"  {passed} passed, {len(failed)} failed")
@@ -471,6 +485,90 @@ async def main() -> None:
         for item in failed:
             print(f"  FAILED: {item}")
         sys.exit(1)
+
+
+async def check_cache_round_trip() -> None:
+    """Every field written to the cache must come back out of it.
+
+    Compared field by field rather than by equality on the object, so a failure
+    names the field that was dropped instead of reporting that two objects
+    differ.
+    """
+    import json
+    import uuid as _uuid
+    from datetime import UTC, datetime
+
+    from app.modules.intelligence.cache import from_cache, to_cache
+    from app.modules.intelligence.schemas.types import (
+        Relation,
+        RetrievalSource,
+        SimilarityResult,
+        SimilarTicket,
+    )
+
+    original = SimilarTicket(
+        ticket_id=_uuid.uuid4(),
+        reference="OS-9001",
+        title="probe",
+        status="open",
+        priority="p1",
+        team_id=_uuid.uuid4(),
+        client_id=_uuid.uuid4(),
+        created_at=datetime.now(UTC),
+        closed_at=None,
+        resolution_summary="fixed by probe",
+        score=0.0164,
+        ranks={RetrievalSource.SEMANTIC: 1, RetrievalSource.LEXICAL: 2},
+        agreed=True,
+        similarity=0.8889,
+        relation=Relation.DUPLICATE,
+        confidence=0.91,
+        reason="same defect",
+    )
+    result = SimilarityResult(
+        results=[original],
+        total_candidates=9,
+        references=(4,),
+        trace=["probe"],
+        degraded=False,
+        grade="good",
+        rewrites=0,
+        rerank_model="probe-model",
+    )
+
+    payload = to_cache(result)
+    try:
+        json.dumps(payload)
+        serialisable = True
+    except (TypeError, ValueError):
+        serialisable = False
+    check(serialisable, "cache payload is JSON-serialisable")
+
+    restored = from_cache(payload, limit=5)
+    check(len(restored.results) == 1, "cache round-trip returns the result")
+    if not restored.results:
+        return
+
+    back = restored.results[0]
+    for field in (
+        "reference",
+        "title",
+        "status",
+        "priority",
+        "resolution_summary",
+        "score",
+        "similarity",
+        "agreed",
+        "relation",
+        "confidence",
+        "reason",
+    ):
+        before, after = getattr(original, field), getattr(back, field)
+        check(before == after, f"cache preserves {field} ({before!r})")
+
+    check(list(back.ranks) == list(original.ranks), "cache preserves which retrievers found it")
+    check(restored.from_cache is True, "a restored result is marked as cached")
+    check(restored.rerank_model == "probe-model", "cache preserves the rerank model")
 
 
 if __name__ == "__main__":

@@ -25,6 +25,10 @@ export const Permission = {
   TICKET_TRANSFER_TEAM: 'ticket:transfer_team',
   TICKET_OVERRIDE_PRIORITY: 'ticket:override_priority',
 
+  // Operating the vector index: embed, re-embed, delete. Held by team
+  // managers and tenant admins, not by CS agents or developers.
+  EMBEDDING_MANAGE: 'embedding:manage',
+
   COMMENT_CREATE: 'comment:create',
   ATTACHMENT_UPLOAD: 'attachment:upload',
   AUDIT_READ: 'audit:read',

@@ -14,8 +14,9 @@ from app.modules.clients.router import router as clients_router
 from app.modules.comments.router import router as comments_router
 from app.modules.identity.router import router as auth_router
 from app.modules.identity.users_router import router as users_router
-from app.modules.intelligence.chat_router import router as chat_router
-from app.modules.intelligence.router import router as intelligence_router
+from app.modules.intelligence.api.chat_router import router as chat_router
+from app.modules.intelligence.api.embedding_router import router as embedding_router
+from app.modules.intelligence.api.similar_router import router as intelligence_router
 from app.modules.teams.router import router as teams_router
 from app.modules.tickets.router import router as tickets_router
 
@@ -33,6 +34,11 @@ api_router.include_router(intelligence_router, prefix="/tickets", tags=["intelli
 
 # The assistant is not scoped to a ticket, so it gets its own prefix.
 api_router.include_router(chat_router, prefix="/chat", tags=["chat"])
+
+# The embedding console. Declares its own /ai/embeddings prefix: it operates the
+# index rather than any one ticket, so hanging it off /tickets would misdescribe
+# what it owns.
+api_router.include_router(embedding_router, tags=["embeddings"])
 
 # Comments and attachments declare full paths of their own, because they hang
 # off both /tickets/{id}/... and /comments/{id}/... and a single prefix cannot

@@ -37,7 +37,7 @@ async def ready(response: Response) -> dict[str, Any]:
     }
 
     # Reported but never fatal: no AI call sits on a write path, so Ollama or
-    # Chroma being down degrades an AI feature rather than the service.
+    # Pinecone being down degrades an AI feature rather than the service.
     if settings.AI_ENABLED:
         from app.modules.intelligence.deps import ai_health
 

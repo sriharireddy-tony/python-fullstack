@@ -35,20 +35,20 @@ from app.core.database import commit_preserving_scope
 from app.core.errors import ConflictError, NotFoundError
 from app.core.logging import get_logger
 from app.modules.intelligence.deps import AiDeps
-from app.modules.intelligence.graphs.analysis import (
-    AgentDeps,
-    AnalysisState,
-    run_analysis,
-)
-from app.modules.intelligence.guardrails.budget import Wallclock
+from app.modules.intelligence.llm.registry import ModelRegistry
 from app.modules.intelligence.models import (
     AiAnalysisRun,
     AiAnalysisStep,
     AiJobKind,
     AnalysisStatus,
 )
-from app.modules.intelligence.registry import ModelRegistry
+from app.modules.intelligence.pipelines.analysis import (
+    AgentDeps,
+    AnalysisState,
+    run_analysis,
+)
 from app.modules.intelligence.repository import AiJobRepository, AnalysisRepository
+from app.modules.intelligence.security.budget import Wallclock
 from app.modules.intelligence.tools.registry import build_tools
 from app.modules.intelligence.tools.tickets import ToolContext
 from app.modules.tickets.models import Ticket

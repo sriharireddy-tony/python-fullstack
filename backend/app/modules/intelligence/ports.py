@@ -1,7 +1,7 @@
 """Interfaces for everything the AI layer depends on from outside.
 
 **No third-party imports in this file, ever.** These Protocols are what let the
-node and graph layers stay ignorant of Ollama, Chroma, Gemini, and LangChain —
+node and graph layers stay ignorant of Ollama, Pinecone, Gemini, and LangChain —
 so swapping any of them is one adapter file plus a config line.
 
 Enforced mechanically: a CI check greps the node and domain layers for vendor

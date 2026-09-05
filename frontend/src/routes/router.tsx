@@ -4,6 +4,7 @@ import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { ProfilePage } from '@/features/profile/ProfilePage'
 import { ChatPage } from '@/features/intelligence/pages/ChatPage'
+import { EmbeddingsPage } from '@/features/intelligence/pages/EmbeddingsPage'
 import { TicketListPage } from '@/features/tickets/TicketListPage'
 import { TicketDetailPage } from '@/features/tickets/TicketDetailPage'
 import { CreateTicketPage } from '@/features/tickets/CreateTicketPage'
@@ -87,6 +88,14 @@ export const router = createBrowserRouter([
             path: 'assistant',
             element: <RequirePermission permission={Permission.TICKET_READ} />,
             children: [{ index: true, element: <ChatPage /> }],
+          },
+
+          {
+            // Operating the index, not reading tickets: a CS agent can read
+            // every ticket here and still must not rebuild the corpus.
+            path: 'embeddings',
+            element: <RequirePermission permission={Permission.EMBEDDING_MANAGE} />,
+            children: [{ index: true, element: <EmbeddingsPage /> }],
           },
 
           {

@@ -2,7 +2,7 @@
 
     .venv\\Scripts\\python -m scripts.verify_ai
 
-Exercises the paths unit checks cannot reach: real Ollama, real Chroma, real
+Exercises the paths unit checks cannot reach: real Ollama, real Pinecone, real
 row-level security. Grows as each phase lands.
 """
 
@@ -21,42 +21,14 @@ from app.core.config import settings
 from app.core.database import session_scope
 from app.main import app
 from app.modules.identity.models import User
-from app.modules.intelligence.adapters.chroma_store import collection_name
-from app.modules.intelligence.checkpointer import get_checkpointer
+from app.modules.intelligence.chunking.policy import build_embedding_text
 from app.modules.intelligence.deps import AiDeps, get_ai_deps
-from app.modules.intelligence.domain.fusion import (
-    cascade,
-    cascade_leader,
-    reciprocal_rank_fusion,
-)
-from app.modules.intelligence.domain.query import (
-    build_query_text,
-    extract_identifiers,
-    extract_references,
-    prepare_lexical_text,
-)
-from app.modules.intelligence.domain.reports import (
-    AgentDecision,
-    QueryRewrite,
-    RelationJudgement,
-)
-from app.modules.intelligence.domain.types import RankedList, Relation, RetrievalSource
-from app.modules.intelligence.embedding_service import (
-    build_embedding_text,
+from app.modules.intelligence.embeddings.service import (
     compute_source_hash,
 )
-from app.modules.intelligence.evals.datasets import load_golden_queries
-from app.modules.intelligence.graphs.analysis import (
-    AgentDeps,
-    AnalysisState,
-    _limit_reason,
-    route_after_act,
-    route_after_decide,
-)
-from app.modules.intelligence.graphs.chat import CLEAR, turn_scoped
-from app.modules.intelligence.guardrails.budget import Wallclock
-from app.modules.intelligence.guardrails.input import guard_input
-from app.modules.intelligence.guardrails.output import guard_output
+from app.modules.intelligence.eval.datasets import load_golden_queries
+from app.modules.intelligence.generation.grounded_answer import guard_output
+from app.modules.intelligence.llm.registry import ModelRegistry, ModelRole
 from app.modules.intelligence.models import (
     AiAnalysisRun,
     AiJob,
@@ -65,12 +37,39 @@ from app.modules.intelligence.models import (
     AiSuggestion,
     SuggestionStatus,
 )
-from app.modules.intelligence.registry import ModelRegistry, ModelRole
+from app.modules.intelligence.pipelines.analysis import (
+    AgentDeps,
+    AnalysisState,
+    _limit_reason,
+    route_after_act,
+    route_after_decide,
+)
+from app.modules.intelligence.pipelines.chat import CLEAR, turn_scoped
+from app.modules.intelligence.pipelines.checkpointer import get_checkpointer
+from app.modules.intelligence.query.parsing import (
+    build_query_text,
+    extract_identifiers,
+    extract_references,
+    prepare_lexical_text,
+)
 from app.modules.intelligence.repository import (
     AiJobRepository,
     UsageRepository,
     VectorStateRepository,
 )
+from app.modules.intelligence.retrieval.fusion import (
+    cascade,
+    cascade_leader,
+    reciprocal_rank_fusion,
+)
+from app.modules.intelligence.schemas.reports import (
+    AgentDecision,
+    QueryRewrite,
+    RelationJudgement,
+)
+from app.modules.intelligence.schemas.types import RankedList, Relation, RetrievalSource
+from app.modules.intelligence.security.budget import Wallclock
+from app.modules.intelligence.security.input import guard_input
 from app.modules.intelligence.service import IntelligenceService
 from app.modules.intelligence.subscribers import register as register_ai
 from app.modules.intelligence.tools.registry import (
@@ -79,6 +78,7 @@ from app.modules.intelligence.tools.registry import (
     sanitize_tool_output,
 )
 from app.modules.intelligence.tools.tickets import ToolContext
+from app.modules.intelligence.vectordb.pinecone_store import namespace_for
 from app.modules.tenancy.models import Tenant
 from app.modules.tickets.models import Ticket
 from sqlalchemy import delete, func, select, text
@@ -118,7 +118,7 @@ async def drop_probe_tickets(tenant_id: uuid.UUID, deps: AiDeps) -> int:
         if not ids:
             return 0
         await db.execute(delete(Ticket).where(Ticket.id.in_(ids)))
-    # Chroma has no foreign keys, so its side is cleaned explicitly.
+    # Pinecone has no foreign keys, so its side is cleaned explicitly.
     await deps.store.delete(tenant_id, ids)
     return len(ids)
 
@@ -943,7 +943,7 @@ async def verify_agent(tenant_id: uuid.UUID, deps: AiDeps, cs: Session) -> None:
         f"a second request is refused while one is active ({again.status_code})",
     )
 
-    from app.modules.intelligence.worker import Worker
+    from app.modules.intelligence.jobs.worker import Worker
 
     started = time.perf_counter()
     processed = await Worker()._tick(deps)
@@ -1169,7 +1169,7 @@ async def main() -> None:
 
     print("\n=== dependencies ===")
     check(await deps.embeddings.health(), "ollama reachable")
-    check(await deps.store.health(), "chroma reachable")
+    check(await deps.store.health(), "pinecone reachable")
     check(deps.embeddings.dimension == 4096, f"dimension probed = {deps.embeddings.dimension}")
 
     removed = await drop_probe_tickets(keka, deps)
@@ -1220,13 +1220,13 @@ async def main() -> None:
     print("\n=== vector store state ===")
     async with session_scope(tenant_id=keka) as db:
         recorded = await VectorStateRepository(db).count(deps.embeddings.model_name)
-    in_chroma = await deps.store.count(keka)
+    in_store = await deps.store.count(keka)
     check(recorded == len(tickets), f"vector_state rows = tickets ({recorded}/{len(tickets)})")
-    check(in_chroma == len(tickets), f"chroma ids = tickets ({in_chroma}/{len(tickets)})")
+    check(in_store == len(tickets), f"pinecone ids = tickets ({in_store}/{len(tickets)})")
 
     print("\n=== TENANT ISOLATION ===")
     check(
-        collection_name(keka) != collection_name(other),
+        namespace_for(keka) != namespace_for(other),
         "tenants resolve to different collection names",
     )
     check(
@@ -1308,7 +1308,7 @@ async def main() -> None:
     )
 
     # Drain it the way the worker does.
-    from app.modules.intelligence.worker import Worker
+    from app.modules.intelligence.jobs.worker import Worker
 
     worker = Worker()
     processed = await worker._tick(deps)
@@ -1317,7 +1317,7 @@ async def main() -> None:
     async with session_scope(tenant_id=keka) as db:
         state = await VectorStateRepository(db).get(new_id, deps.embeddings.model_name)
     check(state is not None, "vector_state recorded for the new ticket")
-    check(await deps.store.count(keka) == len(tickets) + 1, "chroma count incremented")
+    check(await deps.store.count(keka) == len(tickets) + 1, "pinecone count incremented")
 
     probe_vector = await deps.embeddings.embed_query("attendance export empty night shift")
     # Top ten, not top three. What this check exists to prove is that the
@@ -1351,7 +1351,7 @@ async def main() -> None:
     print("\n=== idempotency ===")
     started = time.perf_counter()
     async with session_scope(tenant_id=keka) as db:
-        from app.modules.intelligence.embedding_service import EmbeddingService
+        from app.modules.intelligence.embeddings.service import EmbeddingService
 
         again = await EmbeddingService(db, deps.embeddings, deps.store).embed_tickets(tickets[:20])
     elapsed = time.perf_counter() - started
@@ -1379,11 +1379,11 @@ async def main() -> None:
             select(func.count()).select_from(Ticket).where(Ticket.title.startswith(PROBE_PREFIX))
         )
         recorded_after = await VectorStateRepository(db).count(deps.embeddings.model_name)
-    in_chroma_after = await deps.store.count(keka)
+    in_store_after = await deps.store.count(keka)
     check(leftover == 0, "probe tickets removed, so the script is re-runnable")
     check(
-        recorded_after == in_chroma_after,
-        f"postgres and chroma agree after cleanup ({recorded_after} vs {in_chroma_after})",
+        recorded_after == in_store_after,
+        f"postgres and pinecone agree after cleanup ({recorded_after} vs {in_store_after})",
     )
 
     print("\n" + "=" * 68)

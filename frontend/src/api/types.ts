@@ -212,6 +212,16 @@ export interface SimilarTicket {
   resolution_summary: string | null
   /** Fused rank score. Comparable within one response only. */
   score: number
+  /**
+   * Cosine similarity from the vector store, 0..1, larger is closer.
+   *
+   * Null when only keyword search found this ticket — there is then no vector
+   * comparison to report, which is different from a similarity of zero.
+   *
+   * This is the number to show a human. `score` is rank-derived and lands
+   * around 0.016 regardless of how alike two tickets are.
+   */
+  similarity: number | null
   sources: RetrievalSource[]
   /** True when more than one search returned it — the strongest cheap signal. */
   agreed: boolean
@@ -325,4 +335,56 @@ export interface ChatTurn {
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+}
+
+// --- embedding console -----------------------------------------------------
+
+/** Where one ticket stands relative to the vector index. */
+export type EmbeddingState = 'not_embedded' | 'embedded' | 'stale'
+
+export interface EmbeddingRow {
+  ticket_id: string
+  ticket_number: number
+  title: string
+  status: string
+  priority: string
+  team_id: string
+  state: EmbeddingState
+  model: string | null
+  dimension: number | null
+  embedded_at: string | null
+  /** Characters of text that would be sent to the embedding model. */
+  text_length: number
+}
+
+export interface EmbeddingListResponse {
+  rows: EmbeddingRow[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface EmbeddingSummary {
+  total: number
+  embedded: number
+  stale: number
+  not_embedded: number
+  /** What the vector store itself reports. -1 when it is unreachable. */
+  vectors_in_store: number
+  model: string
+  dimension: number | null
+  auto_embed_on_write: boolean
+}
+
+export interface EmbedOutcome {
+  requested: number
+  embedded: number
+  skipped: number
+  failed: number
+  duration_seconds: number
+  errors: string[]
+}
+
+export interface DeleteEmbeddingsOutcome {
+  deleted: number
 }

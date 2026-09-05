@@ -44,12 +44,20 @@ export const NAV_ITEMS: NavItem[] = [
   // write tools, so it can never do anything the viewer could not do by hand.
   { label: 'Assistant', path: '/assistant', icon: 'chat', permission: Permission.TICKET_READ },
 
+  // Operating the index is an administrative job, so it sits with the other
+  // management screens rather than beside the ticket views.
+  {
+    label: 'Embeddings',
+    path: '/embeddings',
+    icon: 'vector',
+    permission: Permission.EMBEDDING_MANAGE,
+    startsGroup: true,
+  },
   {
     label: 'Clients',
     path: '/clients',
     icon: 'building',
     permission: Permission.CLIENT_MANAGE,
-    startsGroup: true,
   },
   { label: 'Teams', path: '/teams', icon: 'people', permission: Permission.TEAM_MANAGE },
   { label: 'Users', path: '/users', icon: 'person-gear', permission: Permission.USER_MANAGE },

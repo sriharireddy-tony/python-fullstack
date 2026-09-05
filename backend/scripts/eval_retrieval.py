@@ -3,7 +3,7 @@
     .venv\\Scripts\\python -m scripts.eval_retrieval
     .venv\\Scripts\\python -m scripts.eval_retrieval --tenant keka --k 60
 
-Runs the real pipeline — real embeddings, real Chroma, real Postgres — once per
+Runs the real pipeline — real embeddings, real Pinecone, real Postgres — once per
 configuration over the planted golden set, and prints the ablation table.
 
 The ablation is the point. "We built hybrid retrieval" is a claim; a table
@@ -28,19 +28,19 @@ from app.core.config import settings
 from app.core.database import session_scope
 from app.core.logging import configure_logging
 from app.modules.intelligence.deps import get_ai_deps
-from app.modules.intelligence.domain.types import FusionMode, RetrievalSource
-from app.modules.intelligence.evals.datasets import (
+from app.modules.intelligence.eval.datasets import (
     EvalQuery,
     load_golden_queries,
     load_identifier_queries,
 )
-from app.modules.intelligence.evals.report import (
+from app.modules.intelligence.eval.report import (
     FamilyVerdict,
     ablation_table,
     conclusion,
     judge,
 )
-from app.modules.intelligence.evals.retrieval import RetrievalScores, score
+from app.modules.intelligence.eval.retrieval import RetrievalScores, score
+from app.modules.intelligence.schemas.types import FusionMode, RetrievalSource
 from app.modules.intelligence.service import IntelligenceService
 from app.modules.tenancy.models import Tenant
 from sqlalchemy import select
