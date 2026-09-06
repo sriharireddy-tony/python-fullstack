@@ -1,0 +1,1105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memoize a Function</title>
+<meta name="description" content="The cache is easy; the cache key is the whole problem — plus eviction, WeakMap, and async.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">JavaScript semantics &middot; Problem 09</p>
+  <h1>Memoize a Function</h1>
+  <p class="standfirst">Six lines get you a working memoize. Then the interviewer asks what happens
+  with two arguments, or an object argument, or a function that returns a promise, or a cache that
+  grows forever &mdash; and every one of those is really a question about <strong>the key</strong>.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Wrap a function so that calling it twice with the same arguments does the work only once.</p>
+
+  <div class="note key">
+    <span class="t">The precondition nobody states</span>
+    <p>Memoization is only correct for a <strong>pure</strong> function: same input, same output, no
+    side effects. Memoize something that reads a clock, a database, or a mutable object and you have
+    not made it faster &mdash; you have made it wrong.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; the six-line version</span></div>
+<pre><code>function memoize(fn) {
+  const cache = new Map();
+
+  return function (...args) {
+    const key = JSON.stringify(args);
+    if (cache.has(key)) return cache.get(key);
+    const result = fn.apply(this, args);
+    cache.set(key, result);
+    return result;
+  };
+}
+
+let calls = 0;
+const slowSquare = (n) =&gt; { calls++; return n * n; };
+const fast = memoize(slowSquare);
+
+console.log(fast(4), fast(4), fast(4), fast(5));
+console.log('the real function ran', calls, 'times for 4 calls');
+
+// the classic demo: naive fibonacci
+let fibCalls = 0;
+function fib(n) { fibCalls++; return n &lt; 2 ? n : fib(n - 1) + fib(n - 2); }
+
+const t0 = performance.now();
+const answer = fib(32);
+console.log('');
+console.log('fib(32) =', answer);
+console.log('  naive : ' + fibCalls.toLocaleString('en-US') + ' calls, ' +
+            (performance.now() - t0).toFixed(0) + ' ms');
+
+// memoized -- note it must call the MEMOIZED version recursively
+let memoCalls = 0;
+const mfib = memoize(function (n) {
+  memoCalls++;
+  return n &lt; 2 ? n : mfib(n - 1) + mfib(n - 2);
+});
+
+const t1 = performance.now();
+console.log('  memo  : ' + mfib(32) + ' in ' + memoCalls + ' calls, ' +
+            (performance.now() - t1).toFixed(2) + ' ms');
+console.log('');
+console.log('From exponential to linear, by remembering answers.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; where the six-line version breaks</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Five failures of JSON.stringify as a key</span></div>
+<pre><code>function memoize(fn) {
+  const cache = new Map();
+  return function (...args) {
+    const key = JSON.stringify(args);
+    if (cache.has(key)) return cache.get(key);
+    const r = fn.apply(this, args);
+    cache.set(key, r);
+    return r;
+  };
+}
+
+// 1. key ORDER in an object is not stable across callers
+const m1 = memoize((o) =&gt; { console.log('    (computing)'); return o.a + o.b; });
+console.log('1. two objects, same data, different key order:');
+console.log('  ', m1({ a: 1, b: 2 }));
+console.log('  ', m1({ b: 2, a: 1 }), '<- cache MISS, same answer computed twice');
+
+// 2. undefined vanishes; a function vanishes
+let calls2 = 0;
+const m2 = memoize((a, b) =&gt; { calls2++; return [a, b]; });
+m2(1, undefined);
+m2(1, null);
+console.log('');
+console.log('2. m2(1, undefined) keys to', JSON.stringify([1, undefined]));
+console.log('   m2(1, null)      keys to', JSON.stringify([1, null]));
+console.log('   the same key -- ran', calls2,
+            'time(s) for two genuinely different calls');
+console.log('   and a function argument disappears the same way:');
+let calls2b = 0;
+const m2b = memoize((a, f) =&gt; { calls2b++; return typeof f; });
+console.log('  ', m2b(1, () =&gt; 'A'), m2b(1, () =&gt; 'B'),
+            '-- ran', calls2b, 'time(s), both keyed to', JSON.stringify([1, null]));
+
+// 3. NaN, Infinity and -0 all collapse
+let calls3 = 0;
+const m3 = memoize((n) =&gt; { calls3++; return 1 / n; });
+console.log('');
+console.log('3. m3(0)  ->', m3(0));
+console.log('   m3(-0) ->', m3(-0), '<- should be -Infinity');
+console.log('   JSON key for both:', JSON.stringify([0]), 'and', JSON.stringify([-0]));
+console.log('   ran', calls3, 'time(s)');
+
+// 4. a BigInt or a cycle throws
+console.log('');
+try { memoize((x) =&gt; x)(10n); }
+catch (e) { console.log('4. BigInt argument ->', e.message); }
+const cyc = {}; cyc.self = cyc;
+try { memoize((x) =&gt; x)(cyc); }
+catch (e) { console.log('   cyclic argument ->', e.message.split('\n')[0]); }
+
+// 5. it is not free -- stringify runs on EVERY call
+const big = { data: new Array(2000).fill(0).map((_, i) =&gt; ({ i, name: 'n' + i })) };
+const m5 = memoize((o) =&gt; o.data.length);
+m5(big);
+let t = performance.now();
+for (let i = 0; i &lt; 200; i++) m5(big);
+console.log('');
+console.log('5. 200 CACHE HITS on a big object took ' +
+            (performance.now() - t).toFixed(1) + ' ms');
+console.log('   -- the "hit" still stringified 2000 objects each time.');
+console.log('   For a cheap function, memoizing can be slower than not.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why the key strategy decides everything</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; four key strategies</span></div>
+<pre><code>function makeMemo(keyFn) {
+  return function (fn) {
+    const cache = new Map();
+    return (...args) =&gt; {
+      const k = keyFn(args);
+      if (cache.has(k)) return cache.get(k);
+      const r = fn(...args);
+      cache.set(k, r);
+      return r;
+    };
+  };
+}
+
+const work = (a, b) =&gt; { let s = 0; for (let i = 0; i &lt; 200; i++) s += a * b; return s; };
+const N = 200000;
+
+const strategies = {
+  'no memo         ': null,
+  'JSON.stringify  ': makeMemo((args) =&gt; JSON.stringify(args)),
+  'join with |     ': makeMemo((args) =&gt; args.join('|')),
+  'single arg only ': makeMemo((args) =&gt; args[0]),
+  'nested Map      ': null,   // handled separately below
+};
+
+for (const [label, wrap] of Object.entries(strategies)) {
+  if (label.startsWith('nested')) continue;
+  const fn = wrap ? wrap(work) : work;
+  const t = performance.now();
+  for (let i = 0; i &lt; N; i++) fn(i % 50, 7);
+  console.log(label + ': ' + (performance.now() - t).toFixed(1) + ' ms');
+}
+
+// a nested Map: one level per argument, no string building at all
+function memoNested(fn) {
+  const root = new Map();
+  const MISS = Symbol('miss');
+  return (...args) =&gt; {
+    let node = root;
+    for (const a of args) {
+      if (!node.has(a)) node.set(a, new Map());
+      node = node.get(a);
+    }
+    if (node.has(MISS) === false &amp;&amp; node.has('value')) return node.get('value');
+    const r = fn(...args);
+    node.set('value', r);
+    return r;
+  };
+}
+const nested = memoNested(work);
+let t = performance.now();
+for (let i = 0; i &lt; N; i++) nested(i % 50, 7);
+console.log('nested Map      : ' + (performance.now() - t).toFixed(1) + ' ms');
+
+console.log('');
+console.log('The wrapper overhead is charged on EVERY call, hit or');
+console.log('miss. JSON.stringify is the most general and the most');
+console.log('expensive; a nested Map avoids strings entirely and keys');
+console.log('on identity, which is both faster and more correct.');
+console.log('');
+console.log('Rule: memoize when the function is expensive relative to');
+console.log('the key. Never memoize an addition.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; pick the key to fit the function</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Arguments look like</th><th>Use</th><th>Because</th></tr></thead>
+      <tbody>
+        <tr><td>one primitive</td><td class="mono">args[0]</td><td>Map keys are already identity-based</td></tr>
+        <tr><td>several primitives</td><td>a nested Map, or <code>args.join('')</code></td><td>no serialisation, no collisions</td></tr>
+        <tr><td>one object, identity matters</td><td class="mono">WeakMap</td><td>the entry dies with the object</td></tr>
+        <tr><td>one object, contents matter</td><td>a stable stringify (sorted keys)</td><td><code>JSON.stringify</code> is order-dependent</td></tr>
+        <tr><td>anything, and you want control</td><td>a caller-supplied <code>resolver</code></td><td>the caller knows what identifies a call</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why a Map and not a plain object</span>
+    <p>A plain object stringifies every key, so <code>1</code> and <code>'1'</code> collide. It also
+    inherits from <code>Object.prototype</code>, so <code>cache['toString']</code> is a false hit
+    before anything is stored. A <code>Map</code> has neither problem, keeps insertion order, and has
+    an O(1) <code>size</code>.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">the plain-object cache, failing twice</span></div>
+<pre><code>function memoWithObject(fn) {
+  const cache = {};
+  return (x) =&gt; {
+    if (cache[x] !== undefined) return cache[x];
+    return (cache[x] = fn(x));
+  };
+}
+
+function memoWithMap(fn) {
+  const cache = new Map();
+  return (x) =&gt; {
+    if (cache.has(x)) return cache.get(x);
+    const r = fn(x);
+    cache.set(x, r);
+    return r;
+  };
+}
+
+const describe = (x) =&gt; typeof x + ':' + String(x);
+
+const objMemo = memoWithObject(describe);
+const mapMemo = memoWithMap(describe);
+
+console.log('1 vs "1":');
+console.log('  object cache:', objMemo(1), '/', objMemo('1'), '<- collision');
+console.log('  map cache   :', mapMemo(1), '/', mapMemo('1'));
+
+console.log('');
+console.log('inherited keys:');
+console.log('  cache["toString"] before anything is stored:',
+            typeof ({})['toString']);
+const objMemo2 = memoWithObject((x) =&gt; 'computed ' + x);
+console.log('  object cache for "toString":', objMemo2('toString'));
+console.log('  (it happened to work here only because the inherited');
+console.log('   value is a function, not undefined -- the check');
+console.log('   `!== undefined` is what saved it, by accident)');
+
+const proto = memoWithObject((x) =&gt; 'computed ' + x);
+console.log('  object cache for "constructor":', proto('constructor'));
+console.log('  map cache    for "constructor":',
+            memoWithMap((x) =&gt; 'computed ' + x)('constructor'));
+
+console.log('');
+console.log('And the other classic: a function that legitimately');
+console.log('returns undefined is never cached at all.');
+let runs = 0;
+const voidMemo = memoWithObject(() =&gt; { runs++; return undefined; });
+voidMemo('a'); voidMemo('a'); voidMemo('a');
+console.log('  three calls, function ran', runs, 'times');
+console.log('  Use cache.has(key), never a truthiness or undefined test.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; watch the cache fill</h2>
+
+  <div class="trace">
+<pre>  const m = memoize(add)     cache = {}
+
+  m(1, 2)
+      key = "[1,2]"
+      cache.has -> false      MISS
+      add(1, 2) = 3
+      cache = { "[1,2]": 3 }
+      return 3
+
+  m(1, 2)
+      key = "[1,2]"
+      cache.has -> true       HIT
+      return 3                add() never ran
+
+  m(2, 1)
+      key = "[2,1]"           a DIFFERENT key
+      cache.has -> false      MISS
+      cache = { "[1,2]": 3, "[2,1]": 3 }
+
+  Note the last one. add is commutative, but the memo does not
+  know that -- it keys on the ARGUMENTS, not on the meaning.
+  If you want (1,2) and (2,1) to share an entry, that is a
+  custom resolver: (a, b) => [a, b].sort().join(',')
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function memoizeLoud(fn, resolver) {
+  const cache = new Map();
+
+  const wrapped = function (...args) {
+    const key = resolver ? resolver(...args) : JSON.stringify(args);
+
+    if (cache.has(key)) {
+      console.log('  key ' + JSON.stringify(key) + '  HIT  -> ' + cache.get(key));
+      return cache.get(key);
+    }
+
+    console.log('  key ' + JSON.stringify(key) + '  MISS -- computing');
+    const result = fn.apply(this, args);
+    cache.set(key, result);
+    console.log('    stored. cache size is now ' + cache.size);
+    return result;
+  };
+
+  wrapped.cache = cache;
+  return wrapped;
+}
+
+const add = (a, b) =&gt; a + b;
+
+console.log('default key (JSON of the argument list):');
+const m = memoizeLoud(add);
+m(1, 2);
+m(1, 2);
+m(2, 1);
+console.log('  keys:', [...m.cache.keys()]);
+
+console.log('');
+console.log('custom resolver that sorts, so order stops mattering:');
+const m2 = memoizeLoud(add, (a, b) =&gt; [a, b].sort().join(','));
+m2(1, 2);
+m2(2, 1);
+console.log('  keys:', [...m2.cache.keys()]);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; the variants worth knowing</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">1. single argument &mdash; the fastest correct version</span></div>
+<pre><code>// When the function takes exactly one argument, the argument IS
+// the key. No serialisation, and it works for objects by identity.
+function memoizeUnary(fn) {
+  const cache = new Map();
+  return (arg) =&gt; {
+    if (cache.has(arg)) return cache.get(arg);
+    const r = fn(arg);
+    cache.set(arg, r);
+    return r;
+  };
+}
+
+let calls = 0;
+const square = memoizeUnary((n) =&gt; { calls++; return n * n; });
+console.log(square(4), square(4), square(5), '-- ran', calls, 'times');
+
+// and it distinguishes things JSON cannot
+const describe = memoizeUnary((x) =&gt; { calls++; return String(x); });
+calls = 0;
+describe(NaN); describe(NaN);
+describe(0); describe(-0);
+describe(1); describe('1');
+console.log('');
+console.log('NaN twice, 0 and -0, 1 and "1" -- ran', calls, 'times');
+console.log('  NaN keyed once (Map uses SameValueZero, so NaN === NaN');
+console.log('    for key purposes -- unlike ===)');
+console.log('  0 and -0 share a key, also SameValueZero');
+console.log('  1 and "1" are DIFFERENT keys, unlike a plain object');
+
+// object identity
+calls = 0;
+const size = memoizeUnary((o) =&gt; { calls++; return Object.keys(o).length; });
+const a = { x: 1 }, b = { x: 1 };
+size(a); size(a); size(b);
+console.log('');
+console.log('two structurally equal objects, ran', calls, 'times');
+console.log('  identity, not contents. Whether that is right depends');
+console.log('  entirely on your function.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">2. WeakMap &mdash; when the argument is an object you do not own</span></div>
+<pre><code>// A Map keeps its keys alive forever. A WeakMap does not: when the
+// object is garbage, so is its cache entry.
+function memoizeWeak(fn) {
+  const cache = new WeakMap();
+  return (obj) =&gt; {
+    if (cache.has(obj)) return cache.get(obj);
+    const r = fn(obj);
+    cache.set(obj, r);
+    return r;
+  };
+}
+
+let calls = 0;
+const analyse = memoizeWeak((o) =&gt; { calls++; return Object.keys(o).length; });
+
+let node = { a: 1, b: 2 };
+console.log(analyse(node), analyse(node), '-- ran', calls, 'time(s)');
+
+console.log('');
+console.log('What a WeakMap gives up:');
+console.log('  primitive keys  :');
+try { new WeakMap().set('a string', 1); }
+catch (e) { console.log('    ', e.constructor.name + ':', e.message); }
+console.log('  size / iteration: WeakMap has no .size and no .keys()');
+console.log('  a WeakMap is deliberately un-enumerable, because');
+console.log('  observing it would let you detect garbage collection.');
+
+console.log('');
+console.log('When to reach for it: caching a computation ABOUT an');
+console.log('object -- a DOM node, a React element, a parsed config --');
+console.log('where the object has an independent lifetime and you must');
+console.log('not be the reason it stays in memory.');
+
+node = null;   // now both the object and its cache entry can be collected
+console.log('');
+console.log('After `node = null`, the entry is unreachable and the GC');
+console.log('may reclaim both. With a plain Map, the object would be');
+console.log('pinned in memory by the cache for the life of the program.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">3. a bounded cache &mdash; LRU</span></div>
+<pre><code>// An unbounded memo on user input is a memory leak with a friendly
+// name. Cap it, and evict the least recently used entry.
+function memoizeLRU(fn, maxSize = 3) {
+  const cache = new Map();       // Map preserves INSERTION order
+
+  return function (...args) {
+    const key = args.join('');
+
+    if (cache.has(key)) {
+      const value = cache.get(key);
+      cache.delete(key);         // delete + set moves it to the end,
+      cache.set(key, value);     // making it the most recently used
+      return value;
+    }
+
+    const result = fn.apply(this, args);
+    cache.set(key, result);
+
+    if (cache.size &gt; maxSize) {
+      // the first key in iteration order is the oldest
+      const oldest = cache.keys().next().value;
+      cache.delete(oldest);
+    }
+
+    return result;
+  };
+}
+
+let calls = 0;
+const f = memoizeLRU((n) =&gt; { calls++; return n * 10; }, 3);
+
+f(1); f(2); f(3);
+console.log('after 1,2,3      -- computed', calls, 'times');
+
+f(1);                       // hit, and 1 becomes the newest
+console.log('f(1) again       -- computed', calls, 'times (a hit)');
+
+f(4);                       // evicts 2, the least recently used
+console.log('f(4)             -- computed', calls, 'times');
+
+f(1);
+console.log('f(1)             -- computed', calls, 'times (still cached)');
+f(2);
+console.log('f(2)             -- computed', calls, 'times (was evicted)');
+
+console.log('');
+console.log('The delete-then-set trick is the whole LRU. A Map iterates');
+console.log('in insertion order, so re-inserting a key moves it to the');
+console.log('back of the queue, and .keys().next().value is the front.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the one to write in the interview</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; resolver, cache access, and a size cap</span></div>
+<pre><code>function memoize(fn, options = {}) {
+  const resolver = options.resolver;
+  const maxSize = options.maxSize ?? Infinity;
+  const cache = new Map();
+
+  function defaultKey(args) {
+    // fast path for the overwhelmingly common cases
+    if (args.length === 0) return ' empty';
+    if (args.length === 1) {
+      const a = args[0];
+      if (a === null || typeof a !== 'object') return typeof a + ':' + String(a);
+    }
+    return JSON.stringify(args);
+  }
+
+  function wrapped(...args) {
+    const key = resolver ? resolver.apply(this, args) : defaultKey(args);
+
+    if (cache.has(key)) {
+      const value = cache.get(key);
+      if (maxSize !== Infinity) { cache.delete(key); cache.set(key, value); }
+      return value;
+    }
+
+    const result = fn.apply(this, args);
+    cache.set(key, result);
+
+    if (cache.size &gt; maxSize) cache.delete(cache.keys().next().value);
+    return result;
+  }
+
+  wrapped.cache = cache;
+  wrapped.clear = () =&gt; cache.clear();
+  wrapped.delete = (...args) =&gt;
+    cache.delete(resolver ? resolver(...args) : defaultKey(args));
+
+  return wrapped;
+}
+
+let calls = 0;
+const add = memoize((a, b) =&gt; { calls++; return a + b; });
+console.log(add(1, 2), add(1, 2), add(2, 3), '-- ran', calls, 'times');
+
+console.log('');
+console.log('typed keys, so 1 and "1" do not collide:');
+calls = 0;
+const describe = memoize((x) =&gt; { calls++; return typeof x; });
+console.log(' ', describe(1), describe('1'), describe(true), describe('true'));
+console.log('  ran', calls, 'times for 4 distinct inputs');
+
+console.log('');
+console.log('invalidation, which real caches always need:');
+calls = 0;
+const priceOf = memoize((sku) =&gt; { calls++; return sku.length * 10; });
+priceOf('abc'); priceOf('abc');
+console.log('  two calls, computed', calls, 'time(s)');
+priceOf.delete('abc');
+priceOf('abc');
+console.log('  after delete("abc"), computed', calls, 'times');
+priceOf.clear();
+priceOf('abc');
+console.log('  after clear(),       computed', calls, 'times');
+
+console.log('');
+console.log('and the size cap:');
+const capped = memoize((n) =&gt; n * 2, { maxSize: 2 });
+capped(1); capped(2); capped(3);
+console.log('  after 3 calls with maxSize 2, cache holds:',
+            [...capped.cache.keys()]);</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">memoizing an async function &mdash; cache the PROMISE</span></div>
+<pre><code>// The subtle part: cache the promise, not the resolved value.
+// Caching the value means N concurrent callers all start N
+// requests before the first one finishes.
+let requests = 0;
+const fetchUser = (id) =&gt; {
+  requests++;
+  return new Promise((r) =&gt; setTimeout(() =&gt; r({ id, name: 'user' + id }), 20));
+};
+
+// WRONG: awaits inside, so the cache is only written on completion
+function memoAsyncWrong(fn) {
+  const cache = new Map();
+  return async (id) =&gt; {
+    if (cache.has(id)) return cache.get(id);
+    const value = await fn(id);          // a gap, during which nothing is cached
+    cache.set(id, value);
+    return value;
+  };
+}
+
+// RIGHT: store the promise immediately
+function memoAsync(fn) {
+  const cache = new Map();
+  return (id) =&gt; {
+    if (cache.has(id)) return cache.get(id);
+    const promise = fn(id).catch((err) =&gt; {
+      cache.delete(id);                  // do not cache a failure forever
+      throw err;
+    });
+    cache.set(id, promise);              // stored BEFORE anyone awaits
+    return promise;
+  };
+}
+
+requests = 0;
+const wrong = memoAsyncWrong(fetchUser);
+await Promise.all([wrong(1), wrong(1), wrong(1), wrong(1), wrong(1)]);
+console.log('5 concurrent calls, value-cached  ->', requests, 'requests');
+
+requests = 0;
+const right = memoAsync(fetchUser);
+await Promise.all([right(1), right(1), right(1), right(1), right(1)]);
+console.log('5 concurrent calls, promise-cached->', requests, 'request');
+
+console.log('');
+console.log('This pattern has a name -- request deduplication -- and it');
+console.log('is what SWR, React Query and Apollo all do underneath.');
+
+console.log('');
+console.log('And the failure case, which is why the .catch matters:');
+let attempt = 0;
+const flaky = memoAsync(() =&gt; {
+  attempt++;
+  return attempt === 1 ? Promise.reject(new Error('network')) : Promise.resolve('ok');
+});
+try { await flaky(1); } catch (e) { console.log('  first call  ->', e.message); }
+console.log('  second call ->', await flaky(1));
+console.log('  Without the delete, the rejected promise would be');
+console.log('  returned forever and the call could never recover.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">a stable key for object arguments</span></div>
+<pre><code>// JSON.stringify depends on key insertion order. If you need
+// structural equality, sort the keys as you serialise.
+function stableStringify(value) {
+  const seen = new WeakSet();
+
+  return (function walk(v) {
+    if (v === null) return 'null';
+    if (typeof v === 'number') return Object.is(v, -0) ? '-0' : String(v);
+    if (typeof v === 'bigint') return v + 'n';
+    if (typeof v === 'string') return JSON.stringify(v);
+    if (typeof v === 'boolean' || typeof v === 'undefined') return String(v);
+    if (typeof v === 'function') throw new TypeError('cannot key on a function');
+
+    if (seen.has(v)) throw new TypeError('cannot key on a cyclic structure');
+    seen.add(v);
+
+    let out;
+    if (Array.isArray(v)) {
+      out = '[' + v.map(walk).join(',') + ']';
+    } else if (v instanceof Date) {
+      out = 'Date(' + v.getTime() + ')';
+    } else if (v instanceof Map) {
+      out = 'Map(' + [...v].map(([k, x]) =&gt; walk(k) + ':' + walk(x)).sort().join(',') + ')';
+    } else if (v instanceof Set) {
+      out = 'Set(' + [...v].map(walk).sort().join(',') + ')';
+    } else {
+      out = '{' + Object.keys(v).sort()
+        .map((k) =&gt; JSON.stringify(k) + ':' + walk(v[k])).join(',') + '}';
+    }
+
+    seen.delete(v);
+    return out;
+  })(value);
+}
+
+const a = { b: 2, a: 1, c: { y: 2, x: 1 } };
+const b = { a: 1, c: { x: 1, y: 2 }, b: 2 };
+
+console.log('JSON.stringify:');
+console.log('  a:', JSON.stringify(a));
+console.log('  b:', JSON.stringify(b));
+console.log('  equal?', JSON.stringify(a) === JSON.stringify(b));
+
+console.log('');
+console.log('stableStringify:');
+console.log('  a:', stableStringify(a));
+console.log('  b:', stableStringify(b));
+console.log('  equal?', stableStringify(a) === stableStringify(b));
+
+console.log('');
+console.log('and the values JSON loses:');
+console.log('  NaN          ->', JSON.stringify(NaN), 'vs', stableStringify(NaN));
+console.log('  -0           ->', JSON.stringify(-0), 'vs', stableStringify(-0));
+console.log('  Infinity     ->', JSON.stringify(Infinity), 'vs', stableStringify(Infinity));
+console.log('  undefined    ->', JSON.stringify([undefined]), 'vs',
+            stableStringify([undefined]));
+console.log('  a Date       ->', JSON.stringify(new Date(0)), 'vs',
+            stableStringify(new Date(0)));
+console.log('');
+console.log('It is slower than JSON.stringify. Use it only when');
+console.log('structural equality is genuinely what you mean.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th></th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Cache hit</td><td class="mono">O(key)</td><td>&mdash;</td></tr>
+        <tr><td>Cache miss</td><td class="mono">O(key) + the function</td><td class="mono">O(key + result)</td></tr>
+        <tr><td>Whole cache</td><td>&mdash;</td><td class="mono">O(distinct calls) &mdash; unbounded by default</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><code>O(key)</code> is the cost of building the key, and it is the number people forget.
+  A single-argument primitive key is O(1); <code>JSON.stringify</code> of a large object is O(size of
+  the object), <strong>on every call including hits</strong>. Memoizing a cheap function with an
+  expensive key makes it slower.</p>
+
+  <p>The space row is the one that causes incidents. A memoized function keyed on user input has an
+  unbounded cache, holds every result forever, and &mdash; with a <code>Map</code> &mdash; holds every
+  key object forever too. Cap it, or use a <code>WeakMap</code>, or accept that it is a leak.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;A closure over a <code>Map</code>, keyed on the arguments. I use <code>cache.has</code>
+    rather than a truthiness check, so a function returning <code>undefined</code> is still cached, and
+    a <code>Map</code> rather than an object so numeric and string keys do not collide and nothing is
+    inherited from the prototype. The real question is the key: one primitive argument can be the key
+    directly; several want a nested Map or a delimiter join; an object wants a <code>WeakMap</code> if
+    identity is what matters, or a stable sorted stringify if contents are. And I would cap the size,
+    because otherwise it is an unbounded cache keyed on whatever the user types.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Memoizing something that is not pure</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; three ways</span></div>
+<pre><code>function memoize(fn) {
+  const cache = new Map();
+  return (...args) =&gt; {
+    const k = JSON.stringify(args);
+    if (cache.has(k)) return cache.get(k);
+    const r = fn(...args);
+    cache.set(k, r);
+    return r;
+  };
+}
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// (a) it reads the clock
+const now = memoize(() =&gt; Date.now());
+const first = now();
+await sleep(30);
+console.log('a) time is frozen: same value 30 ms later?', now() === first);
+
+// (b) it reads a mutable object
+const config = { mode: 'dark' };
+const describe = memoize((label) =&gt; label + ' in ' + config.mode);
+console.log('');
+console.log('b)', describe('theme'));
+config.mode = 'light';
+console.log('  ', describe('theme'), '<- stale, config changed');
+
+// (c) it returns a mutable object -- callers share it
+const build = memoize((n) =&gt; ({ items: [n] }));
+const one = build(1);
+const two = build(1);
+one.items.push('MUTATED BY ANOTHER CALLER');
+console.log('');
+console.log('c) two callers, same object?', one === two);
+console.log('  ', JSON.stringify(two));
+
+console.log('');
+console.log('Memoization is only valid for a pure function. If the');
+console.log('result depends on anything outside the arguments, that');
+console.log('thing has to be part of the KEY -- or you must not');
+console.log('memoize at all.');
+console.log('');
+console.log('Fix for (b): key on the config too.');
+const fixed = memoize((label, mode) =&gt; label + ' in ' + mode);
+console.log('  ', fixed('theme', 'dark'), '/', fixed('theme', 'light'));
+console.log('Fix for (c): return a copy, or freeze the result.');</code></pre>
+  </div>
+
+  <h3>2. Recursing into the unmemoized function</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the memo does nothing</span></div>
+<pre><code>function memoize(fn) {
+  const cache = new Map();
+  return (...args) =&gt; {
+    const k = String(args);
+    if (cache.has(k)) return cache.get(k);
+    const r = fn(...args);
+    cache.set(k, r);
+    return r;
+  };
+}
+
+// the recursive calls go to `fib`, not to the memoized wrapper
+let brokenCalls = 0;
+function fib(n) {
+  brokenCalls++;
+  return n &lt; 2 ? n : fib(n - 1) + fib(n - 2);
+}
+const memoFib = memoize(fib);
+
+memoFib(28);
+console.log('memoize(fib)(28) -- inner calls:',
+            brokenCalls.toLocaleString('en-US'));
+console.log('  the wrapper cached exactly ONE entry: the top-level call.');
+console.log('  Every recursive call went straight to the raw function.');
+
+// the fix: make the function call the wrapper
+let fixedCalls = 0;
+const goodFib = memoize((n) =&gt; {
+  fixedCalls++;
+  return n &lt; 2 ? n : goodFib(n - 1) + goodFib(n - 2);
+});
+goodFib(28);
+console.log('');
+console.log('self-referential version   -- inner calls:', fixedCalls);
+
+// or pass the memoized version in
+let injectedCalls = 0;
+function memoizeRecursive(fn) {
+  const cache = new Map();
+  const wrapped = (...args) =&gt; {
+    const k = String(args);
+    if (cache.has(k)) return cache.get(k);
+    const r = fn(wrapped, ...args);      // hand the wrapper to the function
+    cache.set(k, r);
+    return r;
+  };
+  return wrapped;
+}
+const injected = memoizeRecursive((self, n) =&gt; {
+  injectedCalls++;
+  return n &lt; 2 ? n : self(n - 1) + self(n - 2);
+});
+injected(28);
+console.log('injection version          -- inner calls:', injectedCalls);
+console.log('');
+console.log('The second is cleaner: the function does not have to know');
+console.log('the name of its own memoized wrapper.');</code></pre>
+  </div>
+
+  <h3>3. An unbounded cache on user input</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; a leak with a friendly name</span></div>
+<pre><code>function memoize(fn) {
+  const cache = new Map();
+  const w = (...a) =&gt; {
+    const k = String(a);
+    if (cache.has(k)) return cache.get(k);
+    const r = fn(...a);
+    cache.set(k, r);
+    return r;
+  };
+  w.cache = cache;
+  return w;
+}
+
+// a search box: every keystroke is a distinct key
+const search = memoize((q) =&gt; ({ query: q, results: new Array(50).fill(q) }));
+
+const typed = 'javascript interview questions';
+for (let i = 1; i &lt;= typed.length; i++) search(typed.slice(0, i));
+
+console.log('one user typed one phrase.');
+console.log('  cache entries:', search.cache.size);
+console.log('  hit rate     : 0% -- every prefix is unique');
+
+console.log('');
+console.log('Now multiply by every user, every session, forever. The');
+console.log('cache only grows, and every entry holds a 50-item array.');
+
+// bounded version
+function memoizeLRU(fn, max) {
+  const cache = new Map();
+  const w = (...a) =&gt; {
+    const k = String(a);
+    if (cache.has(k)) { const v = cache.get(k); cache.delete(k); cache.set(k, v); return v; }
+    const r = fn(...a);
+    cache.set(k, r);
+    if (cache.size &gt; max) cache.delete(cache.keys().next().value);
+    return r;
+  };
+  w.cache = cache;
+  return w;
+}
+const bounded = memoizeLRU((q) =&gt; ({ query: q }), 10);
+for (let i = 1; i &lt;= typed.length; i++) bounded(typed.slice(0, i));
+console.log('');
+console.log('bounded to 10 entries ->', bounded.cache.size, 'entries held');
+
+console.log('');
+console.log('Before memoizing, ask: how many DISTINCT inputs will this');
+console.log('ever see? If the answer is "as many as the user types",');
+console.log('you need a bound, a TTL, or no cache at all.');</code></pre>
+  </div>
+
+  <h3>4. Sharing one cache across instances</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; one instance served another instance's answer</span></div>
+<pre><code>function memoize(fn) {
+  const cache = new Map();
+  return function (...args) {
+    const k = JSON.stringify(args);
+    if (cache.has(k)) return cache.get(k);
+    const r = fn.apply(this, args);
+    cache.set(k, r);
+    return r;
+  };
+}
+
+// memoizing on the PROTOTYPE means one cache for every instance
+class Account {
+  constructor(owner, balance) { this.owner = owner; this.balance = balance; }
+}
+Account.prototype.report = memoize(function (label) {
+  return label + ': ' + this.owner + ' has ' + this.balance;
+});
+
+const ada = new Account('Ada', 100);
+const grace = new Account('Grace', 500);
+
+console.log('ada  :', ada.report('balance'));
+console.log('grace:', grace.report('balance'), '  &lt;- Ada has leaked in');
+console.log('');
+console.log('The key was JSON of the ARGUMENTS -- "balance" in both');
+console.log('cases. `this` is not part of the key, so the second');
+console.log('instance got the cached answer from the first.');
+
+// fix A: a per-instance cache, created in the constructor
+class FixedA {
+  constructor(owner, balance) {
+    this.owner = owner;
+    this.balance = balance;
+    this.report = memoize((label) =&gt; label + ': ' + this.owner + ' has ' + this.balance);
+  }
+}
+console.log('');
+console.log('fix A -- per-instance memo:');
+console.log(' ', new FixedA('Ada', 100).report('balance'));
+console.log(' ', new FixedA('Grace', 500).report('balance'));
+
+// fix B: put `this` in the key with a WeakMap of caches
+function memoizePerReceiver(fn) {
+  const caches = new WeakMap();
+  return function (...args) {
+    if (!caches.has(this)) caches.set(this, new Map());
+    const cache = caches.get(this);
+    const k = JSON.stringify(args);
+    if (cache.has(k)) return cache.get(k);
+    const r = fn.apply(this, args);
+    cache.set(k, r);
+    return r;
+  };
+}
+class FixedB {
+  constructor(owner, balance) { this.owner = owner; this.balance = balance; }
+}
+FixedB.prototype.report = memoizePerReceiver(function (label) {
+  return label + ': ' + this.owner + ' has ' + this.balance;
+});
+console.log('');
+console.log('fix B -- one cache per receiver, shared method:');
+console.log(' ', new FixedB('Ada', 100).report('balance'));
+console.log(' ', new FixedB('Grace', 500).report('balance'));</code></pre>
+  </div>
+
+  <h3>5. Memoizing a function that is cheaper than the key</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct, and slower</span></div>
+<pre><code>function memoize(fn) {
+  const cache = new Map();
+  return (...args) =&gt; {
+    const k = JSON.stringify(args);
+    if (cache.has(k)) return cache.get(k);
+    const r = fn(...args);
+    cache.set(k, r);
+    return r;
+  };
+}
+
+const add = (a, b) =&gt; a + b;
+const memoAdd = memoize(add);
+const N = 500000;
+
+let t = performance.now();
+let s = 0;
+for (let i = 0; i &lt; N; i++) s += add(i % 100, 7);
+const plainMs = performance.now() - t;
+
+t = performance.now();
+s = 0;
+for (let i = 0; i &lt; N; i++) s += memoAdd(i % 100, 7);
+const memoMs = performance.now() - t;
+
+console.log(N.toLocaleString('en-US') + ' additions, only 100 distinct inputs');
+console.log('  plain    : ' + plainMs.toFixed(1) + ' ms');
+console.log('  memoized : ' + memoMs.toFixed(1) + ' ms');
+console.log('  the memo made it ' +
+            (memoMs / Math.max(plainMs, 0.01)).toFixed(1) + 'x SLOWER');
+console.log('');
+console.log('A 99.98% hit rate, and it still lost -- because building');
+console.log('the key costs more than the addition it is avoiding.');
+console.log('');
+console.log('Memoize when the function is EXPENSIVE (a network call, a');
+console.log('parse, a layout measurement, an exponential recursion) and');
+console.log('the input space is SMALL. Otherwise measure first.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the six-line version from memory</strong>, then immediately say two things that
+    are wrong with <code>JSON.stringify</code> as the key.</li>
+    <li><strong>Write the single-argument version</strong> and explain why <code>Map</code> beats a
+    plain object &mdash; numeric keys, inherited keys, and <code>has</code> versus
+    <code>undefined</code>.</li>
+    <li><strong>Write the LRU version.</strong> Step 6. The delete-then-set move is worth having in
+    your fingers; it comes up in cache questions of every kind.</li>
+    <li><strong>Write the async version</strong> and explain why it caches the promise rather than the
+    value. Then explain the <code>.catch</code> that deletes the entry.</li>
+    <li><strong>Write <code>memoizeRecursive</code></strong> &mdash; Step 9's injection version &mdash;
+    and use it to memoize a recursive grid-paths or edit-distance function. That is the bridge from
+    memoization to dynamic programming.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>The cache is trivial; the key is the design.</strong> Every follow-up question on this
+    topic &mdash; multiple arguments, objects, promises, invalidation, leaks &mdash; is answered by
+    deciding what identifies a call and how long that answer stays true. Ask those two questions before
+    you write a line.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="08-currying.html">&larr; Currying</a>
+  <a href="10-flatten-depth.html">Next: Flatten to Depth N &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

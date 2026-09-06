@@ -1,0 +1,876 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Clone</title>
+<meta name="description" content="Why JSON.parse(JSON.stringify(x)) is wrong, and what a real deep clone has to handle.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">JavaScript semantics &middot; Problem 02</p>
+  <h1>Deep Clone</h1>
+  <p class="standfirst">Everyone knows the one-liner. The interview is about knowing the seven things
+  it silently destroys &mdash; and then writing the version that does not.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Copy a value so that changing the copy can never change the original, however deeply nested it
+  is.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">shallow versus deep, in six lines</span></div>
+<pre><code>const original = { name: 'Ada', address: { city: 'London' }, tags: ['x'] };
+
+// SHALLOW: top-level keys copied, nested objects SHARED
+const shallow = { ...original };
+shallow.name = 'Grace';                  // safe -- a new top-level slot
+shallow.address.city = 'Paris';          // NOT safe -- same object
+shallow.tags.push('y');                  // NOT safe -- same array
+
+console.log('after editing the shallow copy:');
+console.log('  original.name        :', original.name);       // 'Ada'   -- fine
+console.log('  original.address.city:', original.address.city); // 'Paris' -- LEAKED
+console.log('  original.tags        :', original.tags);        // ['x','y'] -- LEAKED
+console.log('');
+console.log('  same address object? ', shallow.address === original.address);
+console.log('  same tags array?     ', shallow.tags === original.tags);</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why this happens at all</span>
+    <p>A JavaScript variable never holds an object. It holds a <strong>reference</strong> to one.
+    <code>{ ...original }</code> copies the references in each slot, so the copy and the original point
+    at the same nested objects. Primitives &mdash; numbers, strings, booleans, null, undefined, symbols,
+    bigints &mdash; are copied by value, which is why <code>shallow.name</code> was safe.</p>
+    <p>A <strong>deep</strong> clone follows every reference and rebuilds what it finds, all the way
+    down.</p>
+  </div>
+
+  <p>The shallow copies you already know, and what they share:</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Expression</th><th>Copies</th><th>Shares</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">{ ...obj }</td><td>own enumerable string and symbol keys</td><td>every nested object</td></tr>
+        <tr><td class="mono">Object.assign({}, obj)</td><td>the same, and triggers setters</td><td>every nested object</td></tr>
+        <tr><td class="mono">arr.slice()</td><td>the elements</td><td>every element that is an object</td></tr>
+        <tr><td class="mono">[...arr]</td><td>the same</td><td>the same</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the one-liner everybody reaches for</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; JSON round trip</span></div>
+<pre><code>const clone = (x) =&gt; JSON.parse(JSON.stringify(x));
+
+const original = { name: 'Ada', address: { city: 'London' }, tags: ['x'] };
+const copy = clone(original);
+
+copy.address.city = 'Paris';
+copy.tags.push('y');
+
+console.log('original:', original);
+console.log('copy    :', copy);
+console.log('');
+console.log('shared address?', copy.address === original.address);   // false
+console.log('It works. For plain data, it genuinely works.');</code></pre>
+  </div>
+
+  <p>And for a JSON API response &mdash; strings, numbers, booleans, null, arrays and plain objects
+  &mdash; that is a perfectly reasonable answer. Say so. Then say what it destroys, because that is
+  the part being tested.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is wrong &mdash; seven ways</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Everything JSON.stringify quietly does to your data</span></div>
+<pre><code>const clone = (x) =&gt; JSON.parse(JSON.stringify(x));
+
+// 1. Dates become strings
+const d = { when: new Date('2020-01-02T03:04:05Z') };
+const d2 = clone(d);
+console.log('1. Date        ->', typeof d2.when, JSON.stringify(d2.when));
+console.log('   still a Date?', d2.when instanceof Date);
+
+// 2. undefined and functions vanish from objects...
+const u = { a: 1, b: undefined, c: function () {}, d: Symbol('s') };
+console.log('');
+console.log('2. keys in     ->', Object.keys(u));
+console.log('   keys out    ->', Object.keys(clone(u)));
+
+// ...and become null inside arrays. Same value, two behaviours.
+console.log('   in an array ->', clone([1, undefined, function () {}, 4]));
+
+// 3. Map and Set become {}
+console.log('');
+console.log('3. Map         ->', clone({ m: new Map([['k', 1]]) }));
+console.log('   Set         ->', clone({ s: new Set([1, 2]) }));
+
+// 4. NaN and Infinity become null
+console.log('');
+console.log('4. numbers     ->', clone({ a: NaN, b: Infinity, c: -Infinity, d: -0 }));
+console.log('   (-0 came back as 0 too -- Object.is says:',
+            Object.is(clone({ z: -0 }).z, -0) + ')');
+
+// 5. the prototype is lost -- a class instance becomes a plain object
+class User {
+  constructor(name) { this.name = name; }
+  greet() { return 'hi, ' + this.name; }
+}
+const user = new User('Ada');
+const user2 = clone(user);
+console.log('');
+console.log('5. instanceof User?', user2 instanceof User);
+try { user2.greet(); } catch (e) { console.log('   greet() ->', e.message); }
+
+// 6. BigInt throws outright
+console.log('');
+try { clone({ big: 10n }); } catch (e) { console.log('6. BigInt      ->', e.message); }
+
+// 7. a cycle throws
+const cyclic = { name: 'root' };
+cyclic.self = cyclic;
+try { clone(cyclic); } catch (e) {
+  console.log('7. cycle       ->', e.message.split('\n')[0]);
+}</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The one that bites hardest in practice</span>
+    <p><strong>Dates.</strong> They survive the round trip as ISO strings, which look right in a log
+    and in the UI, and then explode three screens later when something calls
+    <code>.getTime()</code>. The failure happens far from the clone that caused it.</p>
+  </div>
+
+  <p>There is also a speed cost, though it is not the reason to avoid it.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; JSON round trip versus a real clone</span></div>
+<pre><code>function buildData(rows) {
+  const out = [];
+  for (let i = 0; i &lt; rows; i++) {
+    out.push({
+      id: i,
+      name: 'row ' + i,
+      active: i % 2 === 0,
+      meta: { score: i * 1.5, tags: ['a', 'b', 'c'], nested: { deep: { value: i } } },
+    });
+  }
+  return { rows: out, count: rows };
+}
+
+function deepClone(value) {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    const arr = new Array(value.length);
+    for (let i = 0; i &lt; value.length; i++) arr[i] = deepClone(value[i]);
+    return arr;
+  }
+  const out = {};
+  for (const k of Object.keys(value)) out[k] = deepClone(value[k]);
+  return out;
+}
+
+const data = buildData(20000);
+
+let t = performance.now();
+const a = JSON.parse(JSON.stringify(data));
+const jsonMs = performance.now() - t;
+
+t = performance.now();
+const b = deepClone(data);
+const recurseMs = performance.now() - t;
+
+let structuredMs = null;
+if (typeof structuredClone === 'function') {
+  t = performance.now();
+  structuredClone(data);
+  structuredMs = performance.now() - t;
+}
+
+console.log('cloning 20,000 nested records');
+console.log('  JSON round trip : ' + jsonMs.toFixed(1) + ' ms');
+console.log('  recursive clone : ' + recurseMs.toFixed(1) + ' ms');
+if (structuredMs !== null) {
+  console.log('  structuredClone : ' + structuredMs.toFixed(1) + ' ms');
+}
+console.log('  same result:', JSON.stringify(a) === JSON.stringify(b));
+console.log('');
+console.log('The JSON version serialises the whole graph to a string and');
+console.log('parses it back -- two full passes plus a large temporary');
+console.log('string.');
+console.log('');
+console.log('And notice structuredClone: usually the SLOWEST of the');
+console.log('three on plain data like this, because it walks the graph');
+console.log('through the structured-clone algorithm and crosses into');
+console.log('native code for every node. You do not pick it for speed --');
+console.log('you pick it for correctness on Dates, Maps, Sets and cycles.');
+console.log('Correctness is the reason to avoid the JSON trick too. Speed');
+console.log('is a side issue on all three.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; recurse on the shape, remember what you have seen</h2>
+
+  <p>This is the Flatten page's recursion again: one branch per shape the value can take. Two things
+  make it harder.</p>
+
+  <div class="note key">
+    <span class="t">The two real problems</span>
+    <p><strong>Cycles.</strong> If an object contains itself, plain recursion never stops. Keep a
+    <code>Map</code> from <em>original object</em> to <em>its clone</em>; before cloning anything, check
+    whether you have already cloned it and return the existing copy.</p>
+    <p><strong>Shared references.</strong> The same map solves a second, subtler problem: if two
+    properties point at the <em>same</em> object, a naive clone produces two separate copies and
+    silently changes the shape of the data. The map preserves the identity relationship.</p>
+  </div>
+
+  <div class="trace">
+<pre>  clone(value, seen):
+
+      not an object (or null)   ->  return it as-is
+      seen.has(value)           ->  return seen.get(value)
+
+      Date      ->  new Date(value.getTime())
+      RegExp    ->  new RegExp(value.source, value.flags)
+      Map       ->  new Map, register it, then clone each key AND value
+      Set       ->  new Set, register it, then clone each member
+      Array     ->  new array, register it, then clone each element
+      object    ->  new object with the SAME prototype, register it,
+                    then clone each own key
+
+  Register BEFORE recursing into the children. That ordering is
+  what makes cycles terminate: by the time a child points back at
+  the parent, the parent's clone is already in the map.
+</pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The ordering is the whole trick</span>
+    <p>Create the empty shell, put it in the map, <em>then</em> fill it. Fill first and register after,
+    and a self-referencing object recurses forever &mdash; the clone is not in the map yet when the
+    child asks for it.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; a cycle, step by step</h2>
+
+  <div class="trace">
+<pre>  const a = { name: 'a' };
+  const b = { name: 'b', parent: a };
+  a.child = b;                      // a -> b -> a
+
+  clone(a, seen={})
+    not seen. shell A' = {}. seen = { a -> A' }
+    key 'name'  -> 'a' is a primitive, copy it
+    key 'child' -> clone(b, seen)
+        not seen. shell B' = {}. seen = { a -> A', b -> B' }
+        key 'name'   -> 'b'
+        key 'parent' -> clone(a, seen)
+            SEEN. return A'          <-- the recursion stops here
+        B'.parent = A'
+        return B'
+    A'.child = B'
+    return A'
+
+  Result: A' -> B' -> A'. The cycle is reproduced, not followed.
+  And A'.child.parent === A' -- the identity relationship survived.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function cloneLoud(value, seen = new Map(), depth = 0, label = 'root') {
+  const pad = '  '.repeat(depth);
+
+  if (value === null || typeof value !== 'object') {
+    console.log(pad + label + ': primitive ' + JSON.stringify(value) + ' -- copy');
+    return value;
+  }
+
+  if (seen.has(value)) {
+    console.log(pad + label + ': ALREADY SEEN -- return the existing clone');
+    return seen.get(value);
+  }
+
+  const shell = Array.isArray(value) ? [] : {};
+  seen.set(value, shell);
+  console.log(pad + label + ': new ' + (Array.isArray(value) ? 'array' : 'object') +
+              ' shell created and registered');
+
+  for (const key of Object.keys(value)) {
+    shell[key] = cloneLoud(value[key], seen, depth + 1, key);
+  }
+
+  return shell;
+}
+
+const a = { name: 'a' };
+const b = { name: 'b', parent: a };
+a.child = b;
+
+const copy = cloneLoud(a);
+
+console.log('');
+console.log('cycle reproduced?      ', copy.child.parent === copy);
+console.log('but not the original?  ', copy.child.parent !== a);
+console.log('names intact?          ', copy.name, copy.child.name);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; plain data only, loops and index writes</span></div>
+<pre><code>function deepCloneBasic(value) {
+  // primitives (and functions, which we return by reference)
+  if (value === null || typeof value !== 'object') return value;
+
+  if (Object.prototype.toString.call(value) === '[object Array]') {
+    const arr = [];
+    for (let i = 0; i &lt; value.length; i++) arr[i] = deepCloneBasic(value[i]);
+    return arr;
+  }
+
+  const out = {};
+  for (const key in value) {
+    // for...in walks the prototype chain -- filter to own keys
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      out[key] = deepCloneBasic(value[key]);
+    }
+  }
+  return out;
+}
+
+const original = {
+  id: 1,
+  nested: { list: [1, [2, [3]]], flag: true },
+  nothing: null,
+};
+
+const copy = deepCloneBasic(original);
+copy.nested.list[1][1][0] = 999;
+copy.nested.flag = false;
+
+console.log('original:', JSON.stringify(original));
+console.log('copy    :', JSON.stringify(copy));
+console.log('independent?', original.nested.list[1][1][0] === 3);
+console.log('');
+
+// It handles plain data. It does NOT handle a cycle:
+const cyclic = { n: 1 };
+cyclic.self = cyclic;
+try {
+  deepCloneBasic(cyclic);
+} catch (err) {
+  console.log('on a cycle:', err.message);
+}</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">Why <code>hasOwnProperty</code> is called that way</span>
+    <p><code>obj.hasOwnProperty(k)</code> breaks on an object created with
+    <code>Object.create(null)</code> &mdash; it has no prototype, so no such method &mdash; and on any
+    object with a property literally named <code>hasOwnProperty</code>. Calling it through
+    <code>Object.prototype</code> works on both. Modern code can use <code>Object.hasOwn(obj, k)</code>
+    instead.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the version worth shipping</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function deepClone(value, seen = new Map()) {
+  // 1. primitives, functions, null -- nothing to copy
+  if (value === null || typeof value !== 'object') return value;
+
+  // 2. already cloned? return the same clone, so cycles terminate
+  //    and shared references stay shared
+  if (seen.has(value)) return seen.get(value);
+
+  // 3. the built-ins that need their own constructor
+  if (value instanceof Date) return new Date(value.getTime());
+  if (value instanceof RegExp) {
+    const re = new RegExp(value.source, value.flags);
+    re.lastIndex = value.lastIndex;
+    return re;
+  }
+
+  // 4. containers -- create the shell, REGISTER IT, then fill it
+  if (value instanceof Map) {
+    const out = new Map();
+    seen.set(value, out);
+    for (const [k, v] of value) out.set(deepClone(k, seen), deepClone(v, seen));
+    return out;
+  }
+
+  if (value instanceof Set) {
+    const out = new Set();
+    seen.set(value, out);
+    for (const v of value) out.add(deepClone(v, seen));
+    return out;
+  }
+
+  if (Array.isArray(value)) {
+    const out = new Array(value.length);
+    seen.set(value, out);
+    for (let i = 0; i &lt; value.length; i++) out[i] = deepClone(value[i], seen);
+    return out;
+  }
+
+  // 5. anything else: keep the prototype so class instances survive
+  const out = Object.create(Object.getPrototypeOf(value));
+  seen.set(value, out);
+
+  // Reflect.ownKeys includes symbol keys and non-enumerable ones
+  for (const key of Reflect.ownKeys(value)) {
+    const desc = Object.getOwnPropertyDescriptor(value, key);
+    if (desc.get || desc.set) {
+      Object.defineProperty(out, key, desc);      // keep accessors as accessors
+    } else {
+      Object.defineProperty(out, key, {
+        ...desc,
+        value: deepClone(desc.value, seen),
+      });
+    }
+  }
+
+  return out;
+}
+
+// --- run it against everything from Step 3 -----------------------
+class User {
+  constructor(name) { this.name = name; }
+  greet() { return 'hi, ' + this.name; }
+}
+
+const sym = Symbol('tag');
+const shared = { shared: true };
+
+const original = {
+  when: new Date('2020-01-02T03:04:05Z'),
+  re: /ab+c/gi,
+  map: new Map([['k', { deep: 1 }]]),
+  set: new Set([1, { two: 2 }]),
+  nums: { nan: NaN, inf: Infinity, negZero: -0 },
+  big: 10n,
+  user: new User('Ada'),
+  fn: function named() { return 42; },
+  nothing: undefined,
+  [sym]: 'symbol value',
+  a: shared,
+  b: shared,
+};
+original.self = original;
+
+const copy = deepClone(original);
+
+console.log('Date preserved      :', copy.when instanceof Date,
+            copy.when.getTime() === original.when.getTime());
+console.log('RegExp preserved    :', copy.re instanceof RegExp, String(copy.re));
+console.log('Map preserved       :', copy.map instanceof Map,
+            copy.map.get('k').deep, 'deep-copied:',
+            copy.map.get('k') !== original.map.get('k'));
+console.log('Set preserved       :', copy.set instanceof Set, copy.set.size);
+console.log('NaN / Infinity      :', Number.isNaN(copy.nums.nan), copy.nums.inf);
+console.log('-0 preserved        :', Object.is(copy.nums.negZero, -0));
+console.log('BigInt survived     :', copy.big === 10n);
+console.log('prototype kept      :', copy.user instanceof User, copy.user.greet());
+console.log('function by ref     :', copy.fn === original.fn, copy.fn());
+console.log('undefined key kept  :', 'nothing' in copy);
+console.log('symbol key kept     :', copy[sym]);
+console.log('cycle reproduced    :', copy.self === copy, copy.self !== original);
+console.log('sharing preserved   :', copy.a === copy.b, copy.a !== shared);
+console.log('');
+console.log('top level is a new object:', copy !== original);</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Functions are copied by reference &mdash; on purpose</span>
+    <p>You cannot deep clone a function in any meaningful sense: its closure holds live variables that
+    the copy would have to share anyway. Every serious library, and <code>structuredClone</code> itself,
+    either shares the reference or refuses. Sharing is the honest choice.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the built-in you should probably use</span></div>
+<pre><code>// structuredClone landed in Node 17 and every current browser. It
+// is the platform's own deep clone: handles cycles, Dates, Maps,
+// Sets, typed arrays, ArrayBuffers, Blobs and more, in native code.
+console.log('available here?', typeof structuredClone === 'function');
+
+if (typeof structuredClone === 'function') {
+  const src = { when: new Date(0), m: new Map([['k', [1, 2]]]), s: new Set([1]) };
+  src.self = src;
+
+  const c = structuredClone(src);
+  console.log('  Date  :', c.when instanceof Date);
+  console.log('  Map   :', c.m instanceof Map, c.m.get('k'));
+  console.log('  Set   :', c.s instanceof Set);
+  console.log('  cycle :', c.self === c);
+
+  console.log('');
+  console.log('What it will NOT do:');
+
+  // functions throw
+  try { structuredClone({ fn: () =&gt; 1 }); }
+  catch (e) { console.log('  functions  ->', e.name); }
+
+  // class instances lose their prototype (silently)
+  class User { constructor(n) { this.name = n; } greet() { return 'hi ' + this.name; } }
+  const u = structuredClone(new User('Ada'));
+  console.log('  instanceof ->', u instanceof User, '-- became a plain object');
+
+  // getters are flattened to their current value
+  const withGetter = { plain: 1, get computed() { return this.plain * 2; } };
+  const g = structuredClone(withGetter);
+  g.plain = 10;
+  console.log('  getter     -> computed is now', g.computed, '(frozen at 2, not 20)');
+
+  // DOM nodes and Errors have their own rules; symbols throw
+  try { structuredClone({ [Symbol('s')]: 1 }); console.log('  symbol key -> dropped silently'); }
+  catch (e) { console.log('  symbol key ->', e.name); }
+}
+
+console.log('');
+console.log('Decision guide:');
+console.log('  plain JSON data, speed does not matter -> JSON round trip is fine');
+console.log('  real data with Dates/Maps/cycles       -> structuredClone');
+console.log('  class instances or functions involved  -> write your own');
+console.log('  a big app already using it             -> lodash cloneDeep');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Approach</th><th>Time</th><th>Extra space</th></tr></thead>
+      <tbody>
+        <tr><td>JSON round trip</td><td class="mono">O(n)</td><td class="mono">O(n) + a full string</td></tr>
+        <tr><td><strong>Recursive with a seen map</strong></td><td class="mono">O(n)</td><td class="mono">O(n) map + O(d) stack</td></tr>
+        <tr><td><code>structuredClone</code></td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><code>n</code> is the number of nodes in the object graph and <code>d</code> its depth. Every node
+  is visited once &mdash; the <code>seen</code> map is what guarantees &ldquo;once&rdquo; even when the
+  graph is not a tree.</p>
+
+  <p>Two things worth calling out. The <code>seen</code> map holds a reference to every source object
+  for the duration of the clone; for a very large graph that is real memory, and a
+  <code>WeakMap</code> does not help because it lives only as long as the call anyway. And the
+  recursion is depth-bounded &mdash; a linked list ten thousand nodes long will overflow the stack,
+  exactly as on the Flatten page.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;<code>JSON.parse(JSON.stringify(x))</code> works for plain JSON data and nothing else
+    &mdash; it turns Dates into strings, drops undefined and functions, flattens Maps and Sets to
+    <code>{}</code>, loses the prototype, and throws on cycles and BigInt. A real clone recurses on the
+    value's shape with a <code>Map</code> from source object to clone. I register the empty shell in
+    that map <em>before</em> filling it, which is what makes cycles terminate and keeps shared
+    references shared. In production I would reach for <code>structuredClone</code> unless class
+    instances or functions are involved.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Registering the clone after filling it</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; cycles still hang</span></div>
+<pre><code>function broken(value, seen = new Map()) {
+  if (value === null || typeof value !== 'object') return value;
+  if (seen.has(value)) return seen.get(value);
+
+  const out = Array.isArray(value) ? [] : {};
+  for (const k of Object.keys(value)) out[k] = broken(value[k], seen);
+  seen.set(value, out);            // registered too late -- bug
+  return out;
+}
+
+function correct(value, seen = new Map()) {
+  if (value === null || typeof value !== 'object') return value;
+  if (seen.has(value)) return seen.get(value);
+  const out = Array.isArray(value) ? [] : {};
+  seen.set(value, out);            // registered FIRST
+  for (const k of Object.keys(value)) out[k] = correct(value[k], seen);
+  return out;
+}
+
+const cyclic = { n: 1 };
+cyclic.self = cyclic;
+
+try { broken(cyclic); }
+catch (e) { console.log('broken :', e.message); }
+
+const c = correct(cyclic);
+console.log('correct:', c.n, ' cycle rebuilt:', c.self === c);
+
+console.log('');
+console.log('The seen check can only help if the entry EXISTS by the');
+console.log('time the child asks. Fill-then-register means it never');
+console.log('does -- the map is written on the way back up, and the');
+console.log('recursion never gets there.');</code></pre>
+  </div>
+
+  <h3>2. Using <code>typeof x === 'object'</code> without the null check</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; null becomes an empty object</span></div>
+<pre><code>function broken(value) {
+  if (typeof value !== 'object') return value;      // null slips through
+  const out = Array.isArray(value) ? [] : {};
+  for (const k of Object.keys(value)) out[k] = broken(value[k]);
+  return out;
+}
+
+console.log('typeof null ===', typeof null);
+console.log('');
+
+// null reaches the object branch, and Object.keys(null) throws --
+// so the clone does not return a wrong value, it dies outright.
+try {
+  broken({ a: null });
+} catch (e) {
+  console.log('broken({ a: null }) ->', e.constructor.name + ':', e.message);
+}
+
+try {
+  broken(null);
+} catch (e) {
+  console.log('broken(null)        ->', e.constructor.name + ':', e.message);
+}
+
+// A crash is the lucky outcome. Change the object branch to use
+// `for...in` instead and it fails silently, turning null into {}:
+function quietlyBroken(value) {
+  if (typeof value !== 'object') return value;
+  const out = Array.isArray(value) ? [] : {};
+  for (const k in value) out[k] = quietlyBroken(value[k]);
+  return out;
+}
+const src = { a: null, b: { c: null } };
+const copy = quietlyBroken(src);
+console.log('');
+console.log('original:', JSON.stringify(src));
+console.log('copy    :', JSON.stringify(copy));
+console.log('a is still null?', copy.a === null, '-- it became', copy.a);
+
+console.log('');
+console.log('`value === null || typeof value !== "object"` is the guard.');
+console.log('Null first, every time.');</code></pre>
+  </div>
+
+  <h3>3. Cloning arrays as objects</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; arrays come back as plain objects</span></div>
+<pre><code>function broken(value) {
+  if (value === null || typeof value !== 'object') return value;
+  const out = {};                        // always an object -- bug
+  for (const k of Object.keys(value)) out[k] = broken(value[k]);
+  return out;
+}
+
+const src = { list: [1, 2, 3], nested: { more: ['a'] } };
+const copy = broken(src);
+
+console.log('original list:', src.list, Array.isArray(src.list));
+console.log('copied   list:', copy.list, Array.isArray(copy.list));
+console.log('');
+console.log('It LOOKS almost right in a log -- { "0": 1, "1": 2, "2": 3 }');
+console.log('and it even has the right keys. But:');
+try { copy.list.push(4); } catch (e) { console.log('  push  ->', e.message); }
+console.log('  length->', copy.list.length);
+console.log('  map   ->', typeof copy.list.map);
+console.log('');
+console.log('Check Array.isArray BEFORE the generic object branch.');</code></pre>
+  </div>
+
+  <h3>4. Assuming a deep clone freezes the data</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct clone, wrong expectation</span></div>
+<pre><code>function deepClone(value, seen = new Map()) {
+  if (value === null || typeof value !== 'object') return value;
+  if (seen.has(value)) return seen.get(value);
+  if (value instanceof Date) return new Date(value.getTime());
+  const out = Array.isArray(value) ? [] : {};
+  seen.set(value, out);
+  for (const k of Object.keys(value)) out[k] = deepClone(value[k], seen);
+  return out;
+}
+
+const state = { user: { name: 'Ada' } };
+const snapshot = deepClone(state);
+
+// the clone protects the ORIGINAL from edits to the COPY
+snapshot.user.name = 'Grace';
+console.log('original after editing the copy:', state.user.name);   // 'Ada'
+
+// but it does not protect the COPY from anything
+snapshot.user.name = 'Anyone';
+console.log('the copy is still mutable      :', snapshot.user.name);
+
+// if you want immutability, that is a different tool
+function deepFreeze(o) {
+  for (const k of Object.keys(o)) {
+    if (o[k] !== null &amp;&amp; typeof o[k] === 'object') deepFreeze(o[k]);
+  }
+  return Object.freeze(o);
+}
+
+const frozen = deepFreeze(deepClone(state));
+try {
+  frozen.user.name = 'nope';           // silently ignored, or throws in strict mode
+} catch (e) {
+  console.log('frozen write ->', e.constructor.name + ':', e.message);
+}
+console.log('frozen value stayed            :', frozen.user.name);
+
+console.log('');
+console.log('Clone = a separate copy. Freeze = cannot be changed.');
+console.log('They are different guarantees and people conflate them.');</code></pre>
+  </div>
+
+  <h3>5. Losing shared references</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; one object becomes two</span></div>
+<pre><code>function noSeenMap(value) {
+  if (value === null || typeof value !== 'object') return value;
+  const out = Array.isArray(value) ? [] : {};
+  for (const k of Object.keys(value)) out[k] = noSeenMap(value[k]);
+  return out;
+}
+
+function withSeenMap(value, seen = new Map()) {
+  if (value === null || typeof value !== 'object') return value;
+  if (seen.has(value)) return seen.get(value);
+  const out = Array.isArray(value) ? [] : {};
+  seen.set(value, out);
+  for (const k of Object.keys(value)) out[k] = withSeenMap(value[k], seen);
+  return out;
+}
+
+// a config object referenced from two places -- extremely common
+const defaults = { retries: 3 };
+const config = { read: defaults, write: defaults };
+
+console.log('in the original, read === write?', config.read === config.write);
+
+const a = noSeenMap(config);
+const b = withSeenMap(config);
+
+console.log('after noSeenMap                 :', a.read === a.write);
+console.log('after withSeenMap               :', b.read === b.write);
+
+console.log('');
+a.read.retries = 99;
+console.log('editing a.read.retries -> a.write.retries is',
+            a.write.retries, '(expected 99)');
+
+b.read.retries = 99;
+console.log('editing b.read.retries -> b.write.retries is',
+            b.write.retries, '(correct)');
+
+console.log('');
+console.log('Without the map the clone has MORE objects than the');
+console.log('original, and code that relied on the two paths being the');
+console.log('same object now silently diverges. This is the bug that');
+console.log('takes a day to find.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>List the seven JSON failures from memory.</strong> Dates, undefined and functions,
+    Map and Set, NaN and Infinity, prototypes, BigInt, cycles. That list <em>is</em> the answer to
+    &ldquo;what is wrong with the one-liner?&rdquo;</li>
+    <li><strong>Write the twelve-line version</strong> &mdash; primitives, seen map, Date, Array,
+    object &mdash; and be able to say why the shell is registered before it is filled.</li>
+    <li><strong>Add Map and Set</strong> to your version. Note that Map <em>keys</em> can be objects
+    too, and need cloning.</li>
+    <li><strong>Deep equality.</strong> The mirror image of this page: the same shape recursion, the
+    same cycle problem, and a different set of traps (NaN, key order, <code>-0</code>). It has its own
+    page later.</li>
+    <li><strong>Deep merge.</strong> Also its own page later &mdash; and once you have written a clone,
+    the only new question is what to do when both sides have an array at the same key.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>A seen-map is the standard tool for recursing over a graph rather than a tree.</strong>
+    Clone, deep equal, serialise, traverse &mdash; the moment references can repeat, you need a record
+    of what you have already handled, and you need to write that record <em>before</em> you descend.
+    Everything else on this page is a list of JavaScript's special cases, which you learn by having
+    been bitten.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="01-debounce-throttle.html">&larr; Debounce &amp; Throttle</a>
+  <a href="03-map-filter-reduce.html">Next: map, filter, reduce from scratch &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

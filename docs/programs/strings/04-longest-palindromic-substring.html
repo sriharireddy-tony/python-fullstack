@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Longest Palindromic Substring</title>
+<meta name="description" content="Expand around every centre — and the reason there are 2n-1 centres, not n.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Strings &middot; Problem 04</p>
+  <h1>Longest Palindromic Substring</h1>
+  <p class="standfirst">Stop looking for palindromes and start <em>growing</em> them. Stand at each
+  possible centre and push outwards while the characters match. The only genuinely tricky part is
+  realising there are <strong>2n&minus;1 centres</strong>, not n.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Find the longest contiguous stretch of the string that reads the same forwards and backwards.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Answer</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">"babad"</td><td class="mono">"bab"</td><td>"aba" is equally valid</td></tr>
+        <tr><td class="mono">"cbbd"</td><td class="mono">"bb"</td><td>even length</td></tr>
+        <tr><td class="mono">"a"</td><td class="mono">"a"</td><td>one character is a palindrome</td></tr>
+        <tr><td class="mono">"ac"</td><td class="mono">"a"</td><td>or "c" &mdash; no pair matches</td></tr>
+        <tr><td class="mono">"forgeeksskeegfor"</td><td class="mono">"geeksskeeg"</td><td>hidden in the middle</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Two facts that are easy to skate past and both matter:</p>
+
+  <ul>
+    <li><strong>Every single character is a palindrome</strong> of length 1. So the answer is never
+    empty unless the string is.</li>
+    <li>Palindromes come in <strong>two shapes</strong>: odd length, with a character at the centre
+    (<code>"aba"</code>), and even length, with the centre falling <em>between</em> two characters
+    (<code>"abba"</code>). Handling only one shape is the classic half-solution.</li>
+  </ul>
+
+  <div class="note warn">
+    <span class="t">Substring, not subsequence &mdash; again</span>
+    <p>In <code>"character"</code> the letters c, a, r, a, c form a palindrome but they are scattered.
+    The answer must be one solid run. <code>"carac"</code> is not a substring of
+    <code>"character"</code>.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <p>Generate every substring, test each one, keep the longest palindrome.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; every substring</span></div>
+<pre><code>function isPalindrome(s) {
+  let lo = 0, hi = s.length - 1;
+  while (lo &lt; hi) {
+    if (s[lo] !== s[hi]) return false;
+    lo++;
+    hi--;
+  }
+  return true;
+}
+
+function longestPalindromeBrute(s) {
+  let best = '';
+
+  for (let start = 0; start &lt; s.length; start++) {
+    for (let end = start; end &lt; s.length; end++) {
+      const piece = s.slice(start, end + 1);
+
+      if (piece.length &gt; best.length &amp;&amp; isPalindrome(piece)) {
+        best = piece;
+      }
+    }
+  }
+
+  return best;
+}
+
+console.log(longestPalindromeBrute('babad'));            // 'bab'
+console.log(longestPalindromeBrute('cbbd'));             // 'bb'
+console.log(longestPalindromeBrute('a'));                // 'a'
+console.log(longestPalindromeBrute('ac'));               // 'a'
+console.log(longestPalindromeBrute('forgeeksskeegfor')); // 'geeksskeeg'
+console.log(longestPalindromeBrute(''));                 // ''</code></pre>
+  </div>
+
+  <p>The <code>isPalindrome</code> helper is two pointers walking towards each other &mdash; the same
+  shape as reversing an array in place, just comparing instead of swapping. Note the
+  <code>piece.length &gt; best.length</code> check comes <em>first</em>: there is no point testing a
+  substring that could not beat what you already have.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>There are about <code>n&sup2;/2</code> substrings, and checking each one walks up to
+  <code>n</code> characters: <strong>O(n&sup3;)</strong>. A 1,000-character string is a billion
+  operations.</p>
+
+  <p>And the waste is easy to see. Testing <code>"abcba"</code> compares the outer a&rsquo;s, then the
+  b&rsquo;s, then the middle. Testing <code>"bcb"</code> a moment later re-compares the b&rsquo;s and
+  the middle &mdash; work already done.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// The worst case for checking every substring: a string where EVERY
+// substring is a palindrome, so no check can ever exit early.
+const N = 800;
+let s = '';
+for (let i = 0; i &lt; N; i++) s += 'a';
+
+function isPal(str, lo, hi) {
+  while (lo &lt; hi) { if (str[lo] !== str[hi]) return false; lo++; hi--; }
+  return true;
+}
+
+function brute(str) {
+  let bs = 0, bl = 0;
+  for (let i = 0; i &lt; str.length; i++)
+    for (let j = i; j &lt; str.length; j++)
+      if (isPal(str, i, j) &amp;&amp; j - i + 1 &gt; bl) { bs = i; bl = j - i + 1; }
+  return str.slice(bs, bs + bl);
+}
+
+function expand(str) {
+  let bs = 0, bl = 1;
+  const grow = (lo, hi) =&gt; {
+    while (lo &gt;= 0 &amp;&amp; hi &lt; str.length &amp;&amp; str[lo] === str[hi]) { lo--; hi++; }
+    return [lo + 1, hi - lo - 1];
+  };
+  for (let i = 0; i &lt; str.length; i++) {
+    const [s1, l1] = grow(i, i);
+    if (l1 &gt; bl) { bs = s1; bl = l1; }
+    const [s2, l2] = grow(i, i + 1);
+    if (l2 &gt; bl) { bs = s2; bl = l2; }
+  }
+  return str.slice(bs, bs + bl);
+}
+
+let t = performance.now();
+const a = brute(s);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const b = expand(s);
+const fastMs = performance.now() - t;
+
+console.log('every substring :', a.length, 'chars in', bruteMs.toFixed(1) + ' ms');
+console.log('expand centres  :', b.length, 'chars in', fastMs.toFixed(1) + ' ms');
+console.log('same answer     :', a === b);
+console.log('speed-up:', Math.round(bruteMs / Math.max(fastMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; grow from the middle</h2>
+
+  <p>A palindrome is symmetric about its centre. So instead of picking two ends and checking whether
+  what is between them happens to be symmetric, pick the <strong>centre</strong> and push outwards
+  while the characters match.</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Stand at a centre. Compare the characters immediately left and right. If they match, step both
+    pointers outwards and compare again. Stop when they differ or you run off an end. Whatever you
+    walked over is the longest palindrome with that centre.</p>
+  </div>
+
+  <div class="trace">
+<pre>  s = "babad",  centre at index 1 (the 'a')
+
+     b  a  b  a  d
+        ^
+     lo=1 hi=1        "a"           match trivially, expand
+     lo=0 hi=2        b == b        "bab"    expand
+     lo=-1 hi=3       off the left end -> stop
+
+  longest palindrome centred at index 1 is "bab", length 3
+</pre>
+  </div>
+
+  <h3>Why 2n&minus;1 centres</h3>
+
+  <p>Here is the part people miss. An odd-length palindrome is centred <em>on</em> a character.
+  An even-length one is centred <em>between</em> two characters. So the centres are:</p>
+
+  <div class="trace">
+<pre>   s =    b   a   b   a   d
+        ^ | ^ | ^ | ^ | ^ |
+          0   1   2   3   4      <- 5 character centres  (odd lengths)
+            ^   ^   ^   ^
+           0|1 1|2 2|3 3|4       <- 4 gap centres        (even lengths)
+
+   total: 5 + 4 = 9 = 2n - 1
+</pre>
+  </div>
+
+  <p>In code that is two expansions per index: one starting at <code>(i, i)</code> for odd, one at
+  <code>(i, i + 1)</code> for even. The even one immediately fails when
+  <code>s[i] !== s[i+1]</code>, which costs nothing.</p>
+
+  <div class="note warn">
+    <span class="t">Missing the even centres</span>
+    <p>Solutions that only expand from <code>(i, i)</code> return <code>"b"</code> for
+    <code>"cbbd"</code> instead of <code>"bb"</code>, and <code>"a"</code> for <code>"aa"</code>.
+    Test on an even-length palindrome every single time.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>s = "babad"</code>. Nine centres.</p>
+
+  <div class="trace">
+<pre>i=0  odd  (0,0)   "b"                       length 1   best "b"
+     even (0,1)   b vs a  no match           length 0
+
+i=1  odd  (1,1)   "a"  ->  b==b  "bab"  ->  off the end
+                                            length 3   best "bab"
+     even (1,2)   a vs b  no match           length 0
+
+i=2  odd  (2,2)   "b"  ->  a==a  "aba"  ->  b vs d  stop
+                                            length 3   not longer, keep "bab"
+     even (2,3)   b vs a  no match           length 0
+
+i=3  odd  (3,3)   "a"  ->  b vs d  stop     length 1
+     even (3,4)   a vs d  no match           length 0
+
+i=4  odd  (4,4)   "d"                       length 1
+     even (4,5)   hi is off the end          length 0
+
+answer: "bab"
+</pre>
+  </div>
+
+  <p>Note <code>i=2</code> found <code>"aba"</code>, also length 3. Because we only replace the best
+  on a <em>strictly</em> longer find, the earlier <code>"bab"</code> wins. Either is an accepted
+  answer; which one you return depends on that comparison being <code>&gt;</code> rather than
+  <code>&gt;=</code>.</p>
+
+  <p>Now the even case, <code>s = "cbbd"</code>:</p>
+
+  <div class="trace">
+<pre>i=0  odd  (0,0)  "c"                    length 1   best "c"
+     even (0,1)  c vs b  no match        length 0
+
+i=1  odd  (1,1)  "b"  ->  c vs b  stop  length 1
+     even (1,2)  b == b  ->  "bb"  ->  c vs d  stop
+                                        length 2   best "bb"
+
+i=2  odd  (2,2)  "b"  ->  b vs d  stop  length 1
+     even (2,3)  b vs d  no match        length 0
+
+i=3  odd  (3,3)  "d"                    length 1
+     even (3,4)  off the end             length 0
+
+answer: "bb"      -- found only by an EVEN centre
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function longestExplained(s) {
+  if (s.length === 0) return '';
+
+  let bestStart = 0, bestLen = 1;
+
+  function expand(lo, hi, label) {
+    const startLo = lo, startHi = hi;
+    while (lo &gt;= 0 &amp;&amp; hi &lt; s.length &amp;&amp; s[lo] === s[hi]) { lo--; hi++; }
+    lo++; hi--;                       // step back onto the last match
+    const len = hi - lo + 1;
+    const text = len &gt; 0 ? s.slice(lo, hi + 1) : '';
+    console.log('  ' + label + ' (' + startLo + ',' + startHi + ')  ->  "' +
+                text + '"  length ' + len);
+    return [lo, len];
+  }
+
+  console.log('s = "' + s + '"');
+  console.log('');
+
+  for (let i = 0; i &lt; s.length; i++) {
+    console.log('centre index ' + i + ':');
+
+    const [oddStart, oddLen] = expand(i, i, 'odd ');
+    if (oddLen &gt; bestLen) {
+      bestStart = oddStart; bestLen = oddLen;
+      console.log('        NEW BEST "' + s.slice(bestStart, bestStart + bestLen) + '"');
+    }
+
+    const [evenStart, evenLen] = expand(i, i + 1, 'even');
+    if (evenLen &gt; bestLen) {
+      bestStart = evenStart; bestLen = evenLen;
+      console.log('        NEW BEST "' + s.slice(bestStart, bestStart + bestLen) + '"');
+    }
+  }
+
+  console.log('');
+  return s.slice(bestStart, bestStart + bestLen);
+}
+
+console.log('ANSWER:', longestExplained('babad'));
+console.log('==========================================');
+console.log('ANSWER:', longestExplained('cbbd'));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; expand around centre, loops only</span></div>
+<pre><code>function longestPalindromeManual(s) {
+  if (s.length === 0) return '';
+
+  let bestStart = 0;
+  let bestLength = 1;         // a single character always works
+
+  for (let i = 0; i &lt; s.length; i++) {
+
+    // ---- odd length: centre ON character i ----
+    let lo = i;
+    let hi = i;
+    while (lo &gt;= 0 &amp;&amp; hi &lt; s.length &amp;&amp; s[lo] === s[hi]) {
+      lo--;
+      hi++;
+    }
+    // the loop overshot by one on both sides
+    let length = (hi - 1) - (lo + 1) + 1;
+    if (length &gt; bestLength) {
+      bestLength = length;
+      bestStart = lo + 1;
+    }
+
+    // ---- even length: centre BETWEEN i and i+1 ----
+    lo = i;
+    hi = i + 1;
+    while (lo &gt;= 0 &amp;&amp; hi &lt; s.length &amp;&amp; s[lo] === s[hi]) {
+      lo--;
+      hi++;
+    }
+    length = (hi - 1) - (lo + 1) + 1;
+    if (length &gt; bestLength) {
+      bestLength = length;
+      bestStart = lo + 1;
+    }
+  }
+
+  // build the answer without slice
+  let result = '';
+  for (let k = bestStart; k &lt; bestStart + bestLength; k++) {
+    result = result + s[k];
+  }
+  return result;
+}
+
+console.log(longestPalindromeManual('babad'));             // 'bab'
+console.log(longestPalindromeManual('cbbd'));              // 'bb'
+console.log(longestPalindromeManual('a'));                 // 'a'
+console.log(longestPalindromeManual('ac'));                // 'a'
+console.log(longestPalindromeManual('aa'));                // 'aa'
+console.log(longestPalindromeManual('racecar'));           // 'racecar'
+console.log(longestPalindromeManual('forgeeksskeegfor'));  // 'geeksskeeg'
+console.log(longestPalindromeManual(''));                  // ''
+console.log(longestPalindromeManual('abcde'));             // 'a'</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The overshoot &mdash; the most common bug on this page</span>
+    <p>When the <code>while</code> loop ends, <code>lo</code> and <code>hi</code> have <em>already
+    moved past</em> the last matching pair &mdash; either onto a mismatch or off the end. So the
+    palindrome actually runs from <code>lo + 1</code> to <code>hi - 1</code>, and its length is
+    <code>hi - lo - 1</code>.</p>
+    <p>Check it on <code>"aba"</code> centred at index 1: the loop ends with
+    <code>lo = -1</code>, <code>hi = 3</code>. Length is <code>3 - (-1) - 1 = 3</code>. Correct.
+    Writing <code>hi - lo + 1</code> gives 5, which is longer than the whole string.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function longestPalindrome(s) {
+  if (s.length &lt; 2) return s;
+
+  let start = 0;
+  let maxLength = 1;
+
+  // returns [start, length] of the palindrome grown from this centre
+  function expand(lo, hi) {
+    while (lo &gt;= 0 &amp;&amp; hi &lt; s.length &amp;&amp; s[lo] === s[hi]) {
+      lo--;
+      hi++;
+    }
+    return [lo + 1, hi - lo - 1];      // step back in, then measure
+  }
+
+  for (let i = 0; i &lt; s.length; i++) {
+    const [oddStart,  oddLen]  = expand(i, i);       // odd centre
+    const [evenStart, evenLen] = expand(i, i + 1);   // even centre
+
+    if (oddLen &gt; maxLength)  { start = oddStart;  maxLength = oddLen; }
+    if (evenLen &gt; maxLength) { start = evenStart; maxLength = evenLen; }
+  }
+
+  return s.slice(start, start + maxLength);
+}
+
+console.log(longestPalindrome('babad'));             // 'bab'
+console.log(longestPalindrome('cbbd'));              // 'bb'
+console.log(longestPalindrome('a'));                 // 'a'
+console.log(longestPalindrome('ac'));                // 'a'
+console.log(longestPalindrome('aaaa'));              // 'aaaa'
+console.log(longestPalindrome('forgeeksskeegfor'));  // 'geeksskeeg'
+console.log(longestPalindrome('abacdfgdcaba'));      // 'aba'</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the related helpers you will actually write</span></div>
+<pre><code>// Is a string a palindrome? Two pointers, no allocation.
+function isPalindrome(s) {
+  let lo = 0, hi = s.length - 1;
+  while (lo &lt; hi) {
+    if (s[lo] !== s[hi]) return false;
+    lo++; hi--;
+  }
+  return true;
+}
+
+console.log(isPalindrome('racecar'));   // true
+console.log(isPalindrome('abba'));      // true
+console.log(isPalindrome('abc'));       // false
+
+// The one-liner people reach for -- correct, but allocates two
+// whole new strings and is measurably slower on long input.
+const isPalReverse = s =&gt; s === [...s].reverse().join('');
+console.log(isPalReverse('racecar'));   // true
+
+// Count ALL palindromic substrings -- same expansion, count instead
+// of measuring. This is a common follow-up.
+function countPalindromes(s) {
+  let count = 0;
+  const expand = (lo, hi) =&gt; {
+    while (lo &gt;= 0 &amp;&amp; hi &lt; s.length &amp;&amp; s[lo] === s[hi]) { count++; lo--; hi++; }
+  };
+  for (let i = 0; i &lt; s.length; i++) { expand(i, i); expand(i, i + 1); }
+  return count;
+}
+
+console.log(countPalindromes('abc'));    // 3   a, b, c
+console.log(countPalindromes('aaa'));    // 6   a,a,a, aa,aa, aaa
+console.log(countPalindromes('aba'));    // 4   a,b,a, aba</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the dynamic-programming version, for completeness</span></div>
+<pre><code>// dp[i][j] = "is s[i..j] a palindrome?"
+// Build it up by length, because a longer palindrome depends on the
+// shorter one inside it.
+function longestPalindromeDP(s) {
+  const n = s.length;
+  if (n &lt; 2) return s;
+
+  const dp = Array.from({ length: n }, () =&gt; new Array(n).fill(false));
+  let start = 0, maxLen = 1;
+
+  for (let i = 0; i &lt; n; i++) dp[i][i] = true;               // length 1
+
+  for (let i = 0; i &lt; n - 1; i++) {                          // length 2
+    if (s[i] === s[i + 1]) { dp[i][i + 1] = true; start = i; maxLen = 2; }
+  }
+
+  for (let len = 3; len &lt;= n; len++) {                       // length 3 and up
+    for (let i = 0; i + len - 1 &lt; n; i++) {
+      const j = i + len - 1;
+      // ends match AND the inside is already known to be a palindrome
+      if (s[i] === s[j] &amp;&amp; dp[i + 1][j - 1]) {
+        dp[i][j] = true;
+        start = i;
+        maxLen = len;
+      }
+    }
+  }
+
+  return s.slice(start, start + maxLen);
+}
+
+console.log(longestPalindromeDP('babad'));             // 'bab' or 'aba'
+console.log(longestPalindromeDP('cbbd'));              // 'bb'
+console.log(longestPalindromeDP('forgeeksskeegfor'));  // 'geeksskeeg'
+
+// Same O(n^2) time as expansion, but O(n^2) SPACE for the table.
+// Expansion is strictly better here. Know the DP version because
+// interviewers ask "can you do it with DP?" -- then say why you
+// would not.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Every substring</td><td class="mono">O(n&sup3;)</td><td class="mono">O(n)</td></tr>
+        <tr><td>Dynamic programming</td><td class="mono">O(n&sup2;)</td><td class="mono">O(n&sup2;)</td></tr>
+        <tr><td><strong>Expand around centre</strong></td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td></tr>
+        <tr><td>Manacher&rsquo;s algorithm</td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Why expansion is O(n&sup2;) and not O(n).</strong> There are 2n&minus;1 centres, and each
+  expansion can walk up to n/2 steps in each direction. So the worst case &mdash; a string like
+  <code>"aaaaaaaa"</code>, where every expansion runs to the ends &mdash; is about n&sup2;/2
+  comparisons.</p>
+
+  <p><strong>O(1) space</strong> is the win over the DP version: you hold two indexes and a best-so-far,
+  never a table. Same time complexity, dramatically less memory, and simpler code.</p>
+
+  <p>Manacher&rsquo;s algorithm gets it to O(n) by reusing information from palindromes already found
+  &mdash; if you are inside a known palindrome, its mirror tells you a lower bound for free. It is
+  genuinely intricate and almost never expected. Mention that it exists; do not attempt it under
+  time pressure.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Checking every substring is O(n&sup3;). Instead, every palindrome has a centre, so I
+    expand outwards from each of the 2n&minus;1 centres &mdash; n character centres for odd lengths
+    and n&minus;1 gap centres for even &mdash; keeping the longest. O(n&sup2;) time, O(1) space.
+    There is a DP formulation with the same time but O(n&sup2;) space, and Manacher&rsquo;s gets it to
+    O(n) if you need it.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Only handling odd-length palindromes</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; no even centres</span></div>
+<pre><code>function broken(s) {
+  if (s.length &lt; 2) return s;
+  let start = 0, maxLen = 1;
+  for (let i = 0; i &lt; s.length; i++) {
+    let lo = i, hi = i;                 // only odd centres -- bug
+    while (lo &gt;= 0 &amp;&amp; hi &lt; s.length &amp;&amp; s[lo] === s[hi]) { lo--; hi++; }
+    const len = hi - lo - 1;
+    if (len &gt; maxLen) { maxLen = len; start = lo + 1; }
+  }
+  return s.slice(start, start + maxLen);
+}
+
+console.log(broken('babad'));   // 'bab'   right
+console.log(broken('cbbd'));    // 'c'     WRONG, should be 'bb'
+console.log(broken('aa'));      // 'a'     WRONG, should be 'aa'
+console.log(broken('abba'));    // 'a'     WRONG, should be 'abba'
+
+// Every even-length palindrome is invisible to this. Always test
+// on a string whose answer has even length.</code></pre>
+  </div>
+
+  <h3>2. Getting the overshoot arithmetic wrong</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; off by two</span></div>
+<pre><code>function broken(s) {
+  if (s.length &lt; 2) return s;
+  let start = 0, maxLen = 1;
+  const expand = (lo, hi) =&gt; {
+    while (lo &gt;= 0 &amp;&amp; hi &lt; s.length &amp;&amp; s[lo] === s[hi]) { lo--; hi++; }
+    return [lo, hi - lo + 1];       // forgot to step back in -- bug
+  };
+  for (let i = 0; i &lt; s.length; i++) {
+    const [s1, l1] = expand(i, i);
+    if (l1 &gt; maxLen) { start = s1; maxLen = l1; }
+  }
+  return s.slice(start, start + maxLen);
+}
+
+console.log(broken('babad'));   // 'babad'  WRONG -- claims the whole string
+
+// After the loop, lo and hi are one step PAST the palindrome on each
+// side. The correct start is lo + 1 and the correct length is
+// hi - lo - 1. Trace "aba" by hand: the loop ends at lo = -1, hi = 3,
+// and 3 - (-1) - 1 = 3, which is right.</code></pre>
+  </div>
+
+  <h3>3. Slicing strings inside the loop</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct but wasteful</span></div>
+<pre><code>const N = 4000;
+let s = '';
+for (let i = 0; i &lt; N; i++) s += 'a';
+
+function withSlicing(str) {
+  let best = '';
+  const expand = (lo, hi) =&gt; {
+    while (lo &gt;= 0 &amp;&amp; hi &lt; str.length &amp;&amp; str[lo] === str[hi]) {
+      const piece = str.slice(lo, hi + 1);      // new string every step
+      if (piece.length &gt; best.length) best = piece;
+      lo--; hi++;
+    }
+  };
+  for (let i = 0; i &lt; str.length; i++) { expand(i, i); expand(i, i + 1); }
+  return best;
+}
+
+function withIndexes(str) {
+  let start = 0, maxLen = str.length ? 1 : 0;
+  const expand = (lo, hi) =&gt; {
+    while (lo &gt;= 0 &amp;&amp; hi &lt; str.length &amp;&amp; str[lo] === str[hi]) { lo--; hi++; }
+    const len = hi - lo - 1;
+    if (len &gt; maxLen) { maxLen = len; start = lo + 1; }
+  };
+  for (let i = 0; i &lt; str.length; i++) { expand(i, i); expand(i, i + 1); }
+  return str.slice(start, start + maxLen);
+}
+
+let t = performance.now();
+const a = withSlicing(s);
+const sliceMs = performance.now() - t;
+
+t = performance.now();
+const b = withIndexes(s);
+const idxMs = performance.now() - t;
+
+console.log('slicing inside the loop :', a.length, 'chars in', sliceMs.toFixed(1) + ' ms');
+console.log('tracking indexes only   :', b.length, 'chars in', idxMs.toFixed(1) + ' ms');
+console.log('same answer:', a === b);
+
+// Both are O(n^2) comparisons, but the slicing version also COPIES
+// up to n characters on every step. Track start and length; slice
+// once, at the end.</code></pre>
+  </div>
+
+  <h3>4. Returning the length instead of the string</h3>
+
+  <p>The question asks for the substring. <code>maxLength</code> is what you tracked; the answer is
+  <code>s.slice(start, start + maxLength)</code>. Read the return type before you write the last
+  line.</p>
+
+  <h3>5. Not handling the empty string or a single character</h3>
+
+  <p><code>""</code> should give <code>""</code>, and <code>"a"</code> should give <code>"a"</code>.
+  Initialising <code>maxLength = 1</code> unconditionally is wrong for the empty string &mdash; you
+  would slice a character that is not there. Guard with
+  <code>if (s.length &lt; 2) return s;</code>, which handles both at once.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the expand function from memory</strong>, then verify the overshoot arithmetic
+    by hand on <code>"aba"</code>. That one check catches the most common bug on this page.</li>
+    <li><strong>Count all palindromic substrings.</strong> It is in Step 7 &mdash; cover it and
+    rewrite it. The only change is counting inside the loop instead of measuring after it.</li>
+    <li><strong>Longest palindromic <em>subsequence</em>.</strong> Letters may be skipped now, so
+    expansion no longer applies &mdash; this one genuinely needs DP. Doing both makes the difference
+    between substring and subsequence permanent.</li>
+    <li><strong>Shortest palindrome.</strong> Add the fewest characters to the <em>front</em> to make
+    the whole string a palindrome. Hint: find the longest palindromic <em>prefix</em>.</li>
+    <li><strong>Palindrome Partitioning.</strong> Split the string so every piece is a palindrome.
+    Backtracking, using the palindrome check from this page &mdash; and it sits in the recursion
+    topic later in this collection.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Build the thing you are looking for instead of testing candidates.</strong> Checking
+    every substring asks &ldquo;is this one a palindrome?&rdquo; n&sup2; times. Expanding from centres
+    asks &ldquo;how far does the palindrome here reach?&rdquo; 2n&minus;1 times, and every comparison
+    contributes to an answer. When a structure has a defining property &mdash; a centre, a peak, a
+    root &mdash; enumerating <em>those</em> is usually cheaper than enumerating candidates and
+    filtering.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="03-valid-anagram.html">&larr; Valid Anagram</a>
+  <a href="05-valid-parentheses.html">Next: Valid Parentheses &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

@@ -1,0 +1,1004 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Closures and the Counter Factory</title>
+<meta name="description" content="What a closure captures, why var-in-a-loop prints the same number, and the patterns built on top.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">JavaScript semantics &middot; Problem 07</p>
+  <h1>Closures and the Counter Factory</h1>
+  <p class="standfirst">A closure captures a <strong>variable</strong>, not a value. One sentence, and
+  every confusing closure question &mdash; the loop that prints 3 three times, the counter that shares
+  state, the leak that keeps a megabyte alive &mdash; follows from it.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem &mdash; what a closure is</h2>
+
+  <div class="note key">
+    <span class="t">The definition</span>
+    <p>A <strong>closure</strong> is a function together with the variables it can still reach from
+    where it was <em>defined</em>, even after that outer function has returned.</p>
+    <p>The part everyone under-weights: it captures the <strong>variable itself</strong>, a live
+    binding &mdash; not a snapshot of what the variable held at the time.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">variable, not value &mdash; the proof</span></div>
+<pre><code>function makeReader() {
+  let x = 1;
+  const read = () =&gt; x;
+  x = 2;                     // changed AFTER the arrow was created
+  return { read, set: (v) =&gt; { x = v; } };
+}
+
+const r = makeReader();
+console.log('read()      ->', r.read());   // 2, not 1
+r.set(99);
+console.log('after set   ->', r.read());   // 99
+
+// two functions closing over the SAME variable see each other's writes
+function makePair() {
+  let shared = 0;
+  return {
+    inc: () =&gt; ++shared,
+    get: () =&gt; shared,
+  };
+}
+const pair = makePair();
+pair.inc(); pair.inc(); pair.inc();
+console.log('');
+console.log('shared between two closures:', pair.get());   // 3
+
+// but two CALLS to the factory get independent variables
+const a = makePair(), b = makePair();
+a.inc(); a.inc();
+b.inc();
+console.log('a:', a.get(), '  b:', b.get());   // 2  1
+console.log('');
+console.log('One factory call = one set of variables = one closure');
+console.log('scope. That is the whole mechanism.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the classic exercise</span></div>
+<pre><code>// Write a counter with a count nobody outside can touch.
+function createCounter(start = 0) {
+  let count = start;                    // private -- no way to reach it
+
+  return {
+    increment: () =&gt; ++count,
+    decrement: () =&gt; --count,
+    value: () =&gt; count,
+    reset: () =&gt; { count = start; return count; },
+  };
+}
+
+const c = createCounter(10);
+console.log('start      :', c.value());
+console.log('increment  :', c.increment(), c.increment());
+console.log('decrement  :', c.decrement());
+console.log('reset      :', c.reset());
+
+console.log('');
+console.log('Is `count` reachable from outside?');
+console.log('  c.count            :', c.count);
+console.log('  Object.keys(c)     :', Object.keys(c));
+console.log('  JSON.stringify(c)  :', JSON.stringify(c));
+console.log('');
+console.log('It is genuinely inaccessible -- there is no property to');
+console.log('read, no prototype to walk, no name to guess. This is');
+console.log('real encapsulation, and it predates #private fields by');
+console.log('about twenty years.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the alternatives, and what they give up</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">four ways to hold a count</span></div>
+<pre><code>// 1. a module-level variable -- shared by everyone, no privacy
+let globalCount = 0;
+const globalIncrement = () =&gt; ++globalCount;
+
+// 2. a plain object property -- private in name only
+function makeConventional() {
+  return { _count: 0, increment() { return ++this._count; } };
+}
+
+// 3. a closure -- genuinely private
+function makeClosure() {
+  let count = 0;
+  return { increment: () =&gt; ++count, value: () =&gt; count };
+}
+
+// 4. a class with a #private field -- private, and inspectable as a class
+class ClassCounter {
+  #count = 0;
+  increment() { return ++this.#count; }
+  get value() { return this.#count; }
+}
+
+globalIncrement();
+const conv = makeConventional();
+const clos = makeClosure();
+const cls = new ClassCounter();
+conv.increment(); clos.increment(); cls.increment();
+
+console.log('1. global    :', globalCount,
+            '  tampering: globalCount = 500 works, obviously');
+conv._count = 500;
+console.log('2. underscore:', conv._count, '  tampering: also works');
+console.log('3. closure   :', clos.value(), '  tampering: nothing to tamper with');
+try { cls.count = 500; } catch (e) { /* ignored */ }
+console.log('4. #private  :', cls.value, '  tampering:');
+try {
+  eval('cls.#count = 500');
+} catch (e) {
+  console.log('     cls.#count = 500 ->', e.constructor.name,
+              '-- a SYNTAX error, not even runtime');
+}
+
+console.log('');
+console.log('What the closure gives up: `this` never enters the');
+console.log('picture, so the methods cannot be detached and broken --');
+console.log('but each instance also carries its OWN copies of every');
+console.log('method, instead of sharing one on a prototype.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it matters &mdash; the memory cost</h2>
+
+  <p>A closure keeps its whole scope alive. Every instance of a closure-based object holds its own copy
+  of every method; a class shares one copy on the prototype.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Memory demo &mdash; closures versus a prototype</span></div>
+<pre><code>function makeClosureCounter() {
+  let count = 0;
+  return {
+    increment() { return ++count; },
+    decrement() { return --count; },
+    value() { return count; },
+    reset() { count = 0; },
+  };
+}
+
+class ClassCounter {
+  constructor() { this._count = 0; }
+  increment() { return ++this._count; }
+  decrement() { return --this._count; }
+  value() { return this._count; }
+  reset() { this._count = 0; }
+}
+
+const N = 200000;
+
+const before1 = process.memoryUsage ? process.memoryUsage().heapUsed : 0;
+let t = performance.now();
+const closures = [];
+for (let i = 0; i &lt; N; i++) closures.push(makeClosureCounter());
+const closureMs = performance.now() - t;
+const closureBytes = process.memoryUsage
+  ? process.memoryUsage().heapUsed - before1 : 0;
+
+const before2 = process.memoryUsage ? process.memoryUsage().heapUsed : 0;
+t = performance.now();
+const classes = [];
+for (let i = 0; i &lt; N; i++) classes.push(new ClassCounter());
+const classMs = performance.now() - t;
+const classBytes = process.memoryUsage
+  ? process.memoryUsage().heapUsed - before2 : 0;
+
+const mb = (b) =&gt; (b / 1048576).toFixed(1) + ' MB';
+
+console.log(N.toLocaleString('en-US') + ' counters');
+console.log('  closure : ' + closureMs.toFixed(0) + ' ms   ' + mb(closureBytes));
+console.log('  class   : ' + classMs.toFixed(0) + ' ms   ' + mb(classBytes));
+console.log('');
+console.log('Each closure object allocates FOUR fresh function objects.');
+console.log('Each class instance allocates one object; the four methods');
+console.log('live once on ClassCounter.prototype.');
+console.log('');
+console.log('  same methods?  closures:',
+            closures[0].increment === closures[1].increment);
+console.log('  same methods?  classes :',
+            classes[0].increment === classes[1].increment);
+console.log('');
+console.log('Both still work, and both keep the counters alive. Use');
+console.log('closures for a handful of objects with real privacy; use');
+console.log('classes when you will make a lot of them.');
+console.log('');
+console.log('(Heap figures are approximate -- the GC may run mid-');
+console.log('measurement. The identity check on the last two lines is');
+console.log('the part that is exact.)');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; <code>var</code>, <code>let</code>, and the loop</h2>
+
+  <p>The single most-asked closure question. The answer is one fact about scope.</p>
+
+  <div class="trace">
+<pre>  for (var i = 0; i &lt; 3; i++) {
+      setTimeout(() => console.log(i), 0);
+  }
+
+  `var` is FUNCTION-scoped. There is exactly ONE `i`, shared by
+  the loop and by all three callbacks:
+
+      +---------------- function scope ----------------+
+      |  var i  --------------------------> 3          |
+      +------------------------------------------------+
+           ^            ^            ^
+           |            |            |
+        cb#1         cb#2         cb#3     all point at the SAME box
+
+  By the time the callbacks run, the loop has finished and the
+  one shared `i` holds 3. Output: 3 3 3.
+
+
+  for (let i = 0; i &lt; 3; i++) { ... }
+
+  `let` is BLOCK-scoped, and the specification gives a for-loop a
+  FRESH binding per iteration, copying the value forward:
+
+      +-- iteration 0 --+  +-- iteration 1 --+  +-- iteration 2 --+
+      |  let i = 0      |  |  let i = 1      |  |  let i = 2      |
+      +-----------------+  +-----------------+  +-----------------+
+             ^                     ^                     ^
+           cb#1                  cb#2                  cb#3
+
+  Three separate boxes. Output: 0 1 2.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">all of it, side by side</span></div>
+<pre><code>const out = { var: [], let: [], iife: [], bind: [], forEach: [] };
+
+for (var i = 0; i &lt; 3; i++) setTimeout(() =&gt; out.var.push(i), 0);
+
+for (let j = 0; j &lt; 3; j++) setTimeout(() =&gt; out.let.push(j), 0);
+
+// the pre-ES6 fix: an IIFE makes a new function scope per iteration
+for (var k = 0; k &lt; 3; k++) {
+  (function (captured) {
+    setTimeout(() =&gt; out.iife.push(captured), 0);
+  })(k);
+}
+
+// bind also works -- the argument is copied at bind time
+for (var m = 0; m &lt; 3; m++) {
+  setTimeout(function (captured) { out.bind.push(captured); }.bind(null, m), 0);
+}
+
+// forEach gives each callback its own parameter, so var is harmless
+[0, 1, 2].forEach(function (n) { setTimeout(() =&gt; out.forEach.push(n), 0); });
+
+await new Promise((r) =&gt; setTimeout(r, 40));
+
+console.log('var     :', out.var);
+console.log('let     :', out.let);
+console.log('IIFE    :', out.iife);
+console.log('bind    :', out.bind);
+console.log('forEach :', out.forEach);
+console.log('');
+console.log('Everything except the first line works, and they all work');
+console.log('for the same reason: each callback ends up with its own');
+console.log('binding instead of sharing one.');
+
+// and the detail that surprises people: `var` leaks out of the block
+console.log('');
+console.log('after the loops, i is', i, '-- var escaped the loop');
+try { console.log('j is', j); }
+catch (e) { console.log('j is', e.constructor.name + ' -- let did not'); }</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The one case where <code>let</code> does <em>not</em> save you</span>
+    <p>The fresh-binding-per-iteration rule is specific to <code>for (let i = ...)</code>. Declare the
+    variable outside the loop and <code>let</code> behaves exactly like <code>var</code> &mdash; one
+    binding, shared. Shown in Step 9.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; watch the scope chain</h2>
+
+  <div class="trace">
+<pre>  function outer() {
+      let a = 1;
+      function middle() {
+          let b = 2;
+          function inner() {
+              let c = 3;
+              return a + b + c;
+          }
+          return inner;
+      }
+      return middle();
+  }
+  const fn = outer();
+  fn();
+
+  When inner() runs, `a` and `b` are looked up along the SCOPE
+  CHAIN -- the chain of environments that existed where inner
+  was WRITTEN, not where it is CALLED:
+
+      inner's own scope    { c: 3 }
+              |  not found? go up
+      middle's scope       { b: 2, inner }
+              |  not found? go up
+      outer's scope        { a: 1, middle }
+              |  not found? go up
+      module / global scope
+              |
+      not found -> ReferenceError
+
+  outer() and middle() have both RETURNED by the time fn() runs.
+  Their scopes survive anyway, because inner still references
+  them. That is the closure.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the chain, narrating itself</span></div>
+<pre><code>function outer() {
+  let a = 1;
+  console.log('outer running. a =', a);
+
+  function middle() {
+    let b = 2;
+    console.log('  middle running. b =', b, ' (a is still reachable:', a + ')');
+
+    function inner() {
+      let c = 3;
+      console.log('    inner running. c =', c);
+      console.log('    reaching up for b:', b);
+      console.log('    reaching up for a:', a);
+      return a + b + c;
+    }
+
+    return inner;
+  }
+
+  const fn = middle();
+  console.log('outer returning. middle() has already finished.');
+  return fn;
+}
+
+const fn = outer();
+console.log('');
+console.log('both outer() and middle() have returned. calling fn():');
+console.log('RESULT:', fn());
+
+console.log('');
+console.log('And the scopes are LIVE, not frozen -- a setter proves it:');
+
+function counterWithPeek() {
+  let n = 0;
+  const bump = () =&gt; { n += 10; };
+  const peek = () =&gt; n;
+  return { bump, peek };
+}
+const cp = counterWithPeek();
+console.log('  peek:', cp.peek());
+cp.bump();
+console.log('  peek after bump:', cp.peek(), '-- same variable, not a copy');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; the patterns built on closures</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">1. once &mdash; run a function at most one time</span></div>
+<pre><code>function once(fn) {
+  let called = false;
+  let result;
+
+  return function (...args) {
+    if (called) return result;          // every later call replays the result
+    called = true;
+    result = fn.apply(this, args);
+    fn = null;                          // release the reference, help the GC
+    return result;
+  };
+}
+
+let initCount = 0;
+const initialise = once((name) =&gt; {
+  initCount++;
+  return 'initialised ' + name;
+});
+
+console.log(initialise('app'));
+console.log(initialise('again'));       // same result, fn not re-run
+console.log(initialise('and again'));
+console.log('the wrapped function ran', initCount, 'time(s)');
+
+console.log('');
+console.log('Note `called` rather than `result === undefined`: a');
+console.log('function that legitimately returns undefined must still');
+console.log('only run once.');
+let voidRuns = 0;
+const undef = once(() =&gt; { voidRuns++; return undefined; });
+console.log('  three calls returned:', undef(), undef(), undef());
+console.log('  and the function ran', voidRuns, 'time');
+console.log('  A `result === undefined` check would have re-run it');
+console.log('  every single time.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">2. a private ID generator, and a rate limiter</span></div>
+<pre><code>function makeIdGenerator(prefix = 'id') {
+  let n = 0;
+  return () =&gt; prefix + '-' + (++n);
+}
+
+const userId = makeIdGenerator('user');
+const orderId = makeIdGenerator('order');
+
+console.log(userId(), userId(), userId());
+console.log(orderId(), orderId());
+console.log('independent sequences -- separate closures');
+
+// a limiter: allow n calls, then refuse
+function limitCalls(fn, max) {
+  let used = 0;
+  return function (...args) {
+    if (used &gt;= max) throw new Error('call limit of ' + max + ' reached');
+    used++;
+    return fn.apply(this, args);
+  };
+}
+
+const send = limitCalls((msg) =&gt; 'sent: ' + msg, 2);
+console.log('');
+console.log(send('one'));
+console.log(send('two'));
+try { send('three'); } catch (e) { console.log('third call ->', e.message); }
+
+// a running average that never stores the values
+function makeAverager() {
+  let total = 0, count = 0;
+  return (x) =&gt; { total += x; count++; return total / count; };
+}
+const avg = makeAverager();
+console.log('');
+console.log('running average:', [10, 20, 30, 40].map(avg));
+console.log('(the individual numbers were never kept)');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">3. the module pattern &mdash; what everything used before ES modules</span></div>
+<pre><code>const BankAccount = (function () {
+  // everything in here is private
+  let balance = 0;
+  const history = [];
+
+  function record(type, amount) {
+    history.push({ type, amount, balance });
+  }
+
+  // only this object escapes
+  return {
+    deposit(amount) {
+      if (amount &lt;= 0) throw new Error('deposit must be positive');
+      balance += amount;
+      record('deposit', amount);
+      return balance;
+    },
+    withdraw(amount) {
+      if (amount &gt; balance) throw new Error('insufficient funds');
+      balance -= amount;
+      record('withdraw', amount);
+      return balance;
+    },
+    get balance() { return balance; },
+    get statement() { return history.map((h) =&gt; h.type + ' ' + h.amount); },
+  };
+})();
+
+console.log('deposit 100 ->', BankAccount.deposit(100));
+console.log('withdraw 30 ->', BankAccount.withdraw(30));
+try { BankAccount.withdraw(1000); } catch (e) { console.log('->', e.message); }
+console.log('balance     :', BankAccount.balance);
+console.log('statement   :', BankAccount.statement);
+
+console.log('');
+console.log('Attempts to cheat:');
+try {
+  BankAccount.balance = 1000000;
+  console.log('  setting .balance directly:', BankAccount.balance);
+} catch (e) {
+  console.log('  setting .balance directly ->', e.constructor.name + ':',
+              e.message);
+  console.log('  (a getter with no setter. In sloppy mode the write is');
+  console.log('   silently ignored; in strict mode it throws. Either');
+  console.log('   way the balance is unchanged:', BankAccount.balance + ')');
+}
+console.log('  Object.keys              :', Object.keys(BankAccount));
+console.log('  the `history` array      :', BankAccount.history);
+console.log('');
+console.log('And the statement getter returns a NEW array each time,');
+console.log('so even the returned value cannot be used to mutate the');
+console.log('private one:');
+const stolen = BankAccount.statement;
+stolen.push('FORGED');
+console.log('  after pushing to it:', BankAccount.statement);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the interview questions</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the six most common "what does this print"</span></div>
+<pre><code>const answers = [];
+
+// 1
+(function () {
+  const fns = [];
+  for (var i = 0; i &lt; 3; i++) fns.push(() =&gt; i);
+  answers.push('1. var in a loop        -> ' + JSON.stringify(fns.map((f) =&gt; f())));
+})();
+
+// 2
+(function () {
+  const fns = [];
+  for (let i = 0; i &lt; 3; i++) fns.push(() =&gt; i);
+  answers.push('2. let in a loop        -> ' + JSON.stringify(fns.map((f) =&gt; f())));
+})();
+
+// 3 -- a closure over a loop variable that is REASSIGNED after
+(function () {
+  let x = 1;
+  const read = () =&gt; x;
+  x = 2;
+  answers.push('3. reassigned after     -> ' + read());
+})();
+
+// 4 -- parameters are copied, objects are shared
+(function () {
+  function capture(obj, num) {
+    return () =&gt; [obj.v, num];
+  }
+  const o = { v: 1 };
+  let n = 1;
+  const f = capture(o, n);
+  o.v = 99;      // the OBJECT was mutated -- visible
+  n = 99;        // the local `n` was reassigned -- NOT visible
+  answers.push('4. object vs primitive  -> ' + JSON.stringify(f()));
+})();
+
+// 5 -- a closure in a while loop with var
+(function () {
+  const fns = [];
+  var i = 0;
+  while (i &lt; 3) { fns.push(() =&gt; i); i++; }
+  answers.push('5. var in a while       -> ' + JSON.stringify(fns.map((f) =&gt; f())));
+})();
+
+// 6 -- let declared OUTSIDE the for
+(function () {
+  const fns = [];
+  let i;
+  for (i = 0; i &lt; 3; i++) fns.push(() =&gt; i);
+  answers.push('6. let outside the for  -> ' + JSON.stringify(fns.map((f) =&gt; f())));
+})();
+
+answers.forEach((a) =&gt; console.log(a));
+
+console.log('');
+console.log('5 and 6 are the ones that catch people. The magic is not');
+console.log('in `let` -- it is in the FOR HEADER declaring it. Move the');
+console.log('declaration out, or use a while loop, and you are back to');
+console.log('a single shared binding.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">closures and the temporal dead zone</span></div>
+<pre><code>// `var` is hoisted and initialised to undefined
+console.log('1. var before its declaration:', typeof hoistedVar, hoistedVar);
+var hoistedVar = 'set later';
+
+// `let` is hoisted too, but NOT initialised -- the gap is the TDZ
+try {
+  console.log(hoistedLet);
+} catch (e) {
+  console.log('2. let before its declaration:', e.constructor.name + ':', e.message);
+}
+let hoistedLet = 'set later';
+
+// and a closure created before the declaration hits the TDZ too
+function makeEarlyReader() {
+  const read = () =&gt; later;      // fine to WRITE this
+  try { read(); } catch (e) { console.log('3. reading too early:', e.constructor.name); }
+  let later = 'now it exists';
+  return read;
+}
+const reader = makeEarlyReader();
+console.log('4. reading after the declaration:', reader());
+
+console.log('');
+console.log('The closure was valid the whole time -- it just could not');
+console.log('READ the binding until the `let` statement ran. That gap');
+console.log('is the temporal dead zone, and it exists to turn a silent');
+console.log('`undefined` into a loud error.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">a curried logger &mdash; closures composing</span></div>
+<pre><code>// Each layer captures one more thing. This is the shape behind
+// most "configure once, call many times" APIs.
+const createLogger = (level) =&gt; (module) =&gt; (message) =&gt;
+  '[' + level + '] ' + module + ': ' + message;
+
+const error = createLogger('ERROR');
+const authError = error('auth');
+const dbError = error('db');
+
+console.log(authError('token expired'));
+console.log(authError('user not found'));
+console.log(dbError('connection lost'));
+
+// each partial application is independent
+const warn = createLogger('WARN');
+console.log(warn('auth')('slow response'));
+
+console.log('');
+console.log('Three nested closures, three captured variables, and the');
+console.log('partially applied versions are reusable values you can');
+console.log('pass around. The Currying page takes this further.');
+
+// the same idea as a stateful pipeline
+function pipeline(...steps) {
+  let runs = 0;
+  return (input) =&gt; {
+    runs++;
+    return { result: steps.reduce((acc, f) =&gt; f(acc), input), runs };
+  };
+}
+const process = pipeline((x) =&gt; x * 2, (x) =&gt; x + 1, (x) =&gt; 'result: ' + x);
+console.log('');
+console.log(process(5));
+console.log(process(10));
+console.log('`runs` is private state shared across every call.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <p>Closures cost nothing in time &mdash; a variable lookup up the scope chain is a compile-time
+  resolved slot in every modern engine, not a search. The cost is <strong>memory, and lifetime</strong>.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>What</th><th>Cost</th></tr></thead>
+      <tbody>
+        <tr><td>Creating a closure</td><td>one function object plus a pointer to its scope</td></tr>
+        <tr><td>Reading a captured variable</td><td>O(1) &mdash; a slot, not a lookup</td></tr>
+        <tr><td>n closure-based objects with m methods</td><td class="mono">O(n &middot; m) function objects</td></tr>
+        <tr><td>n class instances with m methods</td><td class="mono">O(n) objects, m functions total</td></tr>
+        <tr><td>Lifetime of a captured variable</td><td>as long as <em>any</em> closure over it lives</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>That last row is the one that causes bugs. A single surviving closure keeps its <em>entire</em>
+  scope alive &mdash; not only the variables it uses, in principle, though modern engines do prune
+  variables the closure demonstrably never mentions. Anything reachable through a name the closure
+  <em>does</em> mention is retained for as long as the closure is.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;A closure is a function plus the scope it was defined in, and it captures the variable
+    rather than its value &mdash; so if the variable changes later, the closure sees the new value.
+    That is why <code>var</code> in a loop gives you three functions sharing one binding that ends at
+    3, while <code>for (let i ...)</code> creates a fresh binding per iteration. The practical cost is
+    lifetime: the captured scope lives as long as the closure does, so an event listener or a pending
+    timer can keep a large object alive indefinitely.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Assuming <code>let</code> alone fixes the loop</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; let, and still 3 3 3</span></div>
+<pre><code>// (a) declared OUTSIDE the for header
+const a = [];
+let i;
+for (i = 0; i &lt; 3; i++) a.push(() =&gt; i);
+console.log('let declared outside :', a.map((f) =&gt; f()));
+
+// (b) a while loop
+const b = [];
+let j = 0;
+while (j &lt; 3) { b.push(() =&gt; j); j++; }
+console.log('let in a while       :', b.map((f) =&gt; f()));
+
+// (c) a do..while
+const c = [];
+let k = 0;
+do { c.push(() =&gt; k); k++; } while (k &lt; 3);
+console.log('let in a do..while   :', c.map((f) =&gt; f()));
+
+// (d) the working case, for contrast
+const d = [];
+for (let m = 0; m &lt; 3; m++) d.push(() =&gt; m);
+console.log('let IN the for header:', d.map((f) =&gt; f()));
+
+console.log('');
+console.log('Only (d) works. The per-iteration binding is a special');
+console.log('rule for a `for` statement whose head DECLARES the');
+console.log('variable. Nothing else gets it.');
+console.log('');
+console.log('If you need it elsewhere, capture explicitly:');
+const e = [];
+let n = 0;
+while (n &lt; 3) { const captured = n; e.push(() =&gt; captured); n++; }
+console.log('const inside the body :', e.map((f) =&gt; f()));</code></pre>
+  </div>
+
+  <h3>2. Leaking memory through a retained closure</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; a megabyte kept alive by a one-line callback</span></div>
+<pre><code>function makeHandlers() {
+  const hugeData = new Array(500000).fill('x');   // ~ a few MB
+  const summary = hugeData.length;
+
+  return {
+    // needs only `summary`, but the ARRAY is in the same scope
+    leaky: () =&gt; 'items: ' + summary + ' (hugeData is ' + hugeData.length + ')',
+    // mentions only `summary`
+    lean: () =&gt; 'items: ' + summary,
+  };
+}
+
+const handlers = makeHandlers();
+console.log(handlers.leaky());
+console.log(handlers.lean());
+
+console.log('');
+console.log('`leaky` mentions hugeData, so hugeData cannot be collected');
+console.log('while `leaky` is reachable -- even though the caller only');
+console.log('wanted a number.');
+console.log('');
+console.log('The fix is to extract what you need and let the rest go:');
+
+function makeLeanHandler() {
+  let summary;
+  {
+    const hugeData = new Array(500000).fill('x');
+    summary = hugeData.length;
+  }                                     // hugeData is out of scope here
+  return () =&gt; 'items: ' + summary;
+}
+console.log(' ', makeLeanHandler()());
+
+console.log('');
+console.log('Modern engines DO prune captured variables a closure never');
+console.log('names -- so `lean` above is genuinely lean. But relying on');
+console.log('that is fragile: add a debugger statement, an eval, or a');
+console.log('single stray reference and the optimisation disappears.');
+console.log('Structure the scope so the big object is unreachable.');</code></pre>
+  </div>
+
+  <h3>3. Forgetting to remove a listener</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the handler outlives the component</span></div>
+<pre><code>// a tiny event emitter, so this runs anywhere
+function makeEmitter() {
+  const listeners = [];
+  return {
+    on: (fn) =&gt; { listeners.push(fn); return () =&gt; {
+      const i = listeners.indexOf(fn);
+      if (i &gt;= 0) listeners.splice(i, 1);
+    }; },
+    emit: (v) =&gt; listeners.forEach((fn) =&gt; fn(v)),
+    count: () =&gt; listeners.length,
+  };
+}
+
+const bus = makeEmitter();
+
+function mountLeaky(id) {
+  const state = { id, buffer: new Array(1000).fill(id) };
+  bus.on(() =&gt; { state.buffer[0] = 'touched'; });
+  // no way to remove it -- the reference was never kept
+}
+
+function mountClean(id) {
+  const state = { id, buffer: new Array(1000).fill(id) };
+  const off = bus.on(() =&gt; { state.buffer[0] = 'touched'; });
+  return off;                       // the caller can unsubscribe
+}
+
+for (let i = 0; i &lt; 5; i++) mountLeaky(i);
+console.log('after 5 leaky mounts, listeners:', bus.count());
+
+const offs = [];
+for (let i = 0; i &lt; 5; i++) offs.push(mountClean(i));
+console.log('after 5 clean mounts, listeners:', bus.count());
+offs.forEach((off) =&gt; off());
+console.log('after unmounting them        :', bus.count());
+
+console.log('');
+console.log('Each leaked listener holds its closure, which holds');
+console.log('`state`, which holds a 1000-element array. Five mounts and');
+console.log('five unmounts leave five copies alive forever.');
+console.log('');
+console.log('Every subscribe should return its unsubscribe. In React');
+console.log('that is the effect cleanup; in the DOM it is');
+console.log('removeEventListener with the SAME function reference --');
+console.log('which is why an inline arrow can never be removed.');
+
+const el = { handlers: [] };
+el.handlers.push(() =&gt; 'inline');
+console.log('');
+console.log('  two identical inline arrows are different objects:',
+            (() =&gt; 1).toString() === (() =&gt; 1).toString(),
+            'but', (() =&gt; 1) === (() =&gt; 1));</code></pre>
+  </div>
+
+  <h3>4. Sharing state you meant to keep separate</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; one counter pretending to be many</span></div>
+<pre><code>// the factory is fine
+function makeCounter() {
+  let count = 0;
+  return () =&gt; ++count;
+}
+
+// but calling it ONCE and reusing the result is not
+const shared = makeCounter();
+const a = shared;
+const b = shared;
+console.log('a():', a(), a());
+console.log('b():', b(), '  <- continued from a, not a fresh counter');
+
+// the fix
+const c = makeCounter();
+const d = makeCounter();
+console.log('');
+console.log('c():', c(), c());
+console.log('d():', d(), '  <- independent');
+
+// the same bug in a module
+console.log('');
+const CounterModule = (function () {
+  let count = 0;                       // ONE count for the whole module
+  return { increment: () =&gt; ++count };
+})();
+console.log('module counter, "two" users:',
+            CounterModule.increment(), CounterModule.increment());
+console.log('An IIFE module has exactly one instance, by construction.');
+console.log('If you need many, export the FACTORY, not the result.');</code></pre>
+  </div>
+
+  <h3>5. Expecting a closure over an object to be a snapshot</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the object mutated underneath</span></div>
+<pre><code>function makeReport(user) {
+  return () =&gt; 'report for ' + user.name;
+}
+
+const user = { name: 'Ada' };
+const report = makeReport(user);
+console.log('before:', report());
+
+user.name = 'Grace';
+console.log('after :', report(), '  <- the object was mutated');
+
+console.log('');
+console.log('The PARAMETER `user` was copied -- but what was copied is');
+console.log('a reference to the same object. Reassigning the outer');
+console.log('variable does NOT show through:');
+
+let outer = { name: 'Ada' };
+const report2 = makeReport(outer);
+outer = { name: 'Replaced' };            // a new object in the outer variable
+console.log('  after reassigning outer:', report2());
+
+console.log('');
+console.log('If you want a snapshot, take one:');
+function makeSnapshotReport(user) {
+  const name = user.name;                // copy the primitive out
+  return () =&gt; 'report for ' + name;
+}
+const u2 = { name: 'Ada' };
+const snap = makeSnapshotReport(u2);
+u2.name = 'Grace';
+console.log(' ', snap());
+
+console.log('');
+console.log('Two different questions, always worth separating:');
+console.log('  is the VARIABLE shared?  (var vs let, same scope or not)');
+console.log('  is the VALUE shared?     (object vs primitive)');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the counter factory from memory</strong> and prove the count is unreachable
+    &mdash; <code>Object.keys</code>, <code>JSON.stringify</code>, direct property access.</li>
+    <li><strong>Explain <code>var</code> in a loop</strong> in one sentence, then give three separate
+    fixes: <code>let</code> in the header, an IIFE, and <code>forEach</code>.</li>
+    <li><strong>Answer the six snippets in Step 7</strong> without running them. Numbers 5 and 6 are
+    the ones that separate memorising from understanding.</li>
+    <li><strong>Write <code>once</code>.</strong> Step 6. Then explain why the flag is a separate
+    boolean rather than a check on the cached result.</li>
+    <li><strong>Write <code>memoize</code></strong> &mdash; a closure over a cache. It is the next page,
+    and it is this page's pattern applied to one specific problem.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Captures a variable, not a value.</strong> Say it out loud until it is automatic. Then
+    two corollaries: variables in the same scope are shared, so the question is always &ldquo;how many
+    scopes did this code create?&rdquo;; and a captured scope lives exactly as long as the closure
+    does, which is where the leaks come from.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="06-event-loop.html">&larr; Event Loop Output Order</a>
+  <a href="08-currying.html">Next: Currying &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

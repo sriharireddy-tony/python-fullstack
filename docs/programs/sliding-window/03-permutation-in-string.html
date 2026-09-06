@@ -1,0 +1,804 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Permutation in String</title>
+<meta name="description" content="A fixed window carrying a frequency map, kept in sync with a single matches counter.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Sliding window &middot; Problem 03</p>
+  <h1>Permutation in String</h1>
+  <p class="standfirst">Does any rearrangement of <code>t</code> appear inside <code>s</code>?
+  Two ideas combine here: the <strong>fixed-size window</strong> and the <strong>frequency
+  map</strong>. The refinement is keeping a single counter that says whether they currently match.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Given two strings, return true if <code>s</code> contains a substring that is a permutation of
+  <code>t</code> &mdash; the same characters, the same counts, in any order.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th class="mono">t</th><th class="mono">s</th><th>Answer</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">"ab"</td><td class="mono">"eidbaooo"</td><td class="mono">true</td><td>"ba" at index 3</td></tr>
+        <tr><td class="mono">"ab"</td><td class="mono">"eidboaoo"</td><td class="mono">false</td><td>no window is a rearrangement</td></tr>
+        <tr><td class="mono">"adc"</td><td class="mono">"dcda"</td><td class="mono">true</td><td>"dcd"? no &mdash; "cda" at index 1</td></tr>
+        <tr><td class="mono">"abc"</td><td class="mono">"ab"</td><td class="mono">false</td><td>s is shorter than t</td></tr>
+        <tr><td class="mono">"aa"</td><td class="mono">"aba"</td><td class="mono">false</td><td>no two adjacent a&rsquo;s</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">The realisation that makes this easy</span>
+    <p>Every permutation of <code>t</code> has <strong>exactly the same length</strong> as
+    <code>t</code>. So you are not searching for a variable-length window at all &mdash; you are
+    checking every window of a <strong>fixed</strong> size, and asking whether its character counts
+    equal <code>t</code>&rsquo;s.</p>
+    <p>That is the fixed-size window from problem 01, carrying a frequency map instead of a sum.</p>
+  </div>
+
+  <p>Row five is worth checking: <code>"aba"</code> contains two a&rsquo;s, but never side by side.
+  The window must be contiguous, so the answer is false.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; check every window from scratch</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; count every window</span></div>
+<pre><code>function sameCounts(a, b) {
+  if (a.size !== b.size) return false;
+  for (const [k, v] of a) if (b.get(k) !== v) return false;
+  return true;
+}
+
+function countsOf(str, from, to) {
+  const m = new Map();
+  for (let i = from; i &lt; to; i++) m.set(str[i], (m.get(str[i]) || 0) + 1);
+  return m;
+}
+
+function checkInclusionBrute(t, s) {
+  const k = t.length;
+  if (k &gt; s.length) return false;
+
+  const need = countsOf(t, 0, k);
+
+  for (let start = 0; start + k &lt;= s.length; start++) {
+    if (sameCounts(need, countsOf(s, start, start + k))) return true;
+  }
+
+  return false;
+}
+
+console.log(checkInclusionBrute('ab', 'eidbaooo'));   // true
+console.log(checkInclusionBrute('ab', 'eidboaoo'));   // false
+console.log(checkInclusionBrute('adc', 'dcda'));      // true
+console.log(checkInclusionBrute('abc', 'ab'));        // false
+console.log(checkInclusionBrute('aa', 'aba'));        // false
+console.log(checkInclusionBrute('a', 'a'));           // true</code></pre>
+  </div>
+
+  <p>Correct, and it rebuilds a whole frequency map for every window. With <code>n</code> windows and
+  <code>k</code> characters each, that is <strong>O(n &times; k)</strong> &mdash; plus a full map
+  comparison per window.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>Same waste as the fixed window in problem 01: neighbouring windows share <code>k - 1</code>
+  characters, and we throw all that away and recount.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const K = 500;
+const N = 60000;
+let t = '';
+for (let i = 0; i &lt; K; i++) t += 'abcdefghij'[i % 10];
+let s = '';
+for (let i = 0; i &lt; N; i++) s += 'abcdefghij'[(i * 7) % 10];
+s = s + t;                                  // the answer is right at the end
+
+function countsOf(str, from, to) {
+  const m = new Map();
+  for (let i = from; i &lt; to; i++) m.set(str[i], (m.get(str[i]) || 0) + 1);
+  return m;
+}
+function same(a, b) {
+  if (a.size !== b.size) return false;
+  for (const [k, v] of a) if (b.get(k) !== v) return false;
+  return true;
+}
+
+function brute(pat, str) {
+  const k = pat.length;
+  const need = countsOf(pat, 0, k);
+  for (let i = 0; i + k &lt;= str.length; i++) {
+    if (same(need, countsOf(str, i, i + k))) return true;
+  }
+  return false;
+}
+
+function windowed(pat, str) {
+  const k = pat.length;
+  if (k &gt; str.length) return false;
+
+  const need = new Array(26).fill(0);
+  const have = new Array(26).fill(0);
+  for (let i = 0; i &lt; k; i++) {
+    need[pat.charCodeAt(i) - 97]++;
+    have[str.charCodeAt(i) - 97]++;
+  }
+
+  let matches = 0;
+  for (let i = 0; i &lt; 26; i++) if (need[i] === have[i]) matches++;
+
+  for (let i = k; i &lt; str.length; i++) {
+    if (matches === 26) return true;
+
+    const enter = str.charCodeAt(i) - 97;
+    const leave = str.charCodeAt(i - k) - 97;
+
+    have[enter]++;
+    if (have[enter] === need[enter]) matches++;
+    else if (have[enter] === need[enter] + 1) matches--;
+
+    have[leave]--;
+    if (have[leave] === need[leave]) matches++;
+    else if (have[leave] === need[leave] - 1) matches--;
+  }
+
+  return matches === 26;
+}
+
+let x = performance.now();
+const a = brute(t, s);
+const bruteMs = performance.now() - x;
+
+x = performance.now();
+const b = windowed(t, s);
+const winMs = performance.now() - x;
+
+console.log('recount each window :', a, 'in', bruteMs.toFixed(1) + ' ms');
+console.log('sliding window      :', b, 'in', winMs.toFixed(2) + ' ms');
+console.log('same answer:', a === b);
+console.log('speed-up:', Math.round(bruteMs / Math.max(winMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; slide the counts, track one number</h2>
+
+  <p>Two improvements stack here.</p>
+
+  <h3>Improvement one: slide the counts</h3>
+
+  <p>Move the window by one: increment the count of the character entering on the right, decrement
+  the one leaving on the left. Two operations per step, regardless of <code>k</code> &mdash; the same
+  idea as <code>sum += nums[i] - nums[i - k]</code>, applied to a frequency table.</p>
+
+  <h3>Improvement two: do not compare the maps</h3>
+
+  <p>Comparing two 26-slot tables every step is O(26) &mdash; a constant, but a fat one. Instead
+  maintain a single number.</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Track <code>matches</code>: how many of the 26 letters currently have
+    <code>have[c] === need[c]</code>. When <code>matches === 26</code>, the window is a permutation.</p>
+    <p>Each count change affects exactly one letter, so <code>matches</code> can be repaired in O(1).</p>
+  </div>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the four lines that keep <code>matches</code> honest</span></div>
+<pre><code>// a character ENTERS
+have[c]++;
+if (have[c] === need[c])      matches++;   // just became correct
+else if (have[c] === need[c] + 1) matches--;   // just went one over
+
+// a character LEAVES
+have[c]--;
+if (have[c] === need[c])      matches++;   // just became correct
+else if (have[c] === need[c] - 1) matches--;   // just went one under</code></pre>
+  </div>
+
+  <p>Read those conditions carefully. A letter only <em>changes status</em> when it crosses the
+  boundary. Going from correct to one-too-many loses a match; going from one-too-few to correct gains
+  one. Any other movement &mdash; from three-too-many to two-too-many &mdash; changes nothing.</p>
+
+  <p>This is exactly the <code>formed</code> counter from Minimum Window Substring, and it is the same
+  general trick: <strong>when a predicate is checked in a loop, maintain its answer incrementally
+  instead of recomputing it.</strong></p>
+
+  <div class="note warn">
+    <span class="t">Why 26 and not <code>need.size</code></span>
+    <p><code>matches</code> counts letters where the two tables agree, and that includes letters where
+    both are <strong>zero</strong>. If <code>t</code> has no <code>z</code>, then <code>need['z']</code>
+    is 0 and the window must also contain no <code>z</code> &mdash; that agreement counts. So the
+    target is all 26 letters, not just the ones in <code>t</code>. Getting this wrong lets windows
+    with extra characters slip through.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>t = "ab"</code>, <code>s = "eidbaooo"</code>. Only the letters that ever appear are shown;
+  every other letter has <code>need = have = 0</code> and permanently counts as a match.</p>
+
+  <div class="trace">
+<pre>need:  a:1  b:1   (everything else 0)
+
+first window "ei"      have: e:1  i:1
+  a: need 1, have 0  -> not matching
+  b: need 1, have 0  -> not matching
+  e: need 0, have 1  -> not matching
+  i: need 0, have 1  -> not matching
+  the other 22 letters: 0 = 0  -> matching
+  matches = 22        not 26, keep going
+
+slide to "id"   (d enters, e leaves)
+  have: i:1  d:1
+  matches = 24 - ... let us just say: a,b still wrong; i,d wrong;
+  e is now 0 = 0, correct again
+  matches = 23        no
+
+slide to "db"   (b enters, i leaves)
+  have: d:1  b:1
+  b is now 1 = 1  -> correct
+  i is now 0 = 0  -> correct
+  a still 0 != 1  -> wrong
+  d is 1 != 0     -> wrong
+  matches = 24        no
+
+slide to "ba"   (a enters, d leaves)
+  have: b:1  a:1
+  a is now 1 = 1  -> correct
+  d is now 0 = 0  -> correct
+  every letter agrees
+  matches = 26        YES -> true
+</pre>
+  </div>
+
+  <p>The bookkeeping is fiddly to do by hand, which is exactly why the code maintains it
+  incrementally rather than recounting. Below, the tracer prints only the letters that matter.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function inclusionExplained(t, s) {
+  const k = t.length;
+  console.log('t = "' + t + '"   s = "' + s + '"');
+
+  if (k &gt; s.length) { console.log('t is longer than s -> false'); return false; }
+
+  const need = new Array(26).fill(0);
+  const have = new Array(26).fill(0);
+  for (let i = 0; i &lt; k; i++) {
+    need[t.charCodeAt(i) - 97]++;
+    have[s.charCodeAt(i) - 97]++;
+  }
+
+  let matches = 0;
+  for (let i = 0; i &lt; 26; i++) if (need[i] === have[i]) matches++;
+
+  const show = (from) =&gt;
+    '"' + s.slice(from, from + k) + '"   matches=' + matches + '/26';
+
+  console.log('first window ' + show(0));
+
+  for (let i = k; i &lt; s.length; i++) {
+    if (matches === 26) {
+      console.log('  -> found at index ' + (i - k));
+      console.log('');
+      return true;
+    }
+
+    const enter = s.charCodeAt(i) - 97;
+    const leave = s.charCodeAt(i - k) - 97;
+
+    have[enter]++;
+    if (have[enter] === need[enter]) matches++;
+    else if (have[enter] === need[enter] + 1) matches--;
+
+    have[leave]--;
+    if (have[leave] === need[leave]) matches++;
+    else if (have[leave] === need[leave] - 1) matches--;
+
+    console.log("  +'" + s[i] + "' -'" + s[i - k] + "'   window " + show(i - k + 1));
+  }
+
+  console.log(matches === 26 ? '  -> found at the end' : '  -> not found');
+  console.log('');
+  return matches === 26;
+}
+
+console.log('ANSWER:', inclusionExplained('ab', 'eidbaooo'));
+console.log('==========================================');
+console.log('ANSWER:', inclusionExplained('ab', 'eidboaoo'));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; compare the tables each step</span></div>
+<pre><code>function checkInclusionSimple(t, s) {
+  const k = t.length;
+  if (k &gt; s.length) return false;
+
+  const need = [];
+  const have = [];
+  for (let i = 0; i &lt; 26; i++) { need[i] = 0; have[i] = 0; }
+
+  // build the pattern counts and the first window
+  for (let i = 0; i &lt; k; i++) {
+    need[t.charCodeAt(i) - 97] = need[t.charCodeAt(i) - 97] + 1;
+    have[s.charCodeAt(i) - 97] = have[s.charCodeAt(i) - 97] + 1;
+  }
+
+  function tablesMatch() {
+    for (let i = 0; i &lt; 26; i++) {
+      if (need[i] !== have[i]) return false;
+    }
+    return true;
+  }
+
+  if (tablesMatch()) return true;
+
+  for (let i = k; i &lt; s.length; i++) {
+    have[s.charCodeAt(i) - 97] = have[s.charCodeAt(i) - 97] + 1;       // enters
+    have[s.charCodeAt(i - k) - 97] = have[s.charCodeAt(i - k) - 97] - 1; // leaves
+
+    if (tablesMatch()) return true;
+  }
+
+  return false;
+}
+
+console.log(checkInclusionSimple('ab', 'eidbaooo'));   // true
+console.log(checkInclusionSimple('ab', 'eidboaoo'));   // false
+console.log(checkInclusionSimple('adc', 'dcda'));      // true
+console.log(checkInclusionSimple('abc', 'ab'));        // false
+console.log(checkInclusionSimple('aa', 'aba'));        // false
+console.log(checkInclusionSimple('a', 'a'));           // true
+console.log(checkInclusionSimple('abc', 'ccccbbbbaaaa'));   // false
+console.log(checkInclusionSimple('abc', 'cbabcacab'));      // true</code></pre>
+  </div>
+
+  <p>O(26n), which is O(n). <strong>This is the version to write in an interview</strong> &mdash; it
+  is obviously correct, and the 26-slot comparison is a constant. Offer the <code>matches</code>
+  refinement afterwards.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; the matches counter</span></div>
+<pre><code>function checkInclusionManual(t, s) {
+  const k = t.length;
+  if (k &gt; s.length) return false;
+
+  const need = [];
+  const have = [];
+  for (let i = 0; i &lt; 26; i++) { need[i] = 0; have[i] = 0; }
+
+  for (let i = 0; i &lt; k; i++) {
+    need[t.charCodeAt(i) - 97] = need[t.charCodeAt(i) - 97] + 1;
+    have[s.charCodeAt(i) - 97] = have[s.charCodeAt(i) - 97] + 1;
+  }
+
+  // how many of the 26 letters currently agree?
+  let matches = 0;
+  for (let i = 0; i &lt; 26; i++) {
+    if (need[i] === have[i]) matches = matches + 1;
+  }
+
+  for (let i = k; i &lt; s.length; i++) {
+    if (matches === 26) return true;
+
+    const enter = s.charCodeAt(i) - 97;
+    const leave = s.charCodeAt(i - k) - 97;
+
+    // one character joins
+    have[enter] = have[enter] + 1;
+    if (have[enter] === need[enter]) matches = matches + 1;
+    else if (have[enter] === need[enter] + 1) matches = matches - 1;
+
+    // one character leaves
+    have[leave] = have[leave] - 1;
+    if (have[leave] === need[leave]) matches = matches + 1;
+    else if (have[leave] === need[leave] - 1) matches = matches - 1;
+  }
+
+  return matches === 26;
+}
+
+console.log(checkInclusionManual('ab', 'eidbaooo'));   // true
+console.log(checkInclusionManual('ab', 'eidboaoo'));   // false
+console.log(checkInclusionManual('adc', 'dcda'));      // true
+console.log(checkInclusionManual('abc', 'ab'));        // false
+console.log(checkInclusionManual('aa', 'aba'));        // false
+console.log(checkInclusionManual('a', 'a'));           // true
+console.log(checkInclusionManual('abc', 'cbabcacab')); // true
+console.log(checkInclusionManual('hello', 'ooolleoooleh'));  // false</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The order matters when the same letter enters and leaves</span>
+    <p>If the entering and leaving characters are the same letter, the <code>have</code> count goes up
+    then straight back down &mdash; and <code>matches</code> is adjusted twice, once each way,
+    cancelling out. That is correct, but only because each adjustment is written as a pair of
+    <em>transition</em> checks rather than a recount. Handle enter and leave as two separate,
+    complete steps and this case takes care of itself.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function checkInclusion(t, s) {
+  const k = t.length;
+  if (k &gt; s.length) return false;
+
+  const need = new Array(26).fill(0);
+  const have = new Array(26).fill(0);
+  const idx = c =&gt; c.charCodeAt(0) - 97;
+
+  for (let i = 0; i &lt; k; i++) {
+    need[idx(t[i])]++;
+    have[idx(s[i])]++;
+  }
+
+  const same = () =&gt; need.every((n, i) =&gt; n === have[i]);
+
+  if (same()) return true;
+
+  for (let i = k; i &lt; s.length; i++) {
+    have[idx(s[i])]++;
+    have[idx(s[i - k])]--;
+    if (same()) return true;
+  }
+
+  return false;
+}
+
+console.log(checkInclusion('ab', 'eidbaooo'));   // true
+console.log(checkInclusion('ab', 'eidboaoo'));   // false
+console.log(checkInclusion('adc', 'dcda'));      // true
+console.log(checkInclusion('abc', 'ab'));        // false
+console.log(checkInclusion('a', 'a'));           // true</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the sibling: find ALL the start indexes</span></div>
+<pre><code>// "Find All Anagrams in a String" -- the same window, collecting
+// every match instead of stopping at the first.
+function findAnagrams(s, t) {
+  const k = t.length;
+  const out = [];
+  if (k &gt; s.length) return out;
+
+  const need = new Array(26).fill(0);
+  const have = new Array(26).fill(0);
+  const idx = c =&gt; c.charCodeAt(0) - 97;
+
+  for (let i = 0; i &lt; k; i++) {
+    need[idx(t[i])]++;
+    have[idx(s[i])]++;
+  }
+
+  let matches = 0;
+  for (let i = 0; i &lt; 26; i++) if (need[i] === have[i]) matches++;
+
+  if (matches === 26) out.push(0);
+
+  for (let i = k; i &lt; s.length; i++) {
+    const enter = idx(s[i]);
+    const leave = idx(s[i - k]);
+
+    have[enter]++;
+    if (have[enter] === need[enter]) matches++;
+    else if (have[enter] === need[enter] + 1) matches--;
+
+    have[leave]--;
+    if (have[leave] === need[leave]) matches++;
+    else if (have[leave] === need[leave] - 1) matches--;
+
+    if (matches === 26) out.push(i - k + 1);
+  }
+
+  return out;
+}
+
+console.log(findAnagrams('cbaebabacd', 'abc'));   // [0, 6]
+console.log(findAnagrams('abab', 'ab'));          // [0, 1, 2]
+console.log(findAnagrams('aaaaa', 'aa'));         // [0, 1, 2, 3]
+console.log(findAnagrams('af', 'be'));            // []</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">a Map version, for arbitrary characters</span></div>
+<pre><code>// The 26-slot array assumes lowercase a-z. For any characters,
+// use Maps and count how many keys currently agree.
+function checkInclusionAny(t, s) {
+  const k = [...t].length;
+  const chars = [...s];
+  if (k &gt; chars.length) return false;
+
+  const need = new Map();
+  for (const c of t) need.set(c, (need.get(c) || 0) + 1);
+
+  const have = new Map();
+  const bump = (c, by) =&gt; {
+    const n = (have.get(c) || 0) + by;
+    if (n === 0) have.delete(c); else have.set(c, n);
+  };
+
+  for (let i = 0; i &lt; k; i++) bump(chars[i], 1);
+
+  const same = () =&gt; {
+    if (have.size !== need.size) return false;
+    for (const [c, n] of need) if (have.get(c) !== n) return false;
+    return true;
+  };
+
+  if (same()) return true;
+
+  for (let i = k; i &lt; chars.length; i++) {
+    bump(chars[i], 1);
+    bump(chars[i - k], -1);
+    if (same()) return true;
+  }
+
+  return false;
+}
+
+console.log(checkInclusionAny('ab', 'eidbaooo'));       // true
+console.log(checkInclusionAny('!A', 'xxA!yy'));         // true
+console.log(checkInclusionAny('😀a', 'zza😀z'));         // true
+console.log(checkInclusionAny('aa', 'aba'));            // false
+
+// Note `if (n === 0) have.delete(c)` -- without it, a key with a
+// count of zero stays in the map and `have.size !== need.size`
+// rejects a window that is actually correct.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Recount every window</td><td class="mono">O(n &middot; k)</td><td class="mono">O(k)</td></tr>
+        <tr><td>Slide + compare 26 slots</td><td class="mono">O(26n) = O(n)</td><td class="mono">O(1)</td></tr>
+        <tr><td><strong>Slide + matches counter</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Building the initial tables is O(k). Each of the <code>n - k</code> slides is two count updates
+  and, in the refined version, four comparisons &mdash; all constant. So O(n + k), which is O(n) for
+  the usual case where <code>k &le; n</code>.</p>
+
+  <p>Space is two 26-element arrays: O(1) for a fixed alphabet, O(distinct characters) if you use
+  Maps.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Every permutation of <code>t</code> has the same length as <code>t</code>, so I only
+    need to check windows of that fixed size. I build a frequency table for <code>t</code> and for the
+    first window, then slide: increment the entering character, decrement the leaving one. Comparing
+    the two 26-slot tables each step is O(26), so O(n) overall. To avoid even that, I keep a
+    <code>matches</code> counter of how many letters currently agree and update it on the two
+    transitions &mdash; then a window is a permutation exactly when
+    <code>matches === 26</code>.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Counting matches only over the letters in <code>t</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; extra characters slip through</span></div>
+<pre><code>function broken(t, s) {
+  const k = t.length;
+  if (k &gt; s.length) return false;
+
+  const need = new Map();
+  for (const c of t) need.set(c, (need.get(c) || 0) + 1);
+
+  const have = new Map();
+  for (let i = 0; i &lt; k; i++) have.set(s[i], (have.get(s[i]) || 0) + 1);
+
+  // only checks the letters t cares about -- bug
+  const ok = () =&gt; {
+    for (const [c, n] of need) if (have.get(c) !== n) return false;
+    return true;
+  };
+
+  if (ok()) return true;
+
+  for (let i = k; i &lt; s.length; i++) {
+    have.set(s[i], (have.get(s[i]) || 0) + 1);
+    have.set(s[i - k], have.get(s[i - k]) - 1);
+    if (ok()) return true;
+  }
+  return false;
+}
+
+console.log(broken('ab', 'eidbaooo'));   // true   fine
+console.log(broken('ab', 'ba'));         // true   fine
+console.log(broken('a', 'ab'));          // true   fine
+
+// It happens to survive here because the window length forces the
+// totals to line up. But the reasoning is wrong: checking only t's
+// letters ignores whether the window contains anything ELSE. It
+// only works because the window is exactly k long, so any extra
+// character means one of t's letters must be short. Rely on that
+// and you will get it wrong the moment the window size varies.
+// Count agreement across the WHOLE alphabet -- it costs nothing
+// and the reasoning is then airtight.</code></pre>
+  </div>
+
+  <h3>2. Getting the transition conditions backwards</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; matches drifts</span></div>
+<pre><code>function broken(t, s) {
+  const k = t.length;
+  if (k &gt; s.length) return false;
+  const need = new Array(26).fill(0), have = new Array(26).fill(0);
+  const idx = c =&gt; c.charCodeAt(0) - 97;
+  for (let i = 0; i &lt; k; i++) { need[idx(t[i])]++; have[idx(s[i])]++; }
+
+  let matches = 0;
+  for (let i = 0; i &lt; 26; i++) if (need[i] === have[i]) matches++;
+
+  for (let i = k; i &lt; s.length; i++) {
+    if (matches === 26) return true;
+    const e = idx(s[i]), l = idx(s[i - k]);
+
+    have[e]++;
+    if (have[e] &gt;= need[e]) matches++;        // >= instead of === -- bug
+
+    have[l]--;
+    if (have[l] &lt;= need[l]) matches++;        // also wrong
+  }
+  return matches === 26;
+}
+
+console.log(broken('ab', 'eidbaooo'));   // true   right, by accident
+console.log(broken('ab', 'eidboaoo'));   // true   WRONG, should be false
+console.log(broken('aa', 'aba'));        // true   WRONG, should be false
+
+// matches only counts up, so it sails past 26 and every window
+// looks like a match. The conditions must fire ONLY on the exact
+// transition into or out of agreement.</code></pre>
+  </div>
+
+  <h3>3. Forgetting to check the first window</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; misses a match at index 0</span></div>
+<pre><code>function broken(t, s) {
+  const k = t.length;
+  if (k &gt; s.length) return false;
+  const need = new Array(26).fill(0), have = new Array(26).fill(0);
+  const idx = c =&gt; c.charCodeAt(0) - 97;
+  for (let i = 0; i &lt; k; i++) { need[idx(t[i])]++; have[idx(s[i])]++; }
+
+  const same = () =&gt; need.every((n, i) =&gt; n === have[i]);
+  // no check here -- bug
+
+  for (let i = k; i &lt; s.length; i++) {
+    have[idx(s[i])]++;
+    have[idx(s[i - k])]--;
+    if (same()) return true;
+  }
+  return false;
+}
+
+console.log(broken('ab', 'eidbaooo'));   // true   fine
+console.log(broken('ab', 'ab'));         // false  WRONG, should be true
+console.log(broken('ab', 'abxx'));       // false  WRONG, should be true
+
+// The very first window is a candidate too. Check it before the
+// loop, or run the loop from i = k - 1 and slide at the end of the
+// body instead of the start.</code></pre>
+  </div>
+
+  <h3>4. Comparing sorted substrings</h3>
+
+  <p><code>[...s.slice(i, i+k)].sort().join('') === sortedT</code> is correct and is
+  O(n &middot; k log k) &mdash; worse than the brute force with counts. Sorting computes an ordering
+  the question does not need, exactly as in Valid Anagram.</p>
+
+  <h3>5. Not handling <code>t</code> longer than <code>s</code></h3>
+
+  <p>Without the guard, the initial loop reads past the end of <code>s</code>,
+  <code>charCodeAt</code> returns <code>NaN</code>, and <code>NaN - 97</code> is <code>NaN</code>
+  &mdash; which as an array index silently creates a property named <code>"NaN"</code>. No crash, no
+  correct answer. One guard line.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write Version 1a from memory</strong> &mdash; the one that compares the 26 slots. It
+    is obviously correct and still linear, and that is the answer to give first.</li>
+    <li><strong>Find All Anagrams in a String.</strong> In Step 7 &mdash; the same window, collecting
+    every index. Write it from memory.</li>
+    <li><strong>Return the matching substring</strong>, not just true. You have the index; it is one
+    <code>slice</code>.</li>
+    <li><strong>Permutation with at most one mismatch.</strong> The window may differ from
+    <code>t</code> in one character. What does that do to the <code>matches</code> test? (Hint: think
+    about the total absolute difference between the tables, not the count of agreeing letters.)</li>
+    <li><strong>Minimum Window Substring.</strong> The variable-size cousin, where the window may
+    contain extras. Compare its <code>formed</code> counter with this page&rsquo;s
+    <code>matches</code> &mdash; same trick, different definition of valid.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Two techniques compose.</strong> This problem is the fixed-size window from problem 01
+    carrying the frequency map from Valid Anagram, with the incremental-invariant trick from Minimum
+    Window Substring on top. None of the three is new; recognising that a problem is a combination
+    rather than something novel is most of what makes hard problems feel easy.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="02-longest-repeating-character-replacement.html">&larr; Longest Repeating Character Replacement</a>
+  <a href="04-fruit-into-baskets.html">Next: Fruit Into Baskets &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

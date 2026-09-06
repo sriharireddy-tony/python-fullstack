@@ -1,0 +1,778 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Longest Consecutive Sequence</title>
+<meta name="description" content="O(n) without sorting: only start counting at the head of a run, and every number is visited at most twice.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Hash map &middot; Problem 04</p>
+  <h1>Longest Consecutive Sequence</h1>
+  <p class="standfirst">Sorting solves this in O(n log n) and is a fine answer. The O(n) solution
+  turns on one deceptively small idea: <strong>only start counting a run from its head</strong>.
+  That single <code>if</code> is what stops the algorithm being quadratic.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Given an unsorted array of integers, find the length of the longest run of
+  <strong>consecutive</strong> numbers &mdash; numbers that differ by one. They do not need to be
+  next to each other in the array.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Answer</th><th>The run</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[100, 4, 200, 1, 3, 2]</td><td class="mono">4</td><td class="mono">1, 2, 3, 4</td></tr>
+        <tr><td class="mono">[0,3,7,2,5,8,4,6,0,1]</td><td class="mono">9</td><td class="mono">0&hellip;8</td></tr>
+        <tr><td class="mono">[]</td><td class="mono">0</td><td></td></tr>
+        <tr><td class="mono">[5]</td><td class="mono">1</td><td class="mono">5</td></tr>
+        <tr><td class="mono">[1, 1, 1]</td><td class="mono">1</td><td>duplicates count once</td></tr>
+        <tr><td class="mono">[-3, -2, 5, -1]</td><td class="mono">3</td><td class="mono">-3, -2, -1</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Three things to notice:</p>
+
+  <ul>
+    <li><strong>Position does not matter.</strong> The run <code>1,2,3,4</code> is scattered across
+    the array; consecutive refers to the <em>values</em>, not the indexes.</li>
+    <li><strong>Duplicates count once.</strong> <code>[1,1,1]</code> is a run of length 1, which is
+    why a Set is the right container.</li>
+    <li><strong>Negatives are fine.</strong> Nothing in the problem restricts the values, which rules
+    out any solution that uses the numbers as array indexes.</li>
+  </ul>
+
+  <div class="note warn">
+    <span class="t">The constraint that makes it interesting</span>
+    <p>The problem asks for <strong>O(n)</strong>. Sorting is O(n log n) and would be the obvious
+    route. That extra requirement is the whole exercise &mdash; and it is worth writing the sorted
+    version first anyway, so you have a correct answer on the board.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; sort it</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; sort, then walk</span></div>
+<pre><code>function longestSorted(nums) {
+  if (nums.length === 0) return 0;
+
+  const s = [...nums].sort((a, b) =&gt; a - b);
+
+  let best = 1;
+  let current = 1;
+
+  for (let i = 1; i &lt; s.length; i++) {
+    if (s[i] === s[i - 1]) continue;           // duplicate, ignore it
+
+    if (s[i] === s[i - 1] + 1) {
+      current++;                               // the run continues
+    } else {
+      current = 1;                             // a gap: start over
+    }
+
+    if (current &gt; best) best = current;
+  }
+
+  return best;
+}
+
+console.log(longestSorted([100, 4, 200, 1, 3, 2]));      // 4
+console.log(longestSorted([0,3,7,2,5,8,4,6,0,1]));       // 9
+console.log(longestSorted([]));                          // 0
+console.log(longestSorted([5]));                         // 1
+console.log(longestSorted([1, 1, 1]));                   // 1
+console.log(longestSorted([-3, -2, 5, -1]));             // 3</code></pre>
+  </div>
+
+  <p>Sorting puts consecutive numbers next to each other, and then it is a single walk with the
+  Kadane-like &ldquo;extend or restart&rdquo; shape. Correct, short, and O(n log n). Write it, say its
+  complexity, then go after the linear version.</p>
+
+  <p>Note the <code>continue</code> for duplicates. Without it, <code>[1,1,2]</code> would see
+  <code>1 === 1 + 1</code> as false and reset the run.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>The trap: the version that looks O(n) and is not</h2>
+
+  <p>The natural first attempt at a linear solution: put everything in a Set, then for each number,
+  walk upwards counting how far the run goes.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0b &mdash; correct, but O(n&sup2;)</span></div>
+<pre><code>function longestNaiveSet(nums) {
+  const set = new Set(nums);
+  let best = 0;
+
+  for (const n of set) {
+    let length = 1;
+    let next = n + 1;
+
+    while (set.has(next)) {      // walk up from EVERY number
+      length++;
+      next++;
+    }
+
+    if (length &gt; best) best = length;
+  }
+
+  return best;
+}
+
+console.log(longestNaiveSet([100, 4, 200, 1, 3, 2]));   // 4   correct
+console.log(longestNaiveSet([0,3,7,2,5,8,4,6,0,1]));    // 9   correct
+
+// The answers are right. The COST is the problem.
+// On [1,2,3,...,n]:
+//   starting at 1, walk n steps
+//   starting at 2, walk n-1 steps
+//   starting at 3, walk n-2 steps
+//   ...
+// which is n^2/2 total.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; the two Set versions</span></div>
+<pre><code>// One long consecutive run: the worst case for the naive version.
+const N = 30000;
+const nums = [];
+for (let i = 0; i &lt; N; i++) nums.push(i);
+
+function naive(arr) {
+  const set = new Set(arr);
+  let best = 0;
+  for (const n of set) {
+    let len = 1, next = n + 1;
+    while (set.has(next)) { len++; next++; }
+    if (len &gt; best) best = len;
+  }
+  return best;
+}
+
+function headsOnly(arr) {
+  const set = new Set(arr);
+  let best = 0;
+  for (const n of set) {
+    if (set.has(n - 1)) continue;      // not the head of a run -- skip
+    let len = 1, next = n + 1;
+    while (set.has(next)) { len++; next++; }
+    if (len &gt; best) best = len;
+  }
+  return best;
+}
+
+function sorted(arr) {
+  const s = [...arr].sort((a, b) =&gt; a - b);
+  let best = 1, cur = 1;
+  for (let i = 1; i &lt; s.length; i++) {
+    if (s[i] === s[i - 1]) continue;
+    cur = s[i] === s[i - 1] + 1 ? cur + 1 : 1;
+    if (cur &gt; best) best = cur;
+  }
+  return best;
+}
+
+let t = performance.now();
+const a = naive(nums);
+const naiveMs = performance.now() - t;
+
+t = performance.now();
+const b = headsOnly(nums);
+const headMs = performance.now() - t;
+
+t = performance.now();
+const c = sorted(nums);
+const sortMs = performance.now() - t;
+
+console.log('walk from every number :', a, 'in', naiveMs.toFixed(1) + ' ms');
+console.log('walk from heads only   :', b, 'in', headMs.toFixed(2) + ' ms');
+console.log('sort then walk         :', c, 'in', sortMs.toFixed(2) + ' ms');
+console.log('all agree:', a === b &amp;&amp; b === c);
+console.log('one if statement is worth', Math.round(naiveMs / Math.max(headMs, 0.01)) + 'x here');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; only start at a head</h2>
+
+  <p>Look at what the naive version repeats. For <code>[1,2,3,4]</code> it counts the run four times:
+  starting at 1 it finds a run of 4; starting at 2 it re-walks the same numbers and finds 3; and so
+  on. Every run is walked once per member.</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>A number is the <strong>head</strong> of its run exactly when <code>n - 1</code> is
+    <em>not</em> in the set. Only walk upwards from heads. Every other number is skipped in O(1).</p>
+    <p>One line: <code>if (set.has(n - 1)) continue;</code></p>
+  </div>
+
+  <div class="trace">
+<pre>  set = {1, 2, 3, 4, 100, 200}
+
+  n=1    is 0 in the set?  no  ->  1 IS a head.  walk: 2,3,4 -> length 4
+  n=2    is 1 in the set?  YES ->  skip immediately
+  n=3    is 2 in the set?  YES ->  skip
+  n=4    is 3 in the set?  YES ->  skip
+  n=100  is 99 in the set? no  ->  head.  walk: nothing -> length 1
+  n=200  is 199 in the set? no ->  head.  walk: nothing -> length 1
+
+  answer: 4
+</pre>
+  </div>
+
+  <h3>Why this is genuinely O(n)</h3>
+
+  <p>The inner <code>while</code> loop still exists, so the code <em>looks</em> quadratic. It is not,
+  and the argument is worth having ready:</p>
+
+  <div class="trace">
+<pre>  Every number in the set is visited at most TWICE:
+
+    once by the outer loop, when it is its own turn
+    once by an inner walk -- but only by the walk that started at
+      the head of ITS run, because runs do not overlap
+
+  A number belongs to exactly one run, and that run is walked
+  exactly once (from its head). So total work is at most 2n.
+</pre>
+  </div>
+
+  <p>That is the same style of argument as the sliding window: <em>count the total work across the
+  whole run, not the shape of the nested loops.</em></p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>nums = [100, 4, 200, 1, 3, 2]</code>.</p>
+
+  <div class="trace">
+<pre>set = {100, 4, 200, 1, 3, 2}      (insertion order preserved)
+
+n=100   is 99 in the set?  no  ->  HEAD
+        walk up: 101 in set? no
+        length 1                            best = 1
+
+n=4     is 3 in the set?   YES ->  not a head, skip
+
+n=200   is 199 in the set? no  ->  HEAD
+        walk up: 201? no
+        length 1                            best = 1
+
+n=1     is 0 in the set?   no  ->  HEAD
+        walk up: 2? yes   length 2
+                 3? yes   length 3
+                 4? yes   length 4
+                 5? no    stop
+        length 4                            best = 4
+
+n=3     is 2 in the set?   YES ->  skip
+n=2     is 1 in the set?   YES ->  skip
+
+answer: 4
+</pre>
+  </div>
+
+  <p>Count the work: six outer iterations, and exactly three inner steps (the walk from 1). Nine
+  operations for six numbers &mdash; comfortably under the 2n bound.</p>
+
+  <p>Now with duplicates, <code>nums = [1, 2, 2, 3]</code>:</p>
+
+  <div class="trace">
+<pre>set = {1, 2, 3}       the duplicate 2 vanished on the way in
+
+n=1   0 in set? no  ->  HEAD.  walk 2, 3  ->  length 3
+n=2   1 in set? yes ->  skip
+n=3   2 in set? yes ->  skip
+
+answer: 3
+
+The Set did the duplicate handling for free -- no `continue`
+needed, unlike the sorted version.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function longestExplained(nums) {
+  const set = new Set(nums);
+  console.log('nums =', nums);
+  console.log('set  =', set);
+  console.log('');
+
+  let best = 0;
+  let work = 0;
+
+  for (const n of set) {
+    work++;
+
+    if (set.has(n - 1)) {
+      console.log('n=' + n + '   ' + (n - 1) + ' is in the set -> not a head, skip');
+      continue;
+    }
+
+    let length = 1;
+    let next = n + 1;
+    const walked = [n];
+
+    while (set.has(next)) {
+      work++;
+      walked.push(next);
+      length++;
+      next++;
+    }
+
+    console.log('n=' + n + '   ' + (n - 1) + ' not in the set -> HEAD.  walked [' +
+                walked.join(', ') + ']  length ' + length);
+
+    if (length &gt; best) {
+      best = length;
+      console.log('        new best = ' + best);
+    }
+  }
+
+  console.log('');
+  console.log('total set lookups in walks + outer visits: ' + work +
+              '   (bounded by 2 x ' + set.size + ')');
+  console.log('');
+  return best;
+}
+
+console.log('ANSWER:', longestExplained([100, 4, 200, 1, 3, 2]));
+console.log('==========================================');
+console.log('ANSWER:', longestExplained([0,3,7,2,5,8,4,6,0,1]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; plain object as the set</span></div>
+<pre><code>function longestConsecutiveManual(nums) {
+  if (nums.length === 0) return 0;
+
+  // build the set, and keep the distinct values in a list
+  const present = {};
+  const distinct = [];
+  let distinctCount = 0;
+
+  for (let i = 0; i &lt; nums.length; i++) {
+    const n = nums[i];
+    if (present[n] !== true) {
+      present[n] = true;
+      distinct[distinctCount] = n;
+      distinctCount = distinctCount + 1;
+    }
+  }
+
+  let best = 0;
+
+  for (let i = 0; i &lt; distinctCount; i++) {
+    const n = distinct[i];
+
+    // only start walking from the head of a run
+    if (present[n - 1] === true) continue;
+
+    let length = 1;
+    let next = n + 1;
+
+    while (present[next] === true) {
+      length = length + 1;
+      next = next + 1;
+    }
+
+    if (length &gt; best) best = length;
+  }
+
+  return best;
+}
+
+console.log(longestConsecutiveManual([100, 4, 200, 1, 3, 2]));   // 4
+console.log(longestConsecutiveManual([0,3,7,2,5,8,4,6,0,1]));    // 9
+console.log(longestConsecutiveManual([]));                       // 0
+console.log(longestConsecutiveManual([5]));                      // 1
+console.log(longestConsecutiveManual([1, 1, 1]));                // 1
+console.log(longestConsecutiveManual([-3, -2, 5, -1]));          // 3
+console.log(longestConsecutiveManual([1, 2, 0, 1]));             // 3
+console.log(longestConsecutiveManual([-1, 0, 1]));               // 3</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">Why negatives still work with a plain object</span>
+    <p>Object keys are strings, so <code>present[-3]</code> becomes the key <code>"-3"</code>, and
+    <code>present[n - 1]</code> with <code>n = -2</code> looks up <code>"-3"</code> too. The
+    stringification is consistent in both directions, so lookups line up. What you must <em>not</em>
+    do is use an <em>array</em> indexed by the value &mdash; <code>arr[-3]</code> is not a real array
+    slot and negative numbers silently break it.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">variation &mdash; return the run itself</span></div>
+<pre><code>function longestRun(nums) {
+  const set = new Set(nums);
+  let bestStart = null, bestLength = 0;
+
+  for (const n of set) {
+    if (set.has(n - 1)) continue;
+
+    let length = 1;
+    while (set.has(n + length)) length++;
+
+    if (length &gt; bestLength) {
+      bestLength = length;
+      bestStart = n;
+    }
+  }
+
+  if (bestStart === null) return [];
+
+  const run = [];
+  for (let i = 0; i &lt; bestLength; i++) run.push(bestStart + i);
+  return run;
+}
+
+console.log(longestRun([100, 4, 200, 1, 3, 2]));    // [1, 2, 3, 4]
+console.log(longestRun([0,3,7,2,5,8,4,6,0,1]));     // [0..8]
+console.log(longestRun([-3, -2, 5, -1]));           // [-3, -2, -1]
+console.log(longestRun([]));                        // []
+
+// Note `set.has(n + length)` instead of a separate `next` variable:
+// the length IS the offset from the head. One less thing to keep
+// in sync.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function longestConsecutive(nums) {
+  const set = new Set(nums);
+  let best = 0;
+
+  for (const n of set) {
+    if (set.has(n - 1)) continue;      // only start from a run's head
+
+    let length = 1;
+    while (set.has(n + length)) length++;
+
+    best = Math.max(best, length);
+  }
+
+  return best;
+}
+
+console.log(longestConsecutive([100, 4, 200, 1, 3, 2]));   // 4
+console.log(longestConsecutive([0,3,7,2,5,8,4,6,0,1]));    // 9
+console.log(longestConsecutive([]));                       // 0
+console.log(longestConsecutive([5]));                      // 1
+console.log(longestConsecutive([1, 1, 1]));                // 1
+console.log(longestConsecutive([-3, -2, 5, -1]));          // 3
+console.log(longestConsecutive([9,1,4,7,3,-1,0,5,8,-1,6])); // 7</code></pre>
+  </div>
+
+  <p>Eight lines. The entire difference between O(n&sup2;) and O(n) is
+  <code>if (set.has(n - 1)) continue;</code> &mdash; which is worth saying out loud, because an
+  interviewer who sees the loop may assume it is quadratic unless you explain otherwise.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">iterating the Set vs iterating the array</span></div>
+<pre><code>const nums = [1, 1, 1, 1, 2, 3];
+
+function overArray(arr) {
+  const set = new Set(arr);
+  let best = 0, visits = 0;
+  for (const n of arr) {                 // the ARRAY -- includes duplicates
+    visits++;
+    if (set.has(n - 1)) continue;
+    let len = 1;
+    while (set.has(n + len)) { len++; visits++; }
+    best = Math.max(best, len);
+  }
+  return { best, visits };
+}
+
+function overSet(arr) {
+  const set = new Set(arr);
+  let best = 0, visits = 0;
+  for (const n of set) {                 // the SET -- distinct only
+    visits++;
+    if (set.has(n - 1)) continue;
+    let len = 1;
+    while (set.has(n + len)) { len++; visits++; }
+    best = Math.max(best, len);
+  }
+  return { best, visits };
+}
+
+console.log('over the array:', overArray(nums));
+console.log('over the set  :', overSet(nums));
+
+// Same answer, but iterating the array re-walks the run once per
+// duplicate. With n copies of the same head, that is n walks.
+// Both are correct; iterating the SET is the one that keeps the
+// 2n bound honest.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the union-find version, for completeness</span></div>
+<pre><code>// A different O(n)-ish approach: treat each number as a node and
+// union it with n-1 and n+1 whenever both exist. The answer is the
+// size of the largest component.
+function longestUnionFind(nums) {
+  const parent = new Map();
+  const size = new Map();
+
+  for (const n of nums) {
+    if (!parent.has(n)) { parent.set(n, n); size.set(n, 1); }
+  }
+
+  function find(x) {
+    while (parent.get(x) !== x) {
+      parent.set(x, parent.get(parent.get(x)));   // path halving
+      x = parent.get(x);
+    }
+    return x;
+  }
+
+  function union(a, b) {
+    const ra = find(a), rb = find(b);
+    if (ra === rb) return;
+    const sa = size.get(ra), sb = size.get(rb);
+    if (sa &lt; sb) { parent.set(ra, rb); size.set(rb, sa + sb); }
+    else { parent.set(rb, ra); size.set(ra, sa + sb); }
+  }
+
+  for (const n of parent.keys()) {
+    if (parent.has(n + 1)) union(n, n + 1);
+  }
+
+  let best = 0;
+  for (const n of parent.keys()) best = Math.max(best, size.get(find(n)));
+  return best;
+}
+
+console.log(longestUnionFind([100, 4, 200, 1, 3, 2]));   // 4
+console.log(longestUnionFind([0,3,7,2,5,8,4,6,0,1]));    // 9
+console.log(longestUnionFind([]));                       // 0
+console.log(longestUnionFind([-3, -2, 5, -1]));          // 3
+
+// Nearly O(n), far more code, and no better in practice. Worth
+// knowing that it works -- consecutive numbers really are a graph
+// problem -- and worth NOT writing when the eight-line version does
+// the same job.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Sort, then walk</td><td class="mono">O(n log n)</td><td class="mono">O(n)</td></tr>
+        <tr><td>Set, walk from every number</td><td class="mono">O(n&sup2;)</td><td class="mono">O(n)</td></tr>
+        <tr><td><strong>Set, walk from heads only</strong></td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+        <tr><td>Union-find</td><td class="mono">~O(n)</td><td class="mono">O(n)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>The O(n) argument, restated because it is the point of the problem.</strong> The outer
+  loop visits each distinct number once. The inner walk only runs for heads, and a head&rsquo;s walk
+  covers exactly the members of its own run. Runs are disjoint, so across the entire algorithm the
+  inner walks touch each number at most once. Total: at most 2n set lookups.</p>
+
+  <p>Space is O(n) for the set. This is a straight time-for-space trade &mdash; the sorted version
+  can be O(1) space if you are allowed to sort in place, and it is genuinely the better choice when
+  memory is tight or the input is already sorted.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Sorting gives O(n log n). For O(n), put everything in a hash set and, for each value,
+    walk upwards counting the run &mdash; but only if <code>n - 1</code> is absent, meaning this value
+    is the start of its run. That guard is what makes it linear: each number is visited once by the
+    outer loop and at most once by the single walk over its own run, so at most 2n lookups.
+    O(n) time, O(n) space.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Omitting the head check</h3>
+
+  <p>Step 3 shows it: correct answers, quadratic cost, and on a long consecutive run the difference
+  is dramatic. If you write the loop without the guard and then claim O(n), that is worse than not
+  claiming a complexity at all.</p>
+
+  <h3>2. Walking downwards as well as upwards</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; double counting</span></div>
+<pre><code>function broken(nums) {
+  const set = new Set(nums);
+  let best = 0;
+  for (const n of set) {
+    let len = 1;
+    let up = n + 1, down = n - 1;
+    while (set.has(up)) { len++; up++; }
+    while (set.has(down)) { len++; down--; }   // also walks down
+    best = Math.max(best, len);
+  }
+  return best;
+}
+
+console.log(broken([100, 4, 200, 1, 3, 2]));   // 4   correct answer...
+console.log(broken([1,2,3,4,5]));              // 5   ...also correct
+
+// The ANSWERS are right -- walking both ways from any member gives
+// the full run length. But now every member walks the entire run,
+// so it is O(n^2) again, and the head check would be pointless.
+// Pick one direction and only start from the head.</code></pre>
+  </div>
+
+  <h3>3. Using an array indexed by value</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; negatives and huge values</span></div>
+<pre><code>function broken(nums) {
+  const present = [];
+  for (const n of nums) present[n] = true;     // array indexed by VALUE
+
+  let best = 0;
+  for (const n of nums) {
+    if (present[n - 1]) continue;
+    let len = 1;
+    while (present[n + len]) len++;
+    best = Math.max(best, len);
+  }
+  return best;
+}
+
+console.log(broken([1, 2, 3]));         // 3   fine
+console.log(broken([-3, -2, -1]));      // 1   WRONG, should be 3
+
+// present[-3] = true does not create array slot -3; it adds a
+// property named "-3" to the array object. Then present[n - 1] with
+// n = -2 looks up index -3 as a PROPERTY and... actually finds it.
+// The real breakage is subtler and version-dependent -- which is
+// exactly why you should not do it. Use a Set or a plain object.
+
+// And the memory trap:
+console.log(broken([1, 1000000]));      // 1   correct, but it just
+                                        // allocated a sparse array
+                                        // a million slots wide.</code></pre>
+  </div>
+
+  <h3>4. Forgetting the empty array</h3>
+
+  <p>Initialising <code>best = 1</code> returns 1 for <code>[]</code>. Start at <code>0</code> and let
+  the loop raise it, or guard the empty case explicitly. The Set version handles it naturally because
+  the loop body never runs.</p>
+
+  <h3>5. Forgetting duplicates in the sorted version</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; duplicates reset the run</span></div>
+<pre><code>function broken(nums) {
+  if (!nums.length) return 0;
+  const s = [...nums].sort((a, b) =&gt; a - b);
+  let best = 1, cur = 1;
+  for (let i = 1; i &lt; s.length; i++) {
+    // missing:  if (s[i] === s[i-1]) continue;
+    cur = s[i] === s[i - 1] + 1 ? cur + 1 : 1;
+    best = Math.max(best, cur);
+  }
+  return best;
+}
+
+console.log(broken([1, 2, 3]));         // 3   fine
+console.log(broken([1, 2, 2, 3]));      // 2   WRONG, should be 3
+
+// Sorted, [1,2,2,3] has 2 next to 2. That is neither a duplicate to
+// skip nor a step of one, so the run resets. The Set version never
+// has this problem, because duplicates disappear on the way in.</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the eight-line version from memory</strong>, then say the 2n argument out loud.
+    Being able to defend the complexity matters more here than producing the code.</li>
+    <li><strong>Return the run, not its length.</strong> In Step 6 &mdash; write it from memory.</li>
+    <li><strong>Longest consecutive run allowing one gap.</strong> You may skip a single missing
+    number. What changes? (Hint: the head condition becomes more complicated, and the sorted version
+    starts looking attractive again.)</li>
+    <li><strong>Count how many runs there are.</strong> The number of heads &mdash; one line, once you
+    have the head test.</li>
+    <li><strong>Binary Tree Longest Consecutive Sequence.</strong> Same idea, different structure.
+    Doing it once shows that &ldquo;consecutive&rdquo; is about values, and the container is
+    incidental.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Find the canonical starting point.</strong> The naive version re-derived every run from
+    every member; the fast one identifies a unique representative &mdash; the head &mdash; and does
+    the work exactly once. That pattern appears everywhere: counting connected components, grouping
+    intervals, de-duplicating cycles. When you catch yourself computing the same thing from several
+    entry points, ask <em>which one entry point should own this work?</em></p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="03-isomorphic-strings.html">&larr; Isomorphic Strings</a>
+  <a href="05-four-sum-ii.html">Next: Four Sum II &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

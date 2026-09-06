@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>call, apply and bind</title>
+<meta name="description" content="What `this` actually is, the five rules that decide it, and how to implement all three from scratch.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">JavaScript semantics &middot; Problem 04</p>
+  <h1>Implement call, apply and bind</h1>
+  <p class="standfirst">You cannot write these until you can say what <code>this</code> is. So this page
+  does that first &mdash; five rules, in priority order &mdash; and then the implementations turn out
+  to be almost trivial, except for the one line of <code>bind</code> that makes <code>new</code>
+  work.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem &mdash; and what <code>this</code> is</h2>
+
+  <div class="note key">
+    <span class="t">The single sentence</span>
+    <p>In a normal function, <code>this</code> is <strong>not</strong> decided by where the function was
+    written. It is decided by <strong>how the function was called</strong> &mdash; and specifically, by
+    what was to the left of the dot at the call site.</p>
+  </div>
+
+  <p>The rules, highest priority first. Work down the list and the first match wins.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>#</th><th>Call looks like</th><th><code>this</code> is</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td class="mono">new Fn()</td><td>the brand-new object</td></tr>
+        <tr><td>2</td><td class="mono">fn.call(o) / fn.apply(o) / fn.bind(o)</td><td class="mono">o</td></tr>
+        <tr><td>3</td><td class="mono">obj.fn()</td><td class="mono">obj</td></tr>
+        <tr><td>4</td><td class="mono">fn()</td><td><code>undefined</code> in strict mode, the global object otherwise</td></tr>
+        <tr><td>5</td><td>an <strong>arrow</strong> function, however called</td><td>whatever <code>this</code> was where it was <em>written</em></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Rule 5 is not really a rule &mdash; arrow functions have no <code>this</code> of their own at all,
+  so the name resolves lexically like any other variable. That is why <code>call</code> cannot change
+  it.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">all five rules, one function</span></div>
+<pre><code>'use strict';
+
+function whoAmI() {
+  return this === undefined ? 'undefined'
+       : this === globalThis ? 'globalThis'
+       : this &amp;&amp; this.name ? this.name
+       : String(this);
+}
+
+const obj = { name: 'obj', whoAmI };
+const other = { name: 'other' };
+
+console.log('3. obj.whoAmI()      ->', obj.whoAmI());
+console.log('2. whoAmI.call(other)->', whoAmI.call(other));
+console.log('4. whoAmI()          ->', whoAmI());          // strict: undefined
+
+// 1. new
+function Ctor() { this.name = 'the new object'; this.seen = whoAmI.call(this); }
+console.log('1. new Ctor()        ->', new Ctor().seen);
+
+// 5. arrow -- written at module level, so `this` is whatever is there
+const arrow = () =&gt; (this === undefined ? 'undefined (module scope)' : String(this));
+console.log('5. arrow()           ->', arrow());
+console.log('   arrow.call(other) ->', arrow.call(other), ' -- call had NO effect');
+
+console.log('');
+console.log('The classic trap: detaching a method loses the receiver.');
+const detached = obj.whoAmI;
+console.log('  obj.whoAmI() ->', obj.whoAmI());
+console.log('  detached()   ->', detached(), ' -- same function, no dot, no this');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; what the three methods are for</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Method</th><th>Signature</th><th>Runs now?</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">fn.call(thisArg, a, b, c)</td><td>arguments listed out</td><td>yes</td></tr>
+        <tr><td class="mono">fn.apply(thisArg, [a, b, c])</td><td>arguments in an array</td><td>yes</td></tr>
+        <tr><td class="mono">fn.bind(thisArg, a, b)</td><td>returns a new function</td><td><strong>no</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="t">A mnemonic that actually helps</span>
+    <p><strong>c</strong>all takes <strong>c</strong>ommas. <strong>a</strong>pply takes an
+    <strong>a</strong>rray. <strong>b</strong>ind gives you a function to call <strong>b</strong>y and
+    by.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the three, doing the same job</span></div>
+<pre><code>function introduce(greeting, punctuation) {
+  return greeting + ', I am ' + this.name + punctuation;
+}
+
+const ada = { name: 'Ada' };
+
+console.log(introduce.call(ada, 'Hello', '!'));
+console.log(introduce.apply(ada, ['Hi', '.']));
+
+const bound = introduce.bind(ada, 'Hey');
+console.log(bound('?'));                       // remaining args passed later
+console.log(bound('!!!'));                     // reusable
+
+console.log('');
+console.log('bind returns a function:', typeof bound);
+console.log('and it is a NEW function:', bound !== introduce);
+console.log('its name is             :', bound.name);
+console.log('its length is           :', bound.length,
+            '-- 2 minus the 1 argument already bound');</code></pre>
+  </div>
+
+  <p>Where you actually reach for them:</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the real-world uses</span></div>
+<pre><code>// 1. Borrowing an array method for an array-like object
+function args() {
+  console.log('  arguments is not an array:', Array.isArray(arguments));
+  return Array.prototype.slice.call(arguments);
+}
+console.log('borrowing slice:', args(1, 2, 3));
+
+const arrayLike = { 0: 'a', 1: 'b', length: 2 };
+console.log('borrowing join :', Array.prototype.join.call(arrayLike, '-'));
+console.log('borrowing map  :', Array.prototype.map.call('abc', (c) =&gt; c.toUpperCase()));
+
+// 2. The most reliable type check there is
+const typeOf = (v) =&gt; Object.prototype.toString.call(v).slice(8, -1);
+console.log('');
+console.log('typeOf tests:');
+for (const v of [[], {}, null, undefined, 42, 'x', new Date(0), /re/, new Map(), () =&gt; 1]) {
+  console.log('  ' + String(typeOf(v)).padEnd(10) + ' (typeof said "' + typeof v + '")');
+}
+
+// 3. apply to spread an array into a variadic function (pre-spread syntax)
+const nums = [5, 1, 9, 3];
+console.log('');
+console.log('Math.max.apply(null, nums):', Math.max.apply(null, nums));
+console.log('Math.max(...nums)         :', Math.max(...nums), ' -- modern equivalent');
+
+// 4. bind to pin `this` for a callback
+class Counter {
+  constructor() { this.count = 0; }
+  increment() { this.count++; return this.count; }
+}
+const c = new Counter();
+const unbound = c.increment;
+const rebound = c.increment.bind(c);
+
+try { unbound(); } catch (e) { console.log(''); console.log('unbound():', e.message); }
+console.log('rebound():', rebound(), rebound());</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it matters &mdash; and one performance note</h2>
+
+  <p><code>apply</code> with a very large array is not just slow, it <strong>throws</strong>. Every
+  argument goes on the call stack, and the stack has a limit.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">where apply and spread give out</span></div>
+<pre><code>function biggest(arr) {
+  try {
+    return 'ok: ' + Math.max.apply(null, arr);
+  } catch (e) {
+    return e.constructor.name + ': ' + e.message;
+  }
+}
+
+for (const size of [1000, 100000, 200000, 500000]) {
+  const arr = new Array(size).fill(1);
+  console.log('apply with ' + String(size).padStart(6) + ' args -> ' + biggest(arr));
+}
+
+console.log('');
+console.log('The safe versions never build an argument list at all:');
+const big = new Array(500000).fill(1);
+big[123] = 99;
+
+let t = performance.now();
+let max = -Infinity;
+for (let i = 0; i &lt; big.length; i++) if (big[i] &gt; max) max = big[i];
+console.log('  plain loop        :', max, '(' + (performance.now() - t).toFixed(1) + ' ms)');
+
+t = performance.now();
+console.log('  reduce            :', big.reduce((a, b) =&gt; (a &gt; b ? a : b), -Infinity),
+            '(' + (performance.now() - t).toFixed(1) + ' ms)');
+
+console.log('');
+console.log('The exact limit varies by engine and by what else is on');
+console.log('the stack -- which is exactly why you must not rely on it.');
+console.log('Math.max(...arr) has the same ceiling, for the same reason.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; call, apply and a direct call</span></div>
+<pre><code>function work(a, b) { return a + b; }
+const obj = { n: 1 };
+const N = 3000000;
+
+let t = performance.now();
+let s = 0;
+for (let i = 0; i &lt; N; i++) s += work(1, 2);
+const directMs = performance.now() - t;
+
+t = performance.now();
+s = 0;
+for (let i = 0; i &lt; N; i++) s += work.call(obj, 1, 2);
+const callMs = performance.now() - t;
+
+t = performance.now();
+s = 0;
+for (let i = 0; i &lt; N; i++) s += work.apply(obj, [1, 2]);
+const applyMs = performance.now() - t;
+
+const bound = work.bind(obj);
+t = performance.now();
+s = 0;
+for (let i = 0; i &lt; N; i++) s += bound(1, 2);
+const boundMs = performance.now() - t;
+
+console.log(N.toLocaleString('en-US') + ' calls each');
+console.log('  direct    : ' + directMs.toFixed(1) + ' ms');
+console.log('  .call()   : ' + callMs.toFixed(1) + ' ms');
+console.log('  .apply()  : ' + applyMs.toFixed(1) + ' ms  (allocates the array too)');
+console.log('  bound fn  : ' + boundMs.toFixed(1) + ' ms');
+console.log('');
+console.log('Numbers move a lot between runs and engines. The one');
+console.log('durable point: apply builds a fresh array on every call,');
+console.log('so in a hot loop prefer call or spread.');
+console.log('Do not choose between these on speed at normal scale --');
+console.log('choose on which one says what you mean.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; use rule 3 to implement rule 2</h2>
+
+  <p>Here is the trick the whole page turns on. You are asked to set <code>this</code> without using
+  <code>call</code>. But rule 3 already does that: <code>obj.fn()</code> sets <code>this</code> to
+  <code>obj</code>. So &mdash; <strong>temporarily make the function a property of the target
+  object</strong>, call it with a dot, then remove it.</p>
+
+  <div class="trace">
+<pre>  myCall(fn, thisArg, ...args):
+
+      1. if thisArg is null or undefined, use globalThis
+         (non-strict behaviour; strict mode would keep it as-is)
+
+      2. wrap primitives:  Object(thisArg)
+         'abc'.call target must become a String object
+
+      3. key = Symbol()          <-- cannot collide with a real key
+
+      4. thisArg[key] = fn       <-- rule 3 is now available
+
+      5. result = thisArg[key](...args)     <-- `this` IS thisArg
+
+      6. delete thisArg[key]     <-- leave no trace
+
+      7. return result
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why a Symbol and not a string</span>
+    <p>A string key like <code>'__fn'</code> could collide with a real property, and deleting it
+    afterwards would destroy the caller's data. A fresh <code>Symbol()</code> is guaranteed unique, and
+    it is invisible to <code>Object.keys</code>, <code>for...in</code> and
+    <code>JSON.stringify</code>, so even if the function throws mid-call the object still looks
+    untouched to normal code.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">why the key choice matters</span></div>
+<pre><code>const target = { fn: 'a real property called fn', data: 1 };
+
+function badCall(fn, thisArg, ...args) {
+  thisArg.fn = fn;                       // clobbers the real 'fn' -- bug
+  const r = thisArg[ 'fn' ](...args);
+  delete thisArg.fn;                     // and now it is gone forever
+  return r;
+}
+
+function goodCall(fn, thisArg, ...args) {
+  const key = Symbol('tmp');
+  thisArg[key] = fn;
+  const r = thisArg[key](...args);
+  delete thisArg[key];
+  return r;
+}
+
+const before = JSON.stringify(target);
+goodCall(function () { return this.data; }, target);
+console.log('after goodCall, object unchanged:', JSON.stringify(target) === before);
+
+badCall(function () { return this.data; }, target);
+console.log('after badCall :', JSON.stringify(target));
+console.log('the real "fn" property was destroyed:', !('fn' in target));
+
+console.log('');
+console.log('And a symbol key stays invisible even mid-call:');
+const spy = { name: 'spy' };
+goodCall(function () {
+  console.log('  Object.keys during the call:', Object.keys(this));
+  console.log('  JSON.stringify during it   :', JSON.stringify(this));
+}, spy);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; myCall, step by step</h2>
+
+  <div class="trace">
+<pre>  function greet(a) { return a + ' ' + this.name; }
+  const ada = { name: 'Ada' };
+
+  greet.myCall(ada, 'hello')
+
+    this      = greet          (the function myCall was called on)
+    thisArg   = ada
+    args      = ['hello']
+
+    key = Symbol()
+    ada[key] = greet
+        ada is now  { name: 'Ada', [Symbol()]: greet }
+
+    ada[key]('hello')
+        rule 3 fires: `this` inside greet is `ada`
+        returns 'hello Ada'
+
+    delete ada[key]
+        ada is back to { name: 'Ada' }
+
+    return 'hello Ada'
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>Function.prototype.callLoud = function (thisArg, ...args) {
+  console.log('  fn is           :', this.name);
+  console.log('  thisArg is      :', JSON.stringify(thisArg));
+  console.log('  args are        :', JSON.stringify(args));
+
+  const target = (thisArg === null || thisArg === undefined)
+    ? globalThis
+    : Object(thisArg);
+  console.log('  normalised to   :', target === globalThis ? 'globalThis'
+                                                           : JSON.stringify(target));
+
+  const key = Symbol('tmp');
+  target[key] = this;
+  console.log('  attached as a symbol property; keys still:', Object.keys(target));
+
+  const result = target[key](...args);
+  console.log('  called it -> ', JSON.stringify(result));
+
+  delete target[key];
+  console.log('  detached. keys:', Object.keys(target));
+
+  return result;
+};
+
+function greet(greeting) { return greeting + ' ' + this.name; }
+const ada = { name: 'Ada' };
+
+console.log('greet.callLoud(ada, "hello")');
+const out = greet.callLoud(ada, 'hello');
+console.log('RESULT:', out);
+console.log('');
+console.log('ada is untouched:', JSON.stringify(ada));
+console.log('matches the real call:', out === greet.call(ada, 'hello'));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; call and apply</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; myCall and myApply</span></div>
+<pre><code>Function.prototype.myCall = function (thisArg, ...args) {
+  if (typeof this !== 'function') {
+    throw new TypeError('myCall must be called on a function');
+  }
+
+  // non-strict semantics: null/undefined become the global object,
+  // and primitives are boxed
+  const target = (thisArg === null || thisArg === undefined)
+    ? globalThis
+    : Object(thisArg);
+
+  const key = Symbol('fn');
+  Object.defineProperty(target, key, {
+    value: this,
+    enumerable: false,       // invisible even to symbol enumeration helpers
+    configurable: true,      // so delete works
+  });
+
+  try {
+    return target[key](...args);
+  } finally {
+    delete target[key];      // runs even if the function throws
+  }
+};
+
+Function.prototype.myApply = function (thisArg, argsArray) {
+  if (typeof this !== 'function') {
+    throw new TypeError('myApply must be called on a function');
+  }
+  if (argsArray === null || argsArray === undefined) argsArray = [];
+  if (typeof argsArray !== 'object') {
+    throw new TypeError('CreateListFromArrayLike called on non-object');
+  }
+  // apply accepts any array-LIKE, not just a real array
+  return this.myCall(thisArg, ...Array.from(argsArray));
+};
+
+// --- compare against the real methods ---------------------------
+function describe(a, b) {
+  return [this === globalThis ? 'global' : JSON.stringify(this), a, b].join(' | ');
+}
+
+const objectCases = [
+  [{ n: 1 }, ['x', 'y']],
+  [{ n: 2 }, []],
+  ['a string', ['x']],
+  [42, []],
+  [true, []],
+  [[1, 2], []],
+];
+
+let pass = 0;
+for (const [thisArg, args] of objectCases) {
+  const mine = describe.myCall(thisArg, ...args);
+  const real = describe.call(thisArg, ...args);
+  const mineA = describe.myApply(thisArg, args);
+  const realA = describe.apply(thisArg, args);
+  if (mine === real &amp;&amp; mineA === realA) pass++;
+  else console.log('MISMATCH', JSON.stringify(thisArg), mine, '!==', real);
+}
+console.log(pass + '/' + objectCases.length +
+            ' object and primitive receivers match exactly');
+
+// The one place this technique CANNOT match the spec:
+console.log('');
+console.log('null / undefined as thisArg:');
+console.log('  real call(null) ->', describe.call(null, 'x'));
+console.log('  myCall(null)    ->', describe.myCall(null, 'x'));
+console.log('');
+console.log('The real `call` passes thisArg through untouched, and the');
+console.log('CALLEE decides: a strict function keeps null, a sloppy one');
+console.log('gets the global object. `describe` here is strict (the');
+console.log('whole snippet is), so the real one reports null.');
+console.log('');
+console.log('Our version cannot do that, because you cannot attach a');
+console.log('property to null -- so it substitutes globalThis, which is');
+console.log('the sloppy-mode answer. Every hand-written myCall has this');
+console.log('same limitation. Say so rather than pretending otherwise:');
+console.log('it shows you know WHY the trick works.');
+
+// array-LIKE arguments to apply
+console.log('');
+console.log('apply with an array-like:');
+console.log('  real:', describe.apply({ n: 9 }, { 0: 'p', 1: 'q', length: 2 }));
+console.log('  mine:', describe.myApply({ n: 9 }, { 0: 'p', 1: 'q', length: 2 }));
+
+// the finally clause: no leftover key even when the call throws
+const victim = { n: 1 };
+try {
+  (function () { throw new Error('boom'); }).myCall(victim);
+} catch (e) { /* expected */ }
+console.log('');
+console.log('after a throwing call, leftover symbol keys:',
+            Object.getOwnPropertySymbols(victim).length);
+
+delete Function.prototype.myCall;
+delete Function.prototype.myApply;</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The <code>finally</code> is not decoration</span>
+    <p>Without it, a function that throws leaves the temporary property attached to the caller's object
+    forever. Symbol keys are invisible enough that you would probably never notice &mdash; which makes
+    it worse, not better.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; bind, including the <code>new</code> case</h2>
+
+  <p>Everyone writes the four-line <code>bind</code>. The follow-up is: <em>what happens if someone
+  calls your bound function with <code>new</code>?</em></p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the behaviour you have to reproduce</span></div>
+<pre><code>function Point(x, y) {
+  this.x = x;
+  this.y = y;
+}
+Point.prototype.describe = function () { return '(' + this.x + ', ' + this.y + ')'; };
+
+const wrongThis = { x: 'IGNORE ME', y: 'IGNORE ME' };
+const BoundPoint = Point.bind(wrongThis, 10);
+
+// called normally: `this` is wrongThis, exactly as bound
+const normal = BoundPoint(20);
+console.log('called normally  -> wrongThis is now', JSON.stringify(wrongThis));
+
+// called with new: the bound `this` is DISCARDED
+const p = new BoundPoint(20);
+console.log('');
+console.log('called with new  ->', JSON.stringify(p));
+console.log('  instanceof Point?', p instanceof Point);
+console.log('  prototype chain intact?', typeof p.describe === 'function');
+console.log('  describe():', p.describe());
+console.log('');
+console.log('The bound arguments (10) still applied. The bound `this`');
+console.log('did not. That is the rule you have to implement: `new`');
+console.log('outranks bind, which is rule 1 outranking rule 2.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>Function.prototype.myBind = function (thisArg, ...boundArgs) {
+  if (typeof this !== 'function') {
+    throw new TypeError('Bind must be called on a function');
+  }
+
+  const target = this;
+
+  function bound(...callArgs) {
+    // `this instanceof bound` is true only when called with `new`.
+    // In that case ignore thisArg and use the fresh object.
+    const isNew = this instanceof bound;
+    return target.apply(isNew ? this : thisArg, [...boundArgs, ...callArgs]);
+  }
+
+  // make instances of the bound function instances of the target too
+  if (target.prototype) {
+    // an intermediate object, so writing to bound.prototype cannot
+    // corrupt target.prototype
+    bound.prototype = Object.create(target.prototype);
+  }
+
+  return bound;
+};
+
+// --- check it against the real bind -----------------------------
+function Point(x, y) { this.x = x; this.y = y; }
+Point.prototype.describe = function () { return '(' + this.x + ', ' + this.y + ')'; };
+
+const Real = Point.bind(null, 10);
+const Mine = Point.myBind(null, 10);
+
+const a = new Real(20);
+const b = new Mine(20);
+
+console.log('real  :', JSON.stringify(a), ' instanceof Point:', a instanceof Point);
+console.log('mine  :', JSON.stringify(b), ' instanceof Point:', b instanceof Point);
+console.log('describe works:', b.describe());
+
+// normal calls still honour thisArg
+function greet(greeting, mark) { return greeting + ' ' + this.name + mark; }
+const ada = { name: 'Ada' };
+console.log('');
+console.log('real  :', greet.bind(ada, 'Hi')('!'));
+console.log('mine  :', greet.myBind(ada, 'Hi')('!'));
+
+// partial application accumulates
+function add4(a, b, c, d) { return a + b + c + d; }
+console.log('');
+console.log('real  :', add4.bind(null, 1).bind(null, 2).bind(null, 3)(4));
+console.log('mine  :', add4.myBind(null, 1).myBind(null, 2).myBind(null, 3)(4));
+
+// binding twice cannot re-bind `this` -- the first bind wins
+const once = greet.bind(ada, 'Hi');
+const twice = once.bind({ name: 'Grace' }, 'ignored');
+console.log('');
+console.log('rebinding this: real ->', twice('!'));
+const mineOnce = greet.myBind(ada, 'Hi');
+const mineTwice = mineOnce.myBind({ name: 'Grace' }, 'ignored');
+console.log('                mine ->', mineTwice('!'));
+console.log('Both keep Ada. `this` is fixed by the FIRST bind; later');
+console.log('binds can only add more arguments.');
+
+delete Function.prototype.myBind;</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Two lines that are easy to get wrong</span>
+    <p><code>this instanceof bound</code> is the <code>new</code> detector. When called with
+    <code>new</code>, the fresh object's prototype chain runs through <code>bound.prototype</code>, so
+    the test is true. When called normally, <code>this</code> is <code>thisArg</code> or undefined, and
+    it is false.</p>
+    <p><code>bound.prototype = Object.create(target.prototype)</code> &mdash; and <strong>not</strong>
+    <code>bound.prototype = target.prototype</code>. Assigning directly means anyone who adds a method
+    to the bound function's prototype silently adds it to the original's too.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">why the intermediate prototype object matters</span></div>
+<pre><code>function Point(x) { this.x = x; }
+Point.prototype.original = function () { return 'from Point'; };
+
+function shareThePrototype(fn, thisArg) {
+  function bound(...args) {
+    return fn.apply(this instanceof bound ? this : thisArg, args);
+  }
+  bound.prototype = fn.prototype;                    // shared -- bug
+  return bound;
+}
+
+function ownPrototype(fn, thisArg) {
+  function bound(...args) {
+    return fn.apply(this instanceof bound ? this : thisArg, args);
+  }
+  bound.prototype = Object.create(fn.prototype);     // linked, not shared
+  return bound;
+}
+
+const Shared = shareThePrototype(Point, null);
+Shared.prototype.addedToTheBoundOne = function () { return 'oops'; };
+
+console.log('after adding a method to the SHARED bound prototype:');
+console.log('  Point.prototype has it too?',
+            typeof Point.prototype.addedToTheBoundOne === 'function');
+
+// clean the damage before the second test
+delete Point.prototype.addedToTheBoundOne;
+
+const Own = ownPrototype(Point, null);
+Own.prototype.addedToTheBoundOne = function () { return 'fine'; };
+
+console.log('');
+console.log('after adding a method to an OWN bound prototype:');
+console.log('  Point.prototype has it?',
+            typeof Point.prototype.addedToTheBoundOne === 'function');
+console.log('  instances still inherit Point methods?',
+            new Own(1).original());
+console.log('  and instanceof Point still holds:', new Own(1) instanceof Point);</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">two ways bind is not quite transparent</span></div>
+<pre><code>function original(a, b, c) { return a + b + c; }
+
+const bound = original.bind(null, 1);
+
+console.log('name  : original ->', JSON.stringify(original.name),
+            '  bound ->', JSON.stringify(bound.name));
+console.log('length: original ->', original.length,
+            '  bound ->', bound.length, '(3 minus 1 bound argument)');
+
+console.log('');
+console.log('A bound function has NO prototype property of its own:');
+console.log('  original.prototype:', typeof original.prototype);
+console.log('  bound.prototype   :', typeof bound.prototype);
+console.log('(our myBind gives it one, so instanceof works -- the real');
+console.log(' engine achieves the same through an internal slot we');
+console.log(' cannot reach from JavaScript.)');
+
+console.log('');
+console.log('And you cannot see through a bound function:');
+console.log('  bound.toString():', bound.toString());
+console.log('  original.toString():', original.toString().split('\n')[0]);
+
+console.log('');
+console.log('Arrow functions ignore bind entirely:');
+const arrow = () =&gt; (typeof this);
+console.log('  arrow.bind({ a: 1 })() ->', arrow.bind({ a: 1 })());
+console.log('  because an arrow has no `this` slot to bind.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <p>All three are O(1) in the interesting sense &mdash; they set up a call and get out of the way.
+  What varies is the allocation.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Method</th><th>Allocates</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">call</td><td>nothing extra</td><td>cheapest of the three</td></tr>
+        <tr><td class="mono">apply</td><td>an argument list from the array</td><td>throws above roughly 10<sup>5</sup> arguments</td></tr>
+        <tr><td class="mono">bind</td><td>a new function object, once</td><td>then each call is near-direct</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The one to watch is <code>bind</code> in a render path. <code>onClick={this.handle.bind(this)}</code>
+  creates a <em>different function object every render</em>, so a memoised child component sees a new
+  prop and re-renders. Bind once in the constructor, or use a class field with an arrow.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;<code>this</code> is decided by the call site, not the definition site &mdash; new, then
+    explicit binding, then a method call, then a plain call, with arrow functions opting out entirely.
+    To implement <code>call</code> I temporarily attach the function to the target object under a
+    <code>Symbol</code> key, invoke it with a dot so the method rule sets <code>this</code>, and delete
+    it in a <code>finally</code>. <code>apply</code> is <code>call</code> with the array spread.
+    <code>bind</code> returns a closure over the target and the bound arguments, and checks
+    <code>this instanceof bound</code> so that calling it with <code>new</code> uses the fresh object
+    instead of the bound one &mdash; because <code>new</code> outranks bind.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Using a string key instead of a Symbol</h3>
+
+  <p>Step 4 shows this destroying a real property. Worth remembering that
+  <code>delete obj.fn</code> removes the caller's data, not just yours.</p>
+
+  <h3>2. Forgetting that <code>new</code> beats <code>bind</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the naive four-line bind</span></div>
+<pre><code>Function.prototype.naiveBind = function (thisArg, ...boundArgs) {
+  const target = this;
+  return function (...callArgs) {
+    return target.apply(thisArg, [...boundArgs, ...callArgs]);   // always thisArg
+  };
+};
+
+function Point(x, y) { this.x = x; this.y = y; }
+Point.prototype.describe = function () { return '(' + this.x + ',' + this.y + ')'; };
+
+const wrong = { note: 'should be ignored under new' };
+const NaiveBound = Point.naiveBind(wrong, 1);
+
+const p = new NaiveBound(2);
+
+console.log('the new object   :', JSON.stringify(p));
+console.log('  it is EMPTY -- the constructor wrote to `wrong` instead');
+console.log('the bound object :', JSON.stringify(wrong));
+console.log('instanceof Point :', p instanceof Point);
+try { p.describe(); }
+catch (e) { console.log('describe()       :', e.message); }
+
+console.log('');
+console.log('Compare the real bind:');
+const RealBound = Point.bind(wrong, 1);
+const q = new RealBound(2);
+console.log('  ', JSON.stringify(q), ' instanceof Point:', q instanceof Point,
+            ' describe:', q.describe());
+
+delete Function.prototype.naiveBind;</code></pre>
+  </div>
+
+  <h3>3. Assuming <code>bind</code> works on arrow functions and class methods</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; two silent no-ops and one real error</span></div>
+<pre><code>const obj = {
+  name: 'obj',
+  regular: function () { return this &amp;&amp; this.name; },
+  arrow: () =&gt; (typeof globalThis.name === 'string' ? 'global' : 'not obj'),
+};
+
+const other = { name: 'other' };
+
+console.log('regular, bound to other:', obj.regular.bind(other)());   // 'other'
+console.log('arrow,   bound to other:', obj.arrow.bind(other)());     // unchanged
+
+console.log('');
+console.log('A class field arrow is already bound and cannot be moved:');
+class Widget {
+  constructor(name) { this.name = name; }
+  method() { return this.name; }
+  field = () =&gt; this.name;              // captured at construction
+}
+const w = new Widget('w1');
+const v = new Widget('v1');
+
+console.log('  w.method.call(v) ->', w.method.call(v), ' -- moved, as expected');
+console.log('  w.field.call(v)  ->', w.field.call(v), ' -- did NOT move');
+
+console.log('');
+console.log('And class methods are strict, so a detached one gets');
+console.log('undefined rather than the global object:');
+const detached = w.method;
+try { detached(); }
+catch (e) { console.log('  detached() ->', e.constructor.name + ':', e.message); }
+console.log('  fix: const bound = w.method.bind(w) ->', w.method.bind(w)());</code></pre>
+  </div>
+
+  <h3>4. Binding inside a render or a loop</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; a new function object every time</span></div>
+<pre><code>const handler = { count: 0, handle() { this.count++; } };
+
+// pretend this is a component rendering 5 times
+const propsPassedDown = [];
+for (let render = 0; render &lt; 5; render++) {
+  propsPassedDown.push(handler.handle.bind(handler));
+}
+
+console.log('5 renders produced 5 handlers.');
+console.log('  all the same function object?',
+            propsPassedDown.every((f) =&gt; f === propsPassedDown[0]));
+console.log('  distinct objects:', new Set(propsPassedDown).size);
+console.log('');
+console.log('A memoised child compares props by identity, sees a new');
+console.log('onClick every render, and re-renders every time. The');
+console.log('memoisation does nothing.');
+
+// bind once, reuse the same reference
+const once = handler.handle.bind(handler);
+const stable = [];
+for (let render = 0; render &lt; 5; render++) stable.push(once);
+console.log('');
+console.log('bound once:');
+console.log('  all the same function object?', stable.every((f) =&gt; f === stable[0]));
+
+// and the cost, at scale
+const N = 200000;
+let t = performance.now();
+for (let i = 0; i &lt; N; i++) handler.handle.bind(handler);
+const bindMs = performance.now() - t;
+
+t = performance.now();
+for (let i = 0; i &lt; N; i++) once;
+const reuseMs = performance.now() - t;
+
+console.log('');
+console.log('  ' + N.toLocaleString('en-US') + ' binds : ' + bindMs.toFixed(1) + ' ms');
+console.log('  ' + N.toLocaleString('en-US') + ' reuses: ' + reuseMs.toFixed(1) + ' ms');
+console.log('  (the identity problem is the real cost, not the ms)');</code></pre>
+  </div>
+
+  <h3>5. Confusing <code>call</code>'s first argument with the first real argument</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; everything shifted by one</span></div>
+<pre><code>function sum(a, b, c) {
+  return { thisWas: this === globalThis ? 'global' : JSON.stringify(this),
+           total: a + b + c };
+}
+
+console.log('wanted sum(1,2,3):');
+console.log('  sum.call(1, 2, 3)  ->', sum.call(1, 2, 3));
+//   `this` became the number 1, and c was undefined -> NaN
+
+console.log('');
+console.log('correct:');
+console.log('  sum.call(null, 1, 2, 3) ->', sum.call(null, 1, 2, 3));
+console.log('  sum.apply(null, [1,2,3])->', sum.apply(null, [1, 2, 3]));
+console.log('  sum(1, 2, 3)            ->', sum(1, 2, 3));
+
+console.log('');
+console.log('And the mirror mistake -- apply with loose arguments:');
+try {
+  console.log(sum.apply(null, 1, 2, 3));
+} catch (e) {
+  console.log('  sum.apply(null, 1, 2, 3) ->', e.constructor.name + ':', e.message);
+}
+console.log('  apply takes exactly two arguments: thisArg and a list.');
+console.log('  Extra ones are ignored; a non-object list throws.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Recite the five rules in priority order</strong> and give a one-line example of each.
+    Everything on this page follows from them.</li>
+    <li><strong>Write <code>myCall</code> from memory</strong> &mdash; Symbol key, invoke with a dot,
+    delete in a <code>finally</code> &mdash; then write <code>myApply</code> in one line on top of
+    it.</li>
+    <li><strong>Write <code>myBind</code> with the <code>new</code> case.</strong> Step 7. Be able to
+    explain both <code>this instanceof bound</code> and why the prototype is
+    <code>Object.create(target.prototype)</code>.</li>
+    <li><strong>Predict the output</strong> of a method extracted into a variable, a method passed to
+    <code>setTimeout</code>, and the same method as a class field arrow. Then run it.</li>
+    <li><strong>Write <code>function myNew(Ctor, ...args)</code></strong> &mdash; create an object whose
+    prototype is <code>Ctor.prototype</code>, call the constructor on it, and return the constructor's
+    return value if it is an object, otherwise the new one. That last clause is exactly why
+    <code>new</code> and <code>bind</code> interact the way they do.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong><code>this</code> is an argument, passed invisibly, decided at the call site.</strong>
+    Once you hold that, the confusing cases stop being confusing: a detached method lost its argument,
+    <code>setTimeout</code> passes a different one, an arrow function never had the parameter, and
+    <code>bind</code> is just a closure that supplies the argument for you.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="03-map-filter-reduce.html">&larr; map, filter, reduce</a>
+  <a href="05-custom-promise.html">Next: Custom Promise &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

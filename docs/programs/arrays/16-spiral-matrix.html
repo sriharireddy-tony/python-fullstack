@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spiral Matrix</title>
+<meta name="description" content="Four shrinking boundaries, four loops, and the single guard that stops a non-square matrix reading rows twice.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Arrays &middot; Problem 16</p>
+  <h1>Spiral Matrix</h1>
+  <p class="standfirst">No clever insight, no hidden trick. This problem is pure
+  <strong>careful bookkeeping</strong> &mdash; four boundaries that close in on each other. It is on
+  every list because it separates people who can hold an invariant straight from people who cannot.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Read every element of a matrix in spiral order &mdash; along the top, down the right, back along
+  the bottom, up the left, then inwards and repeat &mdash; and return them as a flat array.</p>
+
+  <div class="trace">
+<pre>   1 --> 2 --> 3
+               |
+   4    5      6
+   ^           |
+   |           v
+   7 <-- 8 <-- 9
+
+result: [1, 2, 3, 6, 9, 8, 7, 4, 5]
+
+
+   1 --> 2 --> 3 --> 4
+                     |
+   5    6 --> 7      8
+   ^           |     |
+   |           v     v
+   9 <-- 10 <-11 <- 12
+
+result: [1,2,3,4, 8,12, 11,10,9, 5, 6,7]
+</pre>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[[1,2,3],[4,5,6],[7,8,9]]</td><td class="mono">[1,2,3,6,9,8,7,4,5]</td></tr>
+        <tr><td class="mono">[[1,2,3,4],[5,6,7,8],[9,10,11,12]]</td><td class="mono">[1,2,3,4,8,12,11,10,9,5,6,7]</td></tr>
+        <tr><td class="mono">[[1,2,3]]</td><td class="mono">[1,2,3]</td></tr>
+        <tr><td class="mono">[[1],[2],[3]]</td><td class="mono">[1,2,3]</td></tr>
+        <tr><td class="mono">[[7]]</td><td class="mono">[7]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The last three rows are the ones that break solutions. A single row, a single column, a single
+  cell. If your code reads them twice or crashes on them, you have the classic bug &mdash; and it is
+  in Step 4.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; how would you do it by hand?</h2>
+
+  <p>Put a finger on the top-left. Walk right until you hit the edge. Turn down. Walk until you hit
+  the edge. Turn left. And so on &mdash; but &ldquo;the edge&rdquo; means <em>the edge of the part you
+  have not visited yet</em>, which shrinks as you go.</p>
+
+  <p>So the naive approach is to track visited cells:</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; walk and mark visited</span></div>
+<pre><code>function spiralVisited(matrix) {
+  if (matrix.length === 0) return [];
+
+  const rows = matrix.length, cols = matrix[0].length;
+  const seen = matrix.map(row =&gt; row.map(() =&gt; false));
+  const result = [];
+
+  // right, down, left, up -- as [rowStep, colStep]
+  const moves = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+  let dir = 0;
+  let r = 0, c = 0;
+
+  for (let step = 0; step &lt; rows * cols; step++) {
+    result.push(matrix[r][c]);
+    seen[r][c] = true;
+
+    // where would the current direction take us?
+    const nr = r + moves[dir][0];
+    const nc = c + moves[dir][1];
+
+    // off the edge, or already visited? then turn right
+    if (nr &lt; 0 || nr &gt;= rows || nc &lt; 0 || nc &gt;= cols || seen[nr][nc]) {
+      dir = (dir + 1) % 4;
+    }
+
+    r += moves[dir][0];
+    c += moves[dir][1];
+  }
+
+  return result;
+}
+
+console.log(spiralVisited([[1,2,3],[4,5,6],[7,8,9]]));
+// [1,2,3,6,9,8,7,4,5]
+console.log(spiralVisited([[1,2,3,4],[5,6,7,8],[9,10,11,12]]));
+// [1,2,3,4,8,12,11,10,9,5,6,7]
+console.log(spiralVisited([[1,2,3]]));     // [1,2,3]
+console.log(spiralVisited([[1],[2],[3]])); // [1,2,3]
+console.log(spiralVisited([[7]]));         // [7]</code></pre>
+  </div>
+
+  <p>This is a perfectly correct answer and worth knowing &mdash; the &ldquo;turn when blocked&rdquo;
+  idea generalises to grid-walking problems everywhere. Its cost is a whole second matrix of
+  booleans: <strong>O(m&middot;n) extra space</strong>.</p>
+
+  <p>Notice the neat trick in it: <code>dir = (dir + 1) % 4</code> cycles right &rarr; down &rarr;
+  left &rarr; up &rarr; right. Modulo again, doing what modulo always does &mdash; wrapping around.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why do better?</h2>
+
+  <p>Time is already optimal &mdash; you must visit every cell, so O(m&middot;n) is the floor. The
+  only thing left to improve is the O(m&middot;n) <code>seen</code> matrix.</p>
+
+  <p>And it turns out you do not need it at all. The spiral is completely predictable: you always know
+  exactly where the unvisited region ends, because it is a rectangle. Four numbers describe it.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; and the memory that disappears</span></div>
+<pre><code>const N = 1200;
+const matrix = [];
+for (let r = 0; r &lt; N; r++) {
+  const row = [];
+  for (let c = 0; c &lt; N; c++) row.push(r * N + c);
+  matrix.push(row);
+}
+
+function visited(m) {
+  const rows = m.length, cols = m[0].length;
+  const seen = m.map(row =&gt; row.map(() =&gt; false));
+  const out = [];
+  const moves = [[0,1],[1,0],[0,-1],[-1,0]];
+  let dir = 0, r = 0, c = 0;
+  for (let s = 0; s &lt; rows * cols; s++) {
+    out.push(m[r][c]); seen[r][c] = true;
+    const nr = r + moves[dir][0], nc = c + moves[dir][1];
+    if (nr &lt; 0 || nr &gt;= rows || nc &lt; 0 || nc &gt;= cols || seen[nr][nc]) dir = (dir + 1) % 4;
+    r += moves[dir][0]; c += moves[dir][1];
+  }
+  return out;
+}
+
+function boundaries(m) {
+  const out = [];
+  let top = 0, bottom = m.length - 1, left = 0, right = m[0].length - 1;
+  while (top &lt;= bottom &amp;&amp; left &lt;= right) {
+    for (let c = left; c &lt;= right; c++) out.push(m[top][c]);
+    top++;
+    for (let r = top; r &lt;= bottom; r++) out.push(m[r][right]);
+    right--;
+    if (top &lt;= bottom) { for (let c = right; c &gt;= left; c--) out.push(m[bottom][c]); bottom--; }
+    if (left &lt;= right) { for (let r = bottom; r &gt;= top; r--) out.push(m[r][left]); left++; }
+  }
+  return out;
+}
+
+let t = performance.now();
+const a = visited(matrix);
+const visitedMs = performance.now() - t;
+
+t = performance.now();
+const b = boundaries(matrix);
+const boundMs = performance.now() - t;
+
+console.log('visited matrix : ' + visitedMs.toFixed(1) + ' ms   (plus ' +
+            (N * N) + ' extra booleans)');
+console.log('four boundaries: ' + boundMs.toFixed(1) + ' ms   (plus 4 numbers)');
+console.log('same output:', a.length === b.length &amp;&amp; a[0] === b[0] &amp;&amp;
+            a[a.length - 1] === b[b.length - 1]);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; four shrinking walls</h2>
+
+  <p>Hold four numbers that describe the rectangle you have not visited yet:</p>
+
+  <div class="trace">
+<pre>                left           right
+                 |               |
+        top --> +-----------------+
+                |                 |
+                |    unvisited    |
+                |                 |
+     bottom --> +-----------------+
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>One lap of the spiral is <strong>four loops</strong>, and each one is followed by moving that
+    wall inwards:</p>
+    <ol style="margin-bottom:0">
+      <li>Walk the <strong>top row</strong>, left to right. Then <code>top++</code>.</li>
+      <li>Walk the <strong>right column</strong>, top to bottom. Then <code>right--</code>.</li>
+      <li>Walk the <strong>bottom row</strong>, right to left. Then <code>bottom--</code>.</li>
+      <li>Walk the <strong>left column</strong>, bottom to top. Then <code>left++</code>.</li>
+    </ol>
+  </div>
+
+  <p>Repeat while <code>top &lt;= bottom &amp;&amp; left &lt;= right</code>. When the walls cross, the
+  rectangle is empty and you are done.</p>
+
+  <h3>The guard that everyone forgets</h3>
+
+  <p>Steps 3 and 4 need an extra check, and this is the whole difficulty of the problem.</p>
+
+  <p>Consider a single-row matrix <code>[[1, 2, 3]]</code>. Step 1 walks the top row and collects
+  <code>1, 2, 3</code>, then sets <code>top = 1</code>. Now <code>top &gt; bottom</code> &mdash; there
+  is no unvisited row left. But step 3 walks &ldquo;the bottom row&rdquo;, which is still row 0, and
+  collects <code>3, 2, 1</code> all over again.</p>
+
+  <div class="trace">
+<pre>[[1, 2, 3]]     top=0 bottom=0 left=0 right=2
+
+step 1: walk top row      -> 1, 2, 3        top becomes 1
+step 2: walk right column from row 1 to 0   -> loop does not run (1 > 0)
+                                               right becomes 1
+step 3: walk bottom row (row 0!) right to left
+        WITHOUT A GUARD  -> 2, 1     <-- already collected
+
+result [1,2,3,2,1]   WRONG
+</pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The two guards, and why only two</span>
+    <p>Before step 3: <code>if (top &lt;= bottom)</code> &mdash; is there still a row to walk?<br>
+    Before step 4: <code>if (left &lt;= right)</code> &mdash; is there still a column to walk?</p>
+    <p>Steps 1 and 2 need no guard, because the <code>while</code> condition was checked immediately
+    before them and nothing has moved yet. It is only after <code>top++</code> and
+    <code>right--</code> that the rectangle may have collapsed mid-lap.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>[[1,2,3],[4,5,6],[7,8,9]]</code>. Start: <code>top=0 bottom=2 left=0 right=2</code>.</p>
+
+  <div class="trace">
+<pre>LAP 1   top=0 bottom=2 left=0 right=2
+
+  top row, left to right:   (0,0)=1  (0,1)=2  (0,2)=3      top -> 1
+  right column, top to bottom: (1,2)=6  (2,2)=9            right -> 1
+  top(1) &lt;= bottom(2)?  yes
+  bottom row, right to left:  (2,1)=8  (2,0)=7             bottom -> 1
+  left(0) &lt;= right(1)?  yes
+  left column, bottom to top: (1,0)=4                      left -> 1
+
+  collected so far: [1,2,3,6,9,8,7,4]
+
+LAP 2   top=1 bottom=1 left=1 right=1     (still valid: 1<=1 and 1<=1)
+
+  top row, left to right:   (1,1)=5                        top -> 2
+  right column, from row 2 to 1: does not run               right -> 0
+  top(2) &lt;= bottom(1)?  NO   -> skip the bottom row
+  left(1) &lt;= right(0)?  NO   -> skip the left column
+
+  collected: [1,2,3,6,9,8,7,4,5]
+
+LAP 3?  top(2) &lt;= bottom(1) is false  ->  loop ends
+
+answer: [1,2,3,6,9,8,7,4,5]
+</pre>
+  </div>
+
+  <p>Lap 2 is where both guards earn their keep. Without them, the centre cell 5 would be collected
+  once by the top-row loop and then again by the bottom-row loop.</p>
+
+  <p>Now the single-row case that broke us in Step 4:</p>
+
+  <div class="trace">
+<pre>[[1,2,3]]      top=0 bottom=0 left=0 right=2
+
+LAP 1
+  top row:      1, 2, 3                      top -> 1
+  right column: from row 1 to row 0 -> no iterations
+                                             right -> 1
+  top(1) &lt;= bottom(0)?  NO  -> skip  (the guard doing its job)
+  left(0) &lt;= right(1)?  yes -> left column, from row 0 down to row 1:
+                        loop is `for r = bottom down to top` = 0 down to 1
+                        -> no iterations
+                                             left -> 1
+
+LAP 2?  top(1) &lt;= bottom(0) is false -> stop
+
+answer: [1,2,3]     correct
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function spiralExplained(matrix) {
+  const out = [];
+  let top = 0, bottom = matrix.length - 1;
+  let left = 0, right = matrix[0].length - 1;
+  let lap = 0;
+
+  while (top &lt;= bottom &amp;&amp; left &lt;= right) {
+    lap++;
+    console.log('LAP ' + lap + '   top=' + top + ' bottom=' + bottom +
+                ' left=' + left + ' right=' + right);
+
+    const a = [];
+    for (let c = left; c &lt;= right; c++) { out.push(matrix[top][c]); a.push(matrix[top][c]); }
+    console.log('  top row      -> [' + a.join(', ') + ']    top becomes ' + (top + 1));
+    top++;
+
+    const b = [];
+    for (let r = top; r &lt;= bottom; r++) { out.push(matrix[r][right]); b.push(matrix[r][right]); }
+    console.log('  right column -> [' + b.join(', ') + ']    right becomes ' + (right - 1));
+    right--;
+
+    if (top &lt;= bottom) {
+      const c2 = [];
+      for (let c = right; c &gt;= left; c--) { out.push(matrix[bottom][c]); c2.push(matrix[bottom][c]); }
+      console.log('  bottom row   -> [' + c2.join(', ') + ']    bottom becomes ' + (bottom - 1));
+      bottom--;
+    } else {
+      console.log('  bottom row   -> SKIPPED (top > bottom)');
+    }
+
+    if (left &lt;= right) {
+      const d = [];
+      for (let r = bottom; r &gt;= top; r--) { out.push(matrix[r][left]); d.push(matrix[r][left]); }
+      console.log('  left column  -> [' + d.join(', ') + ']    left becomes ' + (left + 1));
+      left++;
+    } else {
+      console.log('  left column  -> SKIPPED (left > right)');
+    }
+  }
+
+  console.log('');
+  return out;
+}
+
+console.log('ANSWER:', spiralExplained([[1,2,3],[4,5,6],[7,8,9]]));
+console.log('==========================================');
+console.log('ANSWER:', spiralExplained([[1,2,3]]));
+console.log('==========================================');
+console.log('ANSWER:', spiralExplained([[1,2,3,4],[5,6,7,8],[9,10,11,12]]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; four boundaries, no push</span></div>
+<pre><code>function spiralManual(matrix) {
+  if (matrix.length === 0 || matrix[0].length === 0) return [];
+
+  const result = [];
+  let written = 0;                  // our own push counter
+
+  let top = 0;
+  let bottom = matrix.length - 1;
+  let left = 0;
+  let right = matrix[0].length - 1;
+
+  while (top &lt;= bottom &amp;&amp; left &lt;= right) {
+
+    // 1. across the top, left to right
+    for (let c = left; c &lt;= right; c++) {
+      result[written] = matrix[top][c];
+      written++;
+    }
+    top++;
+
+    // 2. down the right side
+    for (let r = top; r &lt;= bottom; r++) {
+      result[written] = matrix[r][right];
+      written++;
+    }
+    right--;
+
+    // 3. back along the bottom -- ONLY if a row is still left
+    if (top &lt;= bottom) {
+      for (let c = right; c &gt;= left; c--) {
+        result[written] = matrix[bottom][c];
+        written++;
+      }
+      bottom--;
+    }
+
+    // 4. up the left side -- ONLY if a column is still left
+    if (left &lt;= right) {
+      for (let r = bottom; r &gt;= top; r--) {
+        result[written] = matrix[r][left];
+        written++;
+      }
+      left++;
+    }
+  }
+
+  return result;
+}
+
+console.log(spiralManual([[1,2,3],[4,5,6],[7,8,9]]));
+// [1,2,3,6,9,8,7,4,5]
+console.log(spiralManual([[1,2,3,4],[5,6,7,8],[9,10,11,12]]));
+// [1,2,3,4,8,12,11,10,9,5,6,7]
+console.log(spiralManual([[1,2,3]]));            // [1,2,3]
+console.log(spiralManual([[1],[2],[3]]));        // [1,2,3]
+console.log(spiralManual([[7]]));                // [7]
+console.log(spiralManual([[1,2],[3,4]]));        // [1,2,4,3]
+console.log(spiralManual([]));                   // []
+console.log(spiralManual([[1,2,3],[4,5,6]]));    // [1,2,3,6,5,4]</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">A useful self-check</span>
+    <p>The result must have exactly <code>rows &times; cols</code> entries. If it has more, you are
+    reading something twice &mdash; almost certainly a missing guard. If it has fewer, a loop bound is
+    wrong. Adding <code>console.log(result.length, rows * cols)</code> while debugging finds the bug
+    faster than staring at the output.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">that self-check, run over many shapes</span></div>
+<pre><code>function spiral(matrix) {
+  if (matrix.length === 0) return [];
+  const out = [];
+  let top = 0, bottom = matrix.length - 1, left = 0, right = matrix[0].length - 1;
+  while (top &lt;= bottom &amp;&amp; left &lt;= right) {
+    for (let c = left; c &lt;= right; c++) out.push(matrix[top][c]);
+    top++;
+    for (let r = top; r &lt;= bottom; r++) out.push(matrix[r][right]);
+    right--;
+    if (top &lt;= bottom) { for (let c = right; c &gt;= left; c--) out.push(matrix[bottom][c]); bottom--; }
+    if (left &lt;= right) { for (let r = bottom; r &gt;= top; r--) out.push(matrix[r][left]); left++; }
+  }
+  return out;
+}
+
+let allOk = true;
+for (let rows = 1; rows &lt;= 6; rows++) {
+  for (let cols = 1; cols &lt;= 6; cols++) {
+    const m = [];
+    let v = 1;
+    for (let r = 0; r &lt; rows; r++) {
+      const row = [];
+      for (let c = 0; c &lt; cols; c++) row.push(v++);
+      m.push(row);
+    }
+    const out = spiral(m);
+    const distinct = new Set(out).size;
+    if (out.length !== rows * cols || distinct !== rows * cols) {
+      allOk = false;
+      console.log('FAILED on ' + rows + 'x' + cols + ': got ' + out.length +
+                  ' values, ' + distinct + ' distinct');
+    }
+  }
+}
+console.log('all 36 shapes from 1x1 to 6x6 visit every cell exactly once:', allOk);
+console.log('4x3 spiral:', spiral([[1,2,3],[4,5,6],[7,8,9],[10,11,12]]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2a &mdash; the interview answer</span></div>
+<pre><code>function spiralOrder(matrix) {
+  if (!matrix.length) return [];
+
+  const out = [];
+  let top = 0, bottom = matrix.length - 1;
+  let left = 0, right = matrix[0].length - 1;
+
+  while (top &lt;= bottom &amp;&amp; left &lt;= right) {
+    for (let c = left; c &lt;= right; c++) out.push(matrix[top][c]);
+    top++;
+
+    for (let r = top; r &lt;= bottom; r++) out.push(matrix[r][right]);
+    right--;
+
+    if (top &lt;= bottom) {
+      for (let c = right; c &gt;= left; c--) out.push(matrix[bottom][c]);
+      bottom--;
+    }
+
+    if (left &lt;= right) {
+      for (let r = bottom; r &gt;= top; r--) out.push(matrix[r][left]);
+      left++;
+    }
+  }
+
+  return out;
+}
+
+console.log(spiralOrder([[1,2,3],[4,5,6],[7,8,9]]));
+console.log(spiralOrder([[1,2,3,4],[5,6,7,8],[9,10,11,12]]));
+console.log(spiralOrder([[1],[2],[3]]));</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 2b &mdash; peel and rotate</span></div>
+<pre><code>// A genuinely different idea: take the first row off, rotate what is
+// left anticlockwise, and repeat. Very short, and worth seeing once.
+function spiralPeel(matrix) {
+  const out = [];
+  let m = matrix.map(row =&gt; [...row]);   // work on a copy
+
+  while (m.length) {
+    out.push(...m.shift());              // take the top row
+
+    // rotate the rest 90 degrees anticlockwise:
+    // the last column becomes the new first row
+    m = m[0] ? m[0].map((_, c) =&gt; m.map(row =&gt; row[row.length - 1 - c])) : [];
+    m = m.filter(row =&gt; row.length);
+  }
+
+  return out;
+}
+
+console.log(spiralPeel([[1,2,3],[4,5,6],[7,8,9]]));
+// [1,2,3,6,9,8,7,4,5]
+console.log(spiralPeel([[1,2,3,4],[5,6,7,8],[9,10,11,12]]));
+// [1,2,3,4,8,12,11,10,9,5,6,7]
+
+// Elegant, and much worse in practice: it copies the whole remaining
+// matrix on every lap, so it is O((m*n)^1.5)-ish in work and O(m*n)
+// in space. Show it as a curiosity, ship the boundaries version.</code></pre>
+  </div>
+
+  <h3>The reverse problem: building a spiral</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Spiral Matrix II &mdash; fill instead of read</span></div>
+<pre><code>// Same four boundaries, writing instead of reading.
+function generateSpiral(n) {
+  const m = Array.from({ length: n }, () =&gt; new Array(n).fill(0));
+
+  let top = 0, bottom = n - 1, left = 0, right = n - 1;
+  let value = 1;
+
+  while (top &lt;= bottom &amp;&amp; left &lt;= right) {
+    for (let c = left; c &lt;= right; c++) m[top][c] = value++;
+    top++;
+    for (let r = top; r &lt;= bottom; r++) m[r][right] = value++;
+    right--;
+    if (top &lt;= bottom) { for (let c = right; c &gt;= left; c--) m[bottom][c] = value++; bottom--; }
+    if (left &lt;= right) { for (let r = bottom; r &gt;= top; r--) m[r][left] = value++; left++; }
+  }
+
+  return m;
+}
+
+console.log(generateSpiral(3).map(r =&gt; r.join(' ')).join('\n'));
+// 1 2 3
+// 8 9 4
+// 7 6 5
+
+console.log('');
+console.log(generateSpiral(4).map(r =&gt; r.join(' ').padStart(2)).join('\n'));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Extra space</th></tr></thead>
+      <tbody>
+        <tr><td>Visited matrix</td><td class="mono">O(m&middot;n)</td><td class="mono">O(m&middot;n)</td></tr>
+        <tr><td>Peel and rotate</td><td class="mono">worse</td><td class="mono">O(m&middot;n)</td></tr>
+        <tr><td><strong>Four boundaries</strong></td><td class="mono">O(m&middot;n)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Every cell is pushed exactly once, so time is O(m&middot;n) &mdash; and that is optimal, since the
+  output itself has m&middot;n entries. You cannot produce n items in fewer than n steps.</p>
+
+  <p>The four-boundary version holds four integers regardless of matrix size, so O(1) extra space.
+  The output array does not count, by the usual convention &mdash; say that out loud rather than
+  claiming O(1) total.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;I keep four boundaries &mdash; top, bottom, left, right &mdash; describing the unvisited
+    rectangle. Each lap walks the top row left to right, the right column downwards, the bottom row
+    right to left, and the left column upwards, moving each boundary inwards after its pass.
+    The two guards before the bottom and left passes matter: after <code>top++</code> and
+    <code>right--</code> the rectangle can already be empty, and without the checks a single-row or
+    single-column matrix is read twice. O(m&middot;n) time, O(1) extra space.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Missing the two guards</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; reads rows twice</span></div>
+<pre><code>function broken(matrix) {
+  const out = [];
+  let top = 0, bottom = matrix.length - 1, left = 0, right = matrix[0].length - 1;
+  while (top &lt;= bottom &amp;&amp; left &lt;= right) {
+    for (let c = left; c &lt;= right; c++) out.push(matrix[top][c]);
+    top++;
+    for (let r = top; r &lt;= bottom; r++) out.push(matrix[r][right]);
+    right--;
+    for (let c = right; c &gt;= left; c--) out.push(matrix[bottom][c]);   // no guard
+    bottom--;
+    for (let r = bottom; r &gt;= top; r--) out.push(matrix[r][left]);     // no guard
+    left++;
+  }
+  return out;
+}
+
+console.log(broken([[1,2,3],[4,5,6],[7,8,9]]));
+// [1,2,3,6,9,8,7,4,5]   correct -- square matrices hide the bug
+
+console.log(broken([[1,2,3]]));
+// [1,2,3,2,1]           WRONG -- 3 cells, 5 values
+
+console.log(broken([[1,2,3],[4,5,6]]));
+// [1,2,3,6,5,4,4]       WRONG -- 6 cells, 7 values
+
+// Square matrices are exactly the shape that does not expose this.
+// ALWAYS test a single row and a single column.</code></pre>
+  </div>
+
+  <h3>2. Moving a boundary before finishing with it</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; right-- too early</span></div>
+<pre><code>function broken(matrix) {
+  const out = [];
+  let top = 0, bottom = matrix.length - 1, left = 0, right = matrix[0].length - 1;
+  while (top &lt;= bottom &amp;&amp; left &lt;= right) {
+    for (let c = left; c &lt;= right; c++) out.push(matrix[top][c]);
+    top++;
+    right--;                                       // decremented BEFORE use -- bug
+    for (let r = top; r &lt;= bottom; r++) out.push(matrix[r][right]);
+    if (top &lt;= bottom) { for (let c = right; c &gt;= left; c--) out.push(matrix[bottom][c]); bottom--; }
+    if (left &lt;= right) { for (let r = bottom; r &gt;= top; r--) out.push(matrix[r][left]); left++; }
+  }
+  return out;
+}
+
+console.log(broken([[1,2,3],[4,5,6],[7,8,9]]));
+// [1,2,3,5,8,8,7,4,5]   WRONG -- 6 and 9 never appear, 8 and 5 twice
+
+// Each boundary is walked FIRST and moved AFTER. Every one of the
+// four blocks is "loop, then adjust", in that order.</code></pre>
+  </div>
+
+  <h3>3. Using <code>&lt;</code> instead of <code>&lt;=</code> in the while</h3>
+
+  <p><code>while (top &lt; bottom &amp;&amp; left &lt; right)</code> stops one lap early, missing the
+  centre row or column of an odd-sized matrix. On a 3&times;3 it drops the 5. The boundaries are
+  <em>inclusive</em>, so the comparisons must be too &mdash; and the same applies to every
+  <code>c &lt;= right</code> and <code>r &gt;= top</code> inside.</p>
+
+  <h3>4. Not handling the empty matrix</h3>
+
+  <p><code>matrix[0].length</code> throws on <code>[]</code>. And watch for <code>[[]]</code> &mdash;
+  a matrix with one row and no columns &mdash; where <code>matrix.length</code> is 1 but
+  <code>matrix[0].length</code> is 0. Guard both.</p>
+
+  <h3>5. Mixing up rows and columns</h3>
+
+  <p>The top and bottom loops vary <code>c</code> and hold the row fixed. The left and right loops
+  vary <code>r</code> and hold the column fixed. Writing <code>matrix[c][top]</code> once gives
+  <code>undefined</code> on a non-square matrix and, infuriatingly, works fine on a square one.
+  Name your loop variables <code>r</code> and <code>c</code>, never <code>i</code> and
+  <code>j</code>, and this class of bug mostly disappears.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write it from memory and test it on a 1&times;5 and a 5&times;1</strong> before you test
+    a square. If it survives those two, it is almost certainly right.</li>
+    <li><strong>Spiral Matrix II</strong> &mdash; fill an n&times;n grid with 1..n&sup2; in spiral
+    order. It is in Step 7; cover it and rewrite it.</li>
+    <li><strong>Anticlockwise spiral.</strong> Start by going down the left column instead of across
+    the top. Reorder the four blocks and adjust which boundary each one moves.</li>
+    <li><strong>Spiral from the centre outwards.</strong> Genuinely harder, and a good test of whether
+    you understand the structure or just memorised the four loops. Hint: the arm lengths go
+    1, 1, 2, 2, 3, 3, &hellip;</li>
+    <li><strong>Diagonal traversal.</strong> A different walking pattern with the same flavour of
+    bookkeeping. Once you have done two of these, the third stops being scary.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p>Some problems have no insight to find &mdash; they are testing whether you can
+    <strong>hold four moving parts straight without losing one</strong>. The way through is the same
+    every time: draw the state (here, the four walls), write down what each step does to it, and let
+    the boundary conditions fall out of the drawing rather than out of trial and error. And always
+    test the degenerate shapes first: one row, one column, one cell, nothing.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="15-set-matrix-zeroes.html">&larr; Set Matrix Zeroes</a>
+  <a href="17-rotate-image.html">Next: Rotate Image &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

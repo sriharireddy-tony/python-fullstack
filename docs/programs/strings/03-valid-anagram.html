@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Valid Anagram</title>
+<meta name="description" content="Counting beats sorting: the one-map, two-pass technique that turns n log n into n.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Strings &middot; Problem 03</p>
+  <h1>Valid Anagram</h1>
+  <p class="standfirst">A short problem carrying one durable habit: <strong>count, then spend</strong>.
+  Build a budget of characters from the first string and pay it down with the second. If the budget
+  ever goes negative, the answer is no.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Given two strings, decide whether the second is an anagram of the first &mdash; same characters,
+  same counts, any order.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th class="mono">s</th><th class="mono">t</th><th>Answer</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">"anagram"</td><td class="mono">"nagaram"</td><td class="mono">true</td><td>3 a&rsquo;s, 1 n, 1 g, 1 r, 1 m in both</td></tr>
+        <tr><td class="mono">"rat"</td><td class="mono">"car"</td><td class="mono">false</td><td>t against c</td></tr>
+        <tr><td class="mono">"a"</td><td class="mono">"ab"</td><td class="mono">false</td><td>different lengths</td></tr>
+        <tr><td class="mono">""</td><td class="mono">""</td><td class="mono">true</td><td>trivially</td></tr>
+        <tr><td class="mono">"aacc"</td><td class="mono">"ccac"</td><td class="mono">false</td><td>same letters, different counts</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The row that catches half-solutions</span>
+    <p><code>"aacc"</code> and <code>"ccac"</code> use exactly the same <em>set</em> of characters
+    &mdash; a and c &mdash; and are the same length. They are still not anagrams, because
+    <code>"aacc"</code> has two a&rsquo;s and <code>"ccac"</code> has one. Any solution built on
+    <code>Set</code> rather than counts gets this wrong.</p>
+  </div>
+
+  <p>And before anything else: <strong>if the lengths differ, return false immediately</strong>.
+  It is one line, it is always correct, and it saves the whole rest of the work on most negative
+  cases.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answers</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0a &mdash; sort both and compare</span></div>
+<pre><code>function isAnagramSort(s, t) {
+  if (s.length !== t.length) return false;
+  return [...s].sort().join('') === [...t].sort().join('');
+}
+
+console.log(isAnagramSort('anagram', 'nagaram'));   // true
+console.log(isAnagramSort('rat', 'car'));           // false
+console.log(isAnagramSort('aacc', 'ccac'));         // false
+console.log(isAnagramSort('', ''));                 // true
+
+// One line of real work, obviously correct, O(n log n).
+// Say this out loud first -- it buys you thinking time.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0b &mdash; the tempting wrong one</span></div>
+<pre><code>function withSets(s, t) {
+  if (s.length !== t.length) return false;
+  const a = new Set(s), b = new Set(t);
+  if (a.size !== b.size) return false;
+  for (const ch of a) if (!b.has(ch)) return false;
+  return true;
+}
+
+console.log(withSets('anagram', 'nagaram'));   // true
+console.log(withSets('rat', 'car'));           // false
+console.log(withSets('aacc', 'ccac'));         // TRUE -- WRONG
+
+// A Set throws away how MANY of each character there are, which is
+// exactly the information the problem is about.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why sorting is more work than needed</h2>
+
+  <p>Sorting arranges the characters into a total order. But the question does not care about order
+  at all &mdash; it only cares <em>how many</em> of each character there are. Sorting computes far
+  more information than the question needs, and pays <code>n log n</code> for it.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// two long anagrams -- the worst case, since we cannot exit early
+const N = 400000;
+let s = '';
+for (let i = 0; i &lt; N; i++) s += String.fromCharCode(97 + (i % 26));
+const t = [...s].reverse().join('');
+
+function bySorting(a, b) {
+  if (a.length !== b.length) return false;
+  return [...a].sort().join('') === [...b].sort().join('');
+}
+
+function byCounting(a, b) {
+  if (a.length !== b.length) return false;
+  const counts = new Map();
+  for (const ch of a) counts.set(ch, (counts.get(ch) || 0) + 1);
+  for (const ch of b) {
+    const left = counts.get(ch);
+    if (!left) return false;
+    counts.set(ch, left - 1);
+  }
+  return true;
+}
+
+let x = performance.now();
+const r1 = bySorting(s, t);
+const sortMs = performance.now() - x;
+
+x = performance.now();
+const r2 = byCounting(s, t);
+const countMs = performance.now() - x;
+
+console.log('sorting  :', r1, 'in', sortMs.toFixed(1) + ' ms');
+console.log('counting :', r2, 'in', countMs.toFixed(1) + ' ms');
+console.log('speed-up:', Math.round(sortMs / Math.max(countMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; a budget you spend</h2>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Walk the first string and <strong>build a budget</strong>: how many of each character you have.
+    Then walk the second string and <strong>spend</strong> it: subtract one for each character. If you
+    ever need a character with nothing left in the budget, they are not anagrams.</p>
+  </div>
+
+  <p>And because the lengths are equal (you checked that first), spending exactly <code>n</code>
+  characters from a budget of exactly <code>n</code> means the budget must land precisely at zero.
+  <strong>You do not need a final check that everything is zero</strong> &mdash; it is guaranteed.</p>
+
+  <p>That is a genuinely nice piece of reasoning and worth saying out loud:</p>
+
+  <div class="trace">
+<pre>budget total  = length of s   = n
+amount spent  = length of t   = n        (we checked they are equal)
+
+if we never overdrew, then we spent exactly what we had,
+so every counter is exactly zero at the end.
+</pre>
+  </div>
+
+  <h3>The one-pass variant</h3>
+
+  <p>You can even merge the two walks: add for <code>s[i]</code> and subtract for <code>t[i]</code> in
+  the same loop. But then a counter can dip negative and come back, so you <em>do</em> need the final
+  all-zeros check. Two clean passes are easier to reason about; one pass with a final check is
+  slightly fewer iterations. Both are fine &mdash; know which one you are writing and why.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>s = "anagram"</code>, <code>t = "nagaram"</code>.</p>
+
+  <div class="trace">
+<pre>PASS 1 -- build the budget from s = "anagram"
+
+  a -> {a:1}
+  n -> {a:1, n:1}
+  a -> {a:2, n:1}
+  g -> {a:2, n:1, g:1}
+  r -> {a:2, n:1, g:1, r:1}
+  a -> {a:3, n:1, g:1, r:1}
+  m -> {a:3, n:1, g:1, r:1, m:1}
+
+PASS 2 -- spend it with t = "nagaram"
+
+  n   budget has 1  ->  spend    {a:3, n:0, g:1, r:1, m:1}
+  a   budget has 3  ->  spend    {a:2, ...}
+  g   budget has 1  ->  spend    {g:0, ...}
+  a   budget has 2  ->  spend    {a:1, ...}
+  r   budget has 1  ->  spend    {r:0, ...}
+  a   budget has 1  ->  spend    {a:0, ...}
+  m   budget has 1  ->  spend    {m:0, ...}
+
+never overdrew -> TRUE
+</pre>
+  </div>
+
+  <p>Now the case that fails, <code>s = "aacc"</code>, <code>t = "ccac"</code>:</p>
+
+  <div class="trace">
+<pre>PASS 1 -- budget from "aacc"    ->  {a:2, c:2}
+
+PASS 2 -- spend with "ccac"
+  c   has 2  ->  spend   {a:2, c:1}
+  c   has 1  ->  spend   {a:2, c:0}
+  a   has 2  ->  spend   {a:1, c:0}
+  c   has 0  ->  OVERDRAWN  ->  FALSE
+
+Same letters, same length, still not an anagram.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function isAnagramExplained(s, t) {
+  console.log('s = "' + s + '"   t = "' + t + '"');
+
+  if (s.length !== t.length) {
+    console.log('lengths differ (' + s.length + ' vs ' + t.length + ') -> FALSE');
+    console.log('');
+    return false;
+  }
+
+  const budget = new Map();
+
+  console.log('PASS 1 -- build the budget from s');
+  for (const ch of s) {
+    budget.set(ch, (budget.get(ch) || 0) + 1);
+    console.log("  '" + ch + "'  ->  " + JSON.stringify([...budget]));
+  }
+
+  console.log('PASS 2 -- spend it with t');
+  for (const ch of t) {
+    const left = budget.get(ch) || 0;
+    if (left === 0) {
+      console.log("  '" + ch + "'  budget has 0  ->  OVERDRAWN, FALSE");
+      console.log('');
+      return false;
+    }
+    budget.set(ch, left - 1);
+    console.log("  '" + ch + "'  had " + left + ", spend one  ->  " + JSON.stringify([...budget]));
+  }
+
+  console.log('never overdrew -> TRUE');
+  console.log('');
+  return true;
+}
+
+console.log('ANSWER:', isAnagramExplained('anagram', 'nagaram'));
+console.log('==========================================');
+console.log('ANSWER:', isAnagramExplained('aacc', 'ccac'));
+console.log('==========================================');
+console.log('ANSWER:', isAnagramExplained('a', 'ab'));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; a 26-slot counter array</span></div>
+<pre><code>function isAnagramManual(s, t) {
+  if (s.length !== t.length) return false;
+
+  // one counter per lowercase letter
+  const counts = [];
+  for (let i = 0; i &lt; 26; i++) counts[i] = 0;
+
+  // PASS 1: build the budget from s
+  for (let i = 0; i &lt; s.length; i++) {
+    const idx = s.charCodeAt(i) - 97;      // 'a' is 97
+    counts[idx] = counts[idx] + 1;
+  }
+
+  // PASS 2: spend it with t
+  for (let i = 0; i &lt; t.length; i++) {
+    const idx = t.charCodeAt(i) - 97;
+
+    if (counts[idx] === 0) {
+      return false;                        // overdrawn
+    }
+
+    counts[idx] = counts[idx] - 1;
+  }
+
+  // lengths matched, so the budget must be exactly spent
+  return true;
+}
+
+console.log(isAnagramManual('anagram', 'nagaram'));   // true
+console.log(isAnagramManual('rat', 'car'));           // false
+console.log(isAnagramManual('aacc', 'ccac'));         // false
+console.log(isAnagramManual('', ''));                 // true
+console.log(isAnagramManual('a', 'a'));               // true
+console.log(isAnagramManual('ab', 'ba'));             // true
+console.log(isAnagramManual('listen', 'silent'));     // true</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; one pass, add and subtract</span></div>
+<pre><code>function isAnagramOnePass(s, t) {
+  if (s.length !== t.length) return false;
+
+  const counts = [];
+  for (let i = 0; i &lt; 26; i++) counts[i] = 0;
+
+  // walk BOTH strings together: +1 for s, -1 for t
+  for (let i = 0; i &lt; s.length; i++) {
+    counts[s.charCodeAt(i) - 97]++;
+    counts[t.charCodeAt(i) - 97]--;
+  }
+
+  // now every counter MUST be zero -- and here we really do have
+  // to check, because a counter can go negative and come back
+  for (let i = 0; i &lt; 26; i++) {
+    if (counts[i] !== 0) return false;
+  }
+
+  return true;
+}
+
+console.log(isAnagramOnePass('anagram', 'nagaram'));   // true
+console.log(isAnagramOnePass('rat', 'car'));           // false
+console.log(isAnagramOnePass('aacc', 'ccac'));         // false
+console.log(isAnagramOnePass('ab', 'ba'));             // true
+
+// Why the final check is unavoidable here:
+// with s = "ab", t = "ba", after i = 0 the counters are a:+1, b:-1.
+// A negative counter mid-loop means nothing -- only the end state
+// tells you the answer.</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t"><code>charCodeAt</code>, plainly</span>
+    <p>Every character has a numeric code. <code>'a'</code> is 97, <code>'b'</code> is 98, up to
+    <code>'z'</code> at 122. Subtracting 97 maps them onto 0&ndash;25, which are array indexes.
+    That is the whole trick behind every 26-element counter array you will ever see, and it is why
+    those solutions break the moment a capital letter or a space appears.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; Map, works on any characters</span></div>
+<pre><code>function isAnagram(s, t) {
+  if (s.length !== t.length) return false;
+
+  const budget = new Map();
+  for (const ch of s) budget.set(ch, (budget.get(ch) || 0) + 1);
+
+  for (const ch of t) {
+    const left = budget.get(ch);
+    if (!left) return false;          // undefined or 0 -- overdrawn either way
+    budget.set(ch, left - 1);
+  }
+
+  return true;
+}
+
+console.log(isAnagram('anagram', 'nagaram'));   // true
+console.log(isAnagram('rat', 'car'));           // false
+console.log(isAnagram('aacc', 'ccac'));         // false
+console.log(isAnagram('Hello!', '!olleH'));     // true  -- any characters
+console.log(isAnagram('a b', 'b a'));           // true  -- spaces count
+console.log(isAnagram('', ''));                 // true</code></pre>
+  </div>
+
+  <p><code>if (!left)</code> handles both cases at once: <code>undefined</code> (character never seen)
+  and <code>0</code> (budget exhausted) are both falsy. That is one of the few places where relying on
+  falsiness is genuinely clean rather than risky &mdash; because 0 and undefined mean the same thing
+  here.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the realistic variations</span></div>
+<pre><code>// Case-insensitive, ignoring spaces and punctuation
+function isAnagramLoose(s, t) {
+  const clean = str =&gt; [...str.toLowerCase()].filter(c =&gt; /[a-z0-9]/.test(c));
+  const a = clean(s), b = clean(t);
+  if (a.length !== b.length) return false;
+
+  const budget = new Map();
+  for (const ch of a) budget.set(ch, (budget.get(ch) || 0) + 1);
+  for (const ch of b) {
+    const left = budget.get(ch);
+    if (!left) return false;
+    budget.set(ch, left - 1);
+  }
+  return true;
+}
+
+console.log(isAnagramLoose('Dormitory', 'Dirty Room'));      // true
+console.log(isAnagramLoose('Astronomer', 'Moon starer'));    // true
+console.log(isAnagramLoose('Listen!', 'Silent'));            // true
+console.log(isAnagramLoose('hello', 'world'));               // false
+
+// Word-level anagrams: same words, different order
+function isWordAnagram(s, t) {
+  const key = str =&gt; str.toLowerCase().split(/\s+/).filter(Boolean).sort().join(' ');
+  return key(s) === key(t);
+}
+
+console.log(isWordAnagram('the quick fox', 'fox the quick'));   // true
+console.log(isWordAnagram('the quick fox', 'the quick dog'));   // false</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Unicode: <code>.length</code> lies</span>
+    <p>JavaScript string length counts UTF-16 code units, not characters. A single emoji has
+    <code>.length === 2</code>. So the early length check can reject a genuine anagram of
+    emoji-containing strings, and <code>s[i]</code> can hand you half a character. Iterating with
+    <code>for...of</code> or <code>[...s]</code> walks whole code points; comparing
+    <code>[...s].length</code> instead of <code>s.length</code> fixes the guard. For interview inputs
+    this never matters. For real user text, it does.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the unicode-safe version</span></div>
+<pre><code>function isAnagramUnicode(s, t) {
+  const a = [...s], b = [...t];              // whole code points
+  if (a.length !== b.length) return false;
+
+  const budget = new Map();
+  for (const ch of a) budget.set(ch, (budget.get(ch) || 0) + 1);
+  for (const ch of b) {
+    const left = budget.get(ch);
+    if (!left) return false;
+    budget.set(ch, left - 1);
+  }
+  return true;
+}
+
+console.log('naive length of "a😀":', 'a😀'.length);        // 3
+console.log('code-point length   :', [...'a😀'].length);   // 2
+
+console.log(isAnagramUnicode('a😀b', 'b😀a'));   // true
+console.log(isAnagramUnicode('a😀b', 'ab😀'));   // true
+console.log(isAnagramUnicode('a😀b', 'abc'));    // false</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Sort both</td><td class="mono">O(n log n)</td><td class="mono">O(n)</td></tr>
+        <tr><td>Count with a Map</td><td class="mono">O(n)</td><td class="mono">O(k)</td></tr>
+        <tr><td><strong>26-slot array</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>where <code>k</code> is the number of distinct characters.</p>
+
+  <p>The array version is O(1) space in a meaningful sense: 26 slots, whatever the input size. The Map
+  version is O(k), which for a bounded alphabet is also effectively constant &mdash; but say
+  &ldquo;O(k) where k is the alphabet size&rdquo; rather than claiming O(1) for arbitrary Unicode,
+  where k can be large.</p>
+
+  <p>Two passes over the string is still O(n). Sequential passes add.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Sorting both strings works and is O(n log n), but the question only depends on character
+    counts, not order. So: if the lengths differ, false. Otherwise build a frequency map from the
+    first string and decrement it with the second, returning false the moment a count would go
+    negative. Because the lengths are equal, no final zero-check is needed. O(n) time, O(k) space
+    for the alphabet &mdash; or a fixed 26-element array if the input is lowercase a&ndash;z.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Using a Set and losing the counts</h3>
+
+  <p>Shown in Step 2. <code>"aacc"</code> versus <code>"ccac"</code> is the input that exposes it, and
+  it is the first thing a good interviewer will try.</p>
+
+  <h3>2. Skipping the length check</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; no length guard</span></div>
+<pre><code>function broken(s, t) {
+  const budget = new Map();
+  for (const ch of s) budget.set(ch, (budget.get(ch) || 0) + 1);
+  for (const ch of t) {
+    const left = budget.get(ch);
+    if (!left) return false;
+    budget.set(ch, left - 1);
+  }
+  return true;                 // no length check anywhere
+}
+
+console.log(broken('anagram', 'nagaram'));   // true   fine
+console.log(broken('aabb', 'ab'));           // TRUE   WRONG
+console.log(broken('ab', 'aabb'));           // false  right, by accident
+
+// "ab" spends only part of the budget built from "aabb" and never
+// overdraws, so it passes. Either check the lengths up front, or
+// verify that every counter is zero at the end. The length check
+// is one line and also short-circuits most negative cases.</code></pre>
+  </div>
+
+  <h3>3. One pass without the final zero-check</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; bailing on a negative counter</span></div>
+<pre><code>function broken(s, t) {
+  if (s.length !== t.length) return false;
+  const counts = new Array(26).fill(0);
+  for (let i = 0; i &lt; s.length; i++) {
+    counts[s.charCodeAt(i) - 97]++;
+    counts[t.charCodeAt(i) - 97]--;
+    if (counts[t.charCodeAt(i) - 97] &lt; 0) return false;   // bail early -- bug
+  }
+  return true;
+}
+
+console.log(broken('anagram', 'nagaram'));   // false  WRONG, should be true
+console.log(broken('ab', 'ba'));             // false  WRONG, should be true
+
+// In the merged loop, counters legitimately go negative and come
+// back. Only the state AFTER the whole loop means anything.
+// Early bail-out belongs to the two-pass version, not this one.</code></pre>
+  </div>
+
+  <h3>4. Comparing sorted strings without joining</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; comparing arrays with ===</span></div>
+<pre><code>function broken(s, t) {
+  return [...s].sort() === [...t].sort();
+}
+console.log(broken('abc', 'cba'));   // false -- always false
+
+// === on two arrays compares OBJECT IDENTITY, not contents.
+// Two different arrays are never ===, however equal they look.
+console.log([1,2] === [1,2]);        // false
+console.log([1,2].join() === [1,2].join());   // true
+
+// So join them into strings first:
+console.log([...'abc'].sort().join('') === [...'cba'].sort().join(''));   // true</code></pre>
+  </div>
+
+  <h3>5. Assuming lowercase ASCII when the input is not</h3>
+
+  <p><code>'A'.charCodeAt(0) - 97</code> is <code>-32</code>. Writing <code>counts[-32]++</code> does
+  not throw &mdash; JavaScript quietly adds a <code>"-32"</code> property to the array &mdash; so the
+  bug is silent and the answer is wrong. If the input might contain anything other than a&ndash;z,
+  use the Map version.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the Map version from memory</strong>, then explain why no final zero-check is
+    needed when the lengths match.</li>
+    <li><strong>Ransom Note.</strong> Can you build string <code>a</code> using the letters of string
+    <code>b</code>? Identical budget-and-spend, except the lengths do <em>not</em> have to match, so
+    you drop the length check &mdash; and now leftover budget is fine. It is a Tier&nbsp;1 problem on
+    this list.</li>
+    <li><strong>Find all anagram start indexes.</strong> Given a string and a pattern, return every
+    index where an anagram of the pattern begins. Sliding window plus a count comparison &mdash;
+    this page combined with the sliding-window page.</li>
+    <li><strong>Count how many characters must change</strong> to make the strings anagrams.
+    Sum the positive differences between the two count maps.</li>
+    <li><strong>Anagram of a palindrome.</strong> Can the string be rearranged into a palindrome?
+    Count the characters; at most one may have an odd count. Two lines once you have the counts.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>The frequency map is the single most reused tool in string problems.</strong>
+    Build one, then either compare two of them, spend one down, or slide a window and keep it in
+    sync. And notice the general lesson from Step 3: <em>sorting computes an ordering you often do
+    not need</em>. Before you sort, ask whether counting would answer the question &mdash; it is
+    usually a whole complexity class cheaper.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="02-group-anagrams.html">&larr; Group Anagrams</a>
+  <a href="04-longest-palindromic-substring.html">Next: Longest Palindromic Substring &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

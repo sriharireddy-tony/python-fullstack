@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Remove Duplicates from Sorted Array</title>
+<meta name="description" content="The read/write pointer applied to a sorted array — and why sorted means you only ever compare with your neighbour.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Two pointers &middot; Problem 01</p>
+  <h1>Remove Duplicates from Sorted Array</h1>
+  <p class="standfirst">The read/write pointer from Move Zeroes, with one change to the test. And the
+  reason it is easy: in a <strong>sorted</strong> array, every duplicate is standing right next to its
+  twin, so you never have to look further than one step back.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Given a <strong>sorted</strong> array, remove the duplicates <strong>in place</strong> so each
+  value appears once. Return the new length. Whatever sits beyond that length does not matter.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Returns</th><th>Array becomes</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[1, 1, 2]</td><td class="mono">2</td><td class="mono">[1, 2, _]</td></tr>
+        <tr><td class="mono">[0,0,1,1,1,2,2,3,3,4]</td><td class="mono">5</td><td class="mono">[0,1,2,3,4, _ _ _ _ _]</td></tr>
+        <tr><td class="mono">[1, 2, 3]</td><td class="mono">3</td><td class="mono">[1, 2, 3]</td></tr>
+        <tr><td class="mono">[7]</td><td class="mono">1</td><td class="mono">[7]</td></tr>
+        <tr><td class="mono">[]</td><td class="mono">0</td><td class="mono">[]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The underscores are leftover junk. The contract is only that the first <code>k</code> slots hold
+  the distinct values in order.</p>
+
+  <div class="note key">
+    <span class="t">What &ldquo;sorted&rdquo; buys you</span>
+    <p>In an unsorted array, a duplicate of <code>nums[i]</code> could be anywhere, so you would need
+    a Set to remember everything seen. Sorted, equal values are <strong>adjacent</strong>. So the
+    entire memory you need is <em>the last value you kept</em> &mdash; one variable instead of a whole
+    set.</p>
+    <p>This is the same reason sorting helped in Three Sum and Merge Intervals: it converts
+    &ldquo;compare against everything&rdquo; into &ldquo;compare against your neighbour&rdquo;.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answers</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0a &mdash; splice out the duplicates</span></div>
+<pre><code>function removeDuplicatesSplice(nums) {
+  for (let i = 1; i &lt; nums.length; ) {
+    if (nums[i] === nums[i - 1]) {
+      nums.splice(i, 1);      // cut it out; everything after shifts left
+      // do NOT advance i -- a new value slid into this slot
+    } else {
+      i++;
+    }
+  }
+  return nums.length;
+}
+
+const a = [0,0,1,1,1,2,2,3,3,4];
+console.log(removeDuplicatesSplice(a), a);   // 5 [0,1,2,3,4]
+
+const b = [1, 1, 2];
+console.log(removeDuplicatesSplice(b), b);   // 2 [1,2]
+
+// Correct, and genuinely shortens the array. But splice shifts
+// every later element, so it is O(n) per removal -- O(n^2) overall.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0b &mdash; build a new array</span></div>
+<pre><code>function removeDuplicatesCopy(nums) {
+  const out = [];
+  for (const n of nums) {
+    if (out.length === 0 || out[out.length - 1] !== n) out.push(n);
+  }
+  return out;
+}
+
+console.log(removeDuplicatesCopy([0,0,1,1,1,2,2,3,3,4]));   // [0,1,2,3,4]
+console.log(removeDuplicatesCopy([1, 1, 2]));               // [1,2]
+
+// O(n) time -- but O(n) space, and it does not modify the input,
+// so it fails the "in place" requirement.
+
+// The one-liner people reach for, which is also a copy:
+console.log([...new Set([0,0,1,1,1,2,2,3,3,4])]);           // [0,1,2,3,4]</code></pre>
+  </div>
+
+  <p>The Set one-liner is worth knowing and worth saying out loud &mdash; and then setting aside,
+  because it allocates and because it does not need the array to be sorted, which means it is not
+  using the gift the problem gave you.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why splice is slow</h2>
+
+  <p>Removing from the middle of an array shifts every element after it. Do that once per duplicate
+  and you have <strong>O(n&sup2;)</strong> hidden inside a method call that looks like one step.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// Mostly duplicates: the worst case for splice.
+const N = 40000;
+const base = [];
+for (let i = 0; i &lt; N; i++) base.push(Math.floor(i / 20));   // each value 20 times
+
+function bySplice(nums) {
+  for (let i = 1; i &lt; nums.length; ) {
+    if (nums[i] === nums[i - 1]) nums.splice(i, 1);
+    else i++;
+  }
+  return nums.length;
+}
+
+function byPointers(nums) {
+  if (nums.length === 0) return 0;
+  let write = 1;
+  for (let read = 1; read &lt; nums.length; read++) {
+    if (nums[read] !== nums[write - 1]) {
+      nums[write] = nums[read];
+      write++;
+    }
+  }
+  return write;
+}
+
+let t = performance.now();
+const x = bySplice(base.slice());
+const spliceMs = performance.now() - t;
+
+t = performance.now();
+const y = byPointers(base.slice());
+const ptrMs = performance.now() - t;
+
+console.log('splice each duplicate :', x, 'in', spliceMs.toFixed(1) + ' ms');
+console.log('read/write pointers   :', y, 'in', ptrMs.toFixed(2) + ' ms');
+console.log('same length:', x === y);
+console.log('speed-up:', Math.round(spliceMs / Math.max(ptrMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; read and write pointers</h2>
+
+  <p>Stop removing. Start <strong>overwriting</strong>, exactly as in Move Zeroes.</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p><code>read</code> visits every element. <code>write</code> marks the next slot for a distinct
+    value. Copy <code>nums[read]</code> forward only when it differs from
+    <strong><code>nums[write - 1]</code></strong> &mdash; the last value you actually kept.</p>
+  </div>
+
+  <p>Note carefully <em>what</em> you compare against. Not <code>nums[read - 1]</code>, the previous
+  element you looked at &mdash; <code>nums[write - 1]</code>, the last one you <em>committed</em>.
+  In this problem the two happen to be equal, because the array is sorted and you keep the first of
+  every run. But writing <code>nums[write - 1]</code> states the real invariant, and it generalises
+  to problems where they differ.</p>
+
+  <div class="trace">
+<pre>       0  0  1  1  1  2
+       w  r                    write starts at 1, read at 1
+                               (the first element is always kept)
+
+  r=1  value 0,  nums[w-1] = nums[0] = 0    same -> skip
+  r=2  value 1,  nums[w-1] = 0              different -> nums[1] = 1, w=2
+
+       0  1  1  1  1  2
+          w     r
+
+  r=3  value 1,  nums[w-1] = nums[1] = 1    same -> skip
+  r=4  value 1,  same -> skip
+  r=5  value 2,  nums[w-1] = 1              different -> nums[2] = 2, w=3
+
+       0  1  2  1  1  2
+             w
+
+  new length: 3       first three slots: 0, 1, 2
+</pre>
+  </div>
+
+  <p><code>write</code> starts at <strong>1</strong>, not 0. The first element can never be a
+  duplicate of anything before it, so it is always kept &mdash; and starting at 1 means
+  <code>nums[write - 1]</code> is always a real value, never index &minus;1.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>nums = [0,0,1,1,1,2,2,3,3,4]</code>.</p>
+
+  <div class="trace">
+<pre>write = 1        (index 0 is kept automatically)
+
+read=1  value 0   last kept nums[0] = 0   same      array unchanged   write=1
+read=2  value 1   last kept nums[0] = 0   NEW  ->  nums[1] = 1        write=2
+        [0,1,1,1,1,2,2,3,3,4]
+read=3  value 1   last kept nums[1] = 1   same                        write=2
+read=4  value 1   last kept nums[1] = 1   same                        write=2
+read=5  value 2   last kept nums[1] = 1   NEW  ->  nums[2] = 2        write=3
+        [0,1,2,1,1,2,2,3,3,4]
+read=6  value 2   last kept nums[2] = 2   same                        write=3
+read=7  value 3   last kept nums[2] = 2   NEW  ->  nums[3] = 3        write=4
+        [0,1,2,3,1,2,2,3,3,4]
+read=8  value 3   last kept nums[3] = 3   same                        write=4
+read=9  value 4   last kept nums[3] = 3   NEW  ->  nums[4] = 4        write=5
+        [0,1,2,3,4,2,2,3,3,4]
+
+return 5.   The first five slots are 0,1,2,3,4.
+The tail [2,2,3,3,4] is scrap and nobody looks at it.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function removeDuplicatesExplained(nums) {
+  if (nums.length === 0) { console.log('empty -> 0'); return 0; }
+
+  console.log('start: [' + nums.join(',') + ']');
+  console.log('index 0 is always kept, so write starts at 1');
+  console.log('');
+
+  let write = 1;
+
+  for (let read = 1; read &lt; nums.length; read++) {
+    const lastKept = nums[write - 1];
+
+    if (nums[read] !== lastKept) {
+      nums[write] = nums[read];
+      write++;
+      console.log('read=' + read + '  value ' + nums[read] + '  last kept ' + lastKept +
+                  '  NEW -> write it   [' + nums.join(',') + ']   write=' + write);
+    } else {
+      console.log('read=' + read + '  value ' + nums[read] + '  last kept ' + lastKept +
+                  '  same, skip      [' + nums.join(',') + ']   write=' + write);
+    }
+  }
+
+  console.log('');
+  console.log('new length ' + write + '  ->  [' + nums.slice(0, write).join(',') + ']');
+  console.log('');
+  return write;
+}
+
+removeDuplicatesExplained([0,0,1,1,1,2,2,3,3,4]);
+console.log('==========================================');
+removeDuplicatesExplained([1, 1, 2]);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; read and write pointers</span></div>
+<pre><code>function removeDuplicatesManual(nums) {
+  if (nums.length === 0) return 0;
+
+  let write = 1;      // index 0 is always a keeper
+
+  for (let read = 1; read &lt; nums.length; read++) {
+    // compare with the last value we COMMITTED, not the previous read
+    if (nums[read] !== nums[write - 1]) {
+      nums[write] = nums[read];
+      write = write + 1;
+    }
+  }
+
+  return write;
+}
+
+function show(arr) {
+  const copy = [...arr];
+  const k = removeDuplicatesManual(copy);
+  return { length: k, kept: copy.slice(0, k) };
+}
+
+console.log(show([1, 1, 2]));                     // 2, [1,2]
+console.log(show([0,0,1,1,1,2,2,3,3,4]));         // 5, [0,1,2,3,4]
+console.log(show([1, 2, 3]));                     // 3, [1,2,3]
+console.log(show([7]));                           // 1, [7]
+console.log(show([]));                            // 0, []
+console.log(show([5, 5, 5, 5]));                  // 1, [5]
+console.log(show([-2, -2, 0, 0, 1]));             // 3, [-2,0,1]</code></pre>
+  </div>
+
+  <h3>The follow-up: allow each value at most twice</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">variation &mdash; keep up to two of each</span></div>
+<pre><code>function removeDuplicatesTwice(nums) {
+  if (nums.length &lt;= 2) return nums.length;
+
+  let write = 2;      // the first two are always keepers
+
+  for (let read = 2; read &lt; nums.length; read++) {
+    // compare with the value TWO slots back among the kept ones.
+    // If they differ, this value has appeared at most once so far.
+    if (nums[read] !== nums[write - 2]) {
+      nums[write] = nums[read];
+      write++;
+    }
+  }
+
+  return write;
+}
+
+function show2(arr) {
+  const copy = [...arr];
+  const k = removeDuplicatesTwice(copy);
+  return { length: k, kept: copy.slice(0, k) };
+}
+
+console.log(show2([1,1,1,2,2,3]));          // 5, [1,1,2,2,3]
+console.log(show2([0,0,1,1,1,1,2,3,3]));    // 7, [0,0,1,1,2,3,3]
+console.log(show2([1,1]));                  // 2, [1,1]
+console.log(show2([1,2,3]));                // 3, [1,2,3]
+
+// The generalisation: "at most k copies" compares with
+// nums[write - k]. Once you see that, the whole family is one
+// parameter.
+function removeDuplicatesAtMost(nums, k) {
+  if (nums.length &lt;= k) return nums.length;
+  let write = k;
+  for (let read = k; read &lt; nums.length; read++) {
+    if (nums[read] !== nums[write - k]) nums[write++] = nums[read];
+  }
+  return write;
+}
+
+const t = [1,1,1,1,2,2,2,3];
+const n = removeDuplicatesAtMost(t, 3);
+console.log(n, t.slice(0, n));              // 7, [1,1,1,2,2,2,3]</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function removeDuplicates(nums) {
+  if (nums.length === 0) return 0;
+
+  let write = 1;
+
+  for (let read = 1; read &lt; nums.length; read++) {
+    if (nums[read] !== nums[write - 1]) nums[write++] = nums[read];
+  }
+
+  return write;
+}
+
+const a = [0,0,1,1,1,2,2,3,3,4];
+console.log(removeDuplicates(a), a.slice(0, 5));   // 5 [0,1,2,3,4]
+
+const b = [1,1,2];
+console.log(removeDuplicates(b), b.slice(0, 2));   // 2 [1,2]</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the versions you would actually ship</span></div>
+<pre><code>// Truncate the array too, so the caller does not have to track k:
+function dedupeInPlace(nums) {
+  if (nums.length === 0) return nums;
+  let write = 1;
+  for (let read = 1; read &lt; nums.length; read++) {
+    if (nums[read] !== nums[write - 1]) nums[write++] = nums[read];
+  }
+  nums.length = write;          // assigning to .length truncates
+  return nums;
+}
+
+const c = [0,0,1,1,1,2,2,3,3,4];
+console.log(dedupeInPlace(c));     // [0,1,2,3,4] -- actually shortened
+
+// Not in place, unsorted input welcome, one line:
+console.log([...new Set([3,1,3,2,1])]);          // [3,1,2]
+
+// Sorted input, non-mutating, keeps the "neighbour" idea:
+const dedupeSorted = arr =&gt; arr.filter((v, i) =&gt; i === 0 || v !== arr[i - 1]);
+console.log(dedupeSorted([0,0,1,1,1,2,2,3,3,4]));  // [0,1,2,3,4]
+
+// Dedupe objects by a key -- the version you write most often at work:
+function uniqueBy(items, keyOf) {
+  const seen = new Set();
+  return items.filter(item =&gt; {
+    const key = keyOf(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+console.log(uniqueBy(
+  [{id:1,n:'a'}, {id:2,n:'b'}, {id:1,n:'c'}],
+  o =&gt; o.id
+));   // keeps the FIRST of each id</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t"><code>new Set(...)</code> does not need a sorted array &mdash; and that is the point</span>
+    <p>The Set version works on any input and is what you write at work. It is <em>not</em> the answer
+    to this problem, because it allocates O(n) and does not modify the input. When an interviewer
+    specifies &ldquo;sorted&rdquo; and &ldquo;in place&rdquo;, both words are requirements &mdash; and
+    the first one is a hint that O(1) space is achievable.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>In place?</th></tr></thead>
+      <tbody>
+        <tr><td>splice per duplicate</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td><td>yes</td></tr>
+        <tr><td>Set / filter</td><td class="mono">O(n)</td><td class="mono">O(n)</td><td>no</td></tr>
+        <tr><td><strong>Read/write pointers</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td><td>yes</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>One pass, one comparison and at most one assignment per element. O(n) time. Two integers of
+  state, whatever the input size &mdash; O(1) space, and this time genuinely O(1), because there is
+  no output array to excuse.</p>
+
+  <p>Worth noting: the number of <em>writes</em> equals the number of distinct values. On an array
+  with no duplicates, every write is <code>nums[i] = nums[i]</code>. Some implementations add
+  <code>if (write !== read)</code> to skip those; it changes nothing asymptotically and rarely
+  matters.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Because the array is sorted, duplicates are adjacent, so I only need to compare each
+    element with the last one I kept &mdash; no Set required. I keep a write pointer at the next slot
+    for a distinct value, starting at 1 since the first element is always kept, and copy forward only
+    when <code>nums[read] !== nums[write - 1]</code>. O(n) time, O(1) space, and I return the write
+    pointer as the new length.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Comparing with <code>nums[read - 1]</code> after writing</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; compares against overwritten data</span></div>
+<pre><code>function broken(nums) {
+  if (nums.length === 0) return 0;
+  let write = 1;
+  for (let read = 1; read &lt; nums.length; read++) {
+    if (nums[read] !== nums[read - 1]) {     // reads a slot we may have overwritten
+      nums[write] = nums[read];
+      write++;
+    }
+  }
+  return write;
+}
+
+const a = [0,0,1,1,1,2,2,3,3,4];
+console.log(broken(a), a.slice(0, 5));   // 5 [0,1,2,3,4]  -- correct here!
+
+// On a SORTED array this happens to be safe, because write never
+// catches up to read and the value at read-1 is still the original.
+// It is right by circumstance rather than by design. Comparing with
+// nums[write - 1] says what you actually mean -- "the last value I
+// committed" -- and stays correct if the algorithm ever changes.</code></pre>
+  </div>
+
+  <h3>2. Starting <code>write</code> at 0</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; index -1</span></div>
+<pre><code>function broken(nums) {
+  let write = 0;                             // should be 1
+  for (let read = 0; read &lt; nums.length; read++) {
+    if (nums[read] !== nums[write - 1]) {    // nums[-1] on the first step
+      nums[write] = nums[read];
+      write++;
+    }
+  }
+  return write;
+}
+
+const a = [1, 1, 2];
+console.log(broken(a), a.slice(0, 2));
+
+// nums[-1] is undefined, which is never equal to a real value, so
+// the first element is written and it works -- again by accident.
+// Being explicit that index 0 is always kept, and starting write
+// at 1, removes the reliance on undefined comparing unequal.</code></pre>
+  </div>
+
+  <h3>3. Assuming the array is sorted when it is not</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; on unsorted input</span></div>
+<pre><code>function neighbourOnly(nums) {
+  if (nums.length === 0) return 0;
+  let write = 1;
+  for (let read = 1; read &lt; nums.length; read++) {
+    if (nums[read] !== nums[write - 1]) nums[write++] = nums[read];
+  }
+  return write;
+}
+
+const sorted = [1,1,2,2,3];
+console.log(neighbourOnly(sorted), sorted.slice(0, 3));   // 3 [1,2,3]  correct
+
+const unsorted = [1,2,1,2,1];
+const k = neighbourOnly(unsorted);
+console.log(k, unsorted.slice(0, k));   // 5 [1,2,1,2,1]  nothing removed
+
+// Every neighbour differs, so nothing is a "duplicate" by the
+// adjacency test. For unsorted input you need a Set -- which means
+// O(n) space. The sorted guarantee is what buys the O(1).</code></pre>
+  </div>
+
+  <h3>4. Returning the array instead of the length</h3>
+
+  <p>The signature returns a number, and the array still contains junk past index <code>k</code>.
+  Returning <code>nums</code> hands the caller data that looks wrong. If you want to return an array,
+  truncate first with <code>nums.length = write</code>.</p>
+
+  <h3>5. Advancing <code>read</code> after a splice</h3>
+
+  <p>If you do use <code>splice</code>, you must <strong>not</strong> increment the index in the same
+  step &mdash; a different element has just slid into that slot. It is the same trap as Move Zeroes,
+  and it is one more reason to avoid <code>splice</code> in a loop entirely.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the five-line version from memory</strong>, then say why <code>write</code>
+    starts at 1.</li>
+    <li><strong>Allow at most two of each.</strong> In Step 6 &mdash; write it from memory and work
+    out why the comparison becomes <code>nums[write - 2]</code>.</li>
+    <li><strong>Remove Element.</strong> Delete every occurrence of a given value in place and return
+    the new length. The same skeleton with a different keep-test &mdash; and the array need not be
+    sorted, because the test does not involve neighbours.</li>
+    <li><strong>Count the distinct values without modifying the array.</strong> One pass, one counter,
+    comparing with the previous element. Two lines.</li>
+    <li><strong>Merge two sorted arrays, removing duplicates.</strong> Two read pointers and one
+    write pointer &mdash; the natural next step, and it is the merge step of merge sort with a
+    dedupe.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p>Two ideas, both already familiar. <strong>Read pointer, write pointer</strong> for any in-place
+    filter that must preserve order. And <strong>sorted means adjacent</strong>: whenever a problem
+    hands you a sorted array, the first question is what &ldquo;compare against everything&rdquo; can
+    be downgraded to &ldquo;compare against my neighbour&rdquo;. That downgrade is usually worth a
+    whole complexity class, or a whole data structure.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="../hashmap/06-ransom-note.html">&larr; Ransom Note</a>
+  <a href="02-squares-of-sorted-array.html">Next: Squares of a Sorted Array &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

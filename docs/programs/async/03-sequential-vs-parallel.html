@@ -1,0 +1,974 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sequential vs Parallel</title>
+<meta name="description" content="The await-in-a-loop bug, when sequential is actually required, and the unhandled-rejection trap in Promise.all.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Async patterns &middot; Problem 03</p>
+  <h1>Sequential vs Parallel Execution</h1>
+  <p class="standfirst">The <code>await</code>-in-a-loop bug is the most common async mistake there is,
+  and the fix is one line. The interesting part is the other direction: knowing when sequential is
+  <em>required</em>, and the two traps that make <code>Promise.all</code> the wrong tool even when the
+  work is independent.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the bug, and the one-line fix</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const fetchUser = async (id) =&gt; { await sleep(50); return { id, name: 'u' + id }; };
+
+const ids = [1, 2, 3, 4, 5];
+
+// SEQUENTIAL -- each await blocks the next iteration
+let t = Date.now();
+const seq = [];
+for (const id of ids) {
+  seq.push(await fetchUser(id));
+}
+const seqMs = Date.now() - t;
+
+// PARALLEL -- all five start before any is awaited
+t = Date.now();
+const par = await Promise.all(ids.map(fetchUser));
+const parMs = Date.now() - t;
+
+console.log('sequential : ~' + seqMs + ' ms   (5 x 50)');
+console.log('parallel   : ~' + parMs + ' ms   (the slowest one)');
+console.log('same result:', JSON.stringify(seq) === JSON.stringify(par));
+console.log('');
+console.log('The requests are independent. There was never a reason to');
+console.log('wait for user 1 before asking for user 2.');
+console.log('');
+console.log('With 100 users and a 200 ms API, the difference is 20');
+console.log('seconds versus 200 milliseconds.');</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The rule</span>
+    <p><strong>Sequential</strong> when a later step needs an earlier step's result, or when order
+    matters, or when you must not overload something.</p>
+    <p><strong>Parallel</strong> when the operations are genuinely independent.</p>
+    <p>The tell for the bug: an <code>await</code> inside a loop whose body does not use anything from
+    the previous iteration.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">where the awaits actually are</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const timeline = [];
+const t0 = Date.now();
+
+const task = async (name, ms) =&gt; {
+  timeline.push('start ' + name + ' at ' + (Date.now() - t0) + ' ms');
+  await sleep(ms);
+  timeline.push('  end ' + name + ' at ' + (Date.now() - t0) + ' ms');
+  return name;
+};
+
+console.log('--- sequential ---');
+timeline.length = 0;
+await task('A', 40);
+await task('B', 40);
+timeline.forEach((l) =&gt; console.log('  ' + l));
+
+console.log('');
+console.log('--- parallel: start both, then await ---');
+timeline.length = 0;
+const pa = task('A', 40);        // starts NOW
+const pb = task('B', 40);        // starts NOW
+await pa;
+await pb;
+timeline.forEach((l) =&gt; console.log('  ' + l));
+
+console.log('');
+console.log('Note the second version uses `await` twice and is still');
+console.log('parallel. What matters is WHEN the function was CALLED,');
+console.log('not when it is awaited.');
+console.log('');
+console.log('An async function starts running the moment you call it.');
+console.log('`await` only decides when YOU stop and wait.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the four loop shapes</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">four loops, four different behaviours</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const work = async (n) =&gt; { await sleep(30); return n * 2; };
+const items = [1, 2, 3, 4];
+
+// 1. for...of with await -- SEQUENTIAL, and it waits
+let t = Date.now();
+const a = [];
+for (const n of items) a.push(await work(n));
+console.log('1. for...of + await   : ~' + (Date.now() - t) + ' ms  ->',
+            JSON.stringify(a));
+
+// 2. forEach with async -- PARALLEL, and it does NOT wait
+t = Date.now();
+const b = [];
+items.forEach(async (n) =&gt; { b.push(await work(n)); });
+console.log('2. forEach + async    : ~' + (Date.now() - t) + ' ms  ->',
+            JSON.stringify(b), ' <- empty!');
+
+// 3. map + Promise.all -- PARALLEL, and it waits
+t = Date.now();
+const c = await Promise.all(items.map(work));
+console.log('3. map + Promise.all  : ~' + (Date.now() - t) + ' ms  ->',
+            JSON.stringify(c));
+
+// 4. for await...of over an array of promises -- PARALLEL start,
+//    sequential consumption
+t = Date.now();
+const d = [];
+for await (const value of items.map(work)) d.push(value);
+console.log('4. for await...of     : ~' + (Date.now() - t) + ' ms  ->',
+            JSON.stringify(d));
+
+await sleep(60);
+console.log('');
+console.log('and forEach eventually filled up:', JSON.stringify(b));
+console.log('  -- long after the line that logged it.');
+
+console.log('');
+console.log('Number 4 is worth knowing: map() started all four');
+console.log('immediately, so it is as fast as Promise.all, but you');
+console.log('receive the values one at a time in input order. Useful');
+console.log('when you want to process each result as it becomes');
+console.log('available without holding them all.');</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Why <code>forEach</code> can never work</span>
+    <p><code>forEach</code> calls your callback and <strong>throws away the return value</strong>. An
+    async callback returns a promise; <code>forEach</code> discards it. There is nothing to await, so
+    the loop finishes immediately with every task still in flight.</p>
+    <p>Worse: a rejection inside that callback becomes an unhandled rejection, because nobody holds the
+    promise. Same for <code>map</code> without <code>Promise.all</code>, and for
+    <code>filter</code>, <code>some</code> and <code>every</code> &mdash; all of which treat a returned
+    promise as a truthy object.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">filter and some with an async predicate</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const isEvenAsync = async (n) =&gt; { await sleep(5); return n % 2 === 0; };
+
+const items = [1, 2, 3, 4, 5, 6];
+
+// filter with an async predicate: EVERY promise is truthy
+const wrong = items.filter(isEvenAsync);
+console.log('filter(async)  :', JSON.stringify(wrong), ' <- kept everything');
+console.log('  because a Promise object is always truthy:',
+            !!Promise.resolve(false));
+
+// some / every: same problem
+console.log('some(async)    :', items.some(isEvenAsync), ' <- always true');
+console.log('every(async)   :', items.every(isEvenAsync), ' <- always true');
+console.log('  even with a predicate that always resolves false:');
+console.log('    ', items.some(async () =&gt; false));
+
+// the fix: resolve the predicates first, then filter synchronously
+const flags = await Promise.all(items.map(isEvenAsync));
+const right = items.filter((_, i) =&gt; flags[i]);
+console.log('');
+console.log('filter, done properly:', JSON.stringify(right));
+
+// a reusable helper
+async function asyncFilter(arr, predicate) {
+  const keep = await Promise.all(arr.map(predicate));
+  return arr.filter((_, i) =&gt; keep[i]);
+}
+async function asyncSome(arr, predicate) {
+  const flags = await Promise.all(arr.map(predicate));
+  return flags.some(Boolean);
+}
+console.log('asyncFilter          :', JSON.stringify(await asyncFilter(items, isEvenAsync)));
+console.log('asyncSome            :', await asyncSome(items, isEvenAsync));
+console.log('asyncSome(always no) :', await asyncSome(items, async () =&gt; false));
+
+console.log('');
+console.log('Note asyncSome loses short-circuiting -- it runs every');
+console.log('predicate. If that matters you need a loop, and then you');
+console.log('are back to sequential.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why the difference scales</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; as the list grows</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const call = async () =&gt; { await sleep(20); return 1; };
+
+console.log('items   sequential   parallel   ratio');
+
+for (const n of [1, 2, 5, 10, 25]) {
+  const items = Array.from({ length: n }, (_, i) =&gt; i);
+
+  let t = Date.now();
+  for (const _ of items) await call();
+  const seq = Date.now() - t;
+
+  t = Date.now();
+  await Promise.all(items.map(call));
+  const par = Date.now() - t;
+
+  console.log(String(n).padStart(5) + '   ' +
+              String(seq + ' ms').padStart(10) + '   ' +
+              String(par + ' ms').padStart(8) + '   ' +
+              (seq / Math.max(par, 1)).toFixed(1) + 'x');
+}
+
+console.log('');
+console.log('Sequential is O(n) in latency. Parallel is O(1) -- the');
+console.log('slowest single call -- until you hit a connection limit.');
+console.log('');
+console.log('That is the whole argument, and it is why this bug is');
+console.log('worth catching in review: it does not degrade gracefully,');
+console.log('it degrades linearly with your data.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; ask what depends on what</h2>
+
+  <div class="trace">
+<pre>  Draw the dependency graph. Anything with no arrow between it
+  can run at the same time.
+
+
+  SEQUENTIAL -- a chain:
+
+      getUser  ->  getPosts(user.id)  ->  getComments(posts[0].id)
+
+      Each needs the one before it. No choice.
+
+
+  PARALLEL -- independent:
+
+      getUser
+      getSettings        all three need only the id you already have
+      getNotifications
+
+
+  MIXED -- the common real case:
+
+      getUser  ->  +-- getPosts(user.id)     --+
+                   |                            |-> render
+                   +-- getSettings(user.id)  --+
+
+      One await, then Promise.all, then continue.
+      NOT three sequential awaits.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the mixed case, done three ways</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const getUser = async (id) =&gt; { await sleep(40); return { id, name: 'Ada' }; };
+const getPosts = async (uid) =&gt; { await sleep(40); return ['p1', 'p2']; };
+const getSettings = async (uid) =&gt; { await sleep(40); return { theme: 'dark' }; };
+const getFriends = async (uid) =&gt; { await sleep(40); return ['bob']; };
+
+// A: all sequential -- 4 x 40
+let t = Date.now();
+const u1 = await getUser(1);
+const p1 = await getPosts(u1.id);
+const s1 = await getSettings(u1.id);
+const f1 = await getFriends(u1.id);
+console.log('A. four awaits in a row : ~' + (Date.now() - t) + ' ms');
+
+// B: the user first, then the three dependents together -- 2 x 40
+t = Date.now();
+const u2 = await getUser(1);
+const [p2, s2, f2] = await Promise.all([
+  getPosts(u2.id), getSettings(u2.id), getFriends(u2.id),
+]);
+console.log('B. one await, then all  : ~' + (Date.now() - t) + ' ms');
+
+// C: start everything that CAN start, await later
+t = Date.now();
+const userPromise = getUser(1);
+const settingsPromise = getSettings(1);        // only needs the id we already have
+const u3 = await userPromise;
+const [p3, f3] = await Promise.all([getPosts(u3.id), getFriends(u3.id)]);
+const s3 = await settingsPromise;              // already finished
+console.log('C. start early, await late: ~' + (Date.now() - t) + ' ms');
+
+console.log('');
+console.log('All three produce the same data:',
+            JSON.stringify([p1, s1, f1]) === JSON.stringify([p2, s2, f2]) &amp;&amp;
+            JSON.stringify([p2, s2, f2]) === JSON.stringify([p3, s3, f3]));
+console.log('');
+console.log('B is the version to write: it reads top to bottom and it');
+console.log('is twice as fast as A.');
+console.log('');
+console.log('C is faster still where it applies -- getSettings only');
+console.log('needed the id, which we had all along. Look for calls that');
+console.log('do not actually depend on the await above them; they are');
+console.log('very common.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; when sequential is required</h2>
+
+  <p>Three cases where the loop must stay sequential, and no amount of <code>Promise.all</code> will
+  help.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">1. pagination &mdash; you cannot ask for page 2 until page 1 arrives</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// the server returns a cursor for the next page
+const pages = {
+  null: { items: ['a', 'b'], next: 'c1' },
+  c1: { items: ['c', 'd'], next: 'c2' },
+  c2: { items: ['e'], next: null },
+};
+const fetchPage = async (cursor) =&gt; { await sleep(20); return pages[cursor]; };
+
+const all = [];
+let cursor = null;
+let requests = 0;
+const t0 = Date.now();
+
+do {
+  const page = await fetchPage(cursor);          // MUST be sequential
+  requests++;
+  all.push(...page.items);
+  cursor = page.next;
+  console.log('  page ' + requests + ': ' + JSON.stringify(page.items) +
+              '  next cursor: ' + page.next);
+} while (cursor !== null);
+
+console.log('');
+console.log('collected:', JSON.stringify(all), 'in', requests, 'requests,',
+            '~' + (Date.now() - t0) + ' ms');
+console.log('');
+console.log('There is no parallel version. The cursor for page 2 is IN');
+console.log('page 1. Genuine sequential dependency.');
+console.log('');
+console.log('If the API gave you a total count or numbered pages, you');
+console.log('could parallelise -- which is exactly why good APIs do.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">2. rate limits and 3. ordered side effects</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// 2. the server allows 1 request per 30 ms
+let lastCall = 0;
+let violations = 0;
+const rateLimitedApi = async (n) =&gt; {
+  const gap = Date.now() - lastCall;
+  if (lastCall !== 0 &amp;&amp; gap &lt; 25) violations++;
+  lastCall = Date.now();
+  await sleep(10);
+  return n;
+};
+
+violations = 0; lastCall = 0;
+await Promise.all([1, 2, 3, 4, 5].map(rateLimitedApi));
+console.log('Promise.all against a rate limit:');
+console.log('  violations:', violations, 'of 4 gaps -- every one too fast');
+
+violations = 0; lastCall = 0;
+for (const n of [1, 2, 3, 4, 5]) { await rateLimitedApi(n); await sleep(25); }
+console.log('  sequential with a pause: violations', violations);
+
+// 3. writes that must land in order
+const log = [];
+const append = async (line, ms) =&gt; { await sleep(ms); log.push(line); };
+
+log.length = 0;
+await Promise.all([
+  append('1. created the record', 30),
+  append('2. attached the file', 10),
+  append('3. sent the email', 20),
+]);
+console.log('');
+console.log('ordered writes, in parallel:');
+log.forEach((l) =&gt; console.log('  ' + l));
+console.log('  -- the audit log is in completion order, which is wrong');
+
+log.length = 0;
+await append('1. created the record', 30);
+await append('2. attached the file', 10);
+await append('3. sent the email', 20);
+console.log('');
+console.log('sequential:');
+log.forEach((l) =&gt; console.log('  ' + l));
+
+console.log('');
+console.log('Three legitimate reasons to stay sequential:');
+console.log('  a dependency between steps  (pagination, cursors)');
+console.log('  a limit on the other side   (rate limits, connections)');
+console.log('  order is part of the result (audit logs, migrations,');
+console.log('                               anything transactional)');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; the helpers, written out</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">sequential and parallel map, both explicit</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// deliberately sequential, and it says so in the name
+async function mapSeries(items, fn) {
+  const out = [];
+  for (let i = 0; i &lt; items.length; i++) {
+    out.push(await fn(items[i], i, items));
+  }
+  return out;
+}
+
+// deliberately parallel
+async function mapParallel(items, fn) {
+  return Promise.all(items.map(fn));
+}
+
+// sequential reduce -- each step needs the previous accumulator
+async function reduceSeries(items, fn, initial) {
+  let acc = initial;
+  for (let i = 0; i &lt; items.length; i++) {
+    acc = await fn(acc, items[i], i, items);
+  }
+  return acc;
+}
+
+// the same thing written as a promise chain, which is how you did
+// it before async/await -- and it is worth recognising
+function reduceChain(items, fn, initial) {
+  return items.reduce(
+    (promise, item, i) =&gt; promise.then((acc) =&gt; fn(acc, item, i, items)),
+    Promise.resolve(initial)
+  );
+}
+
+const items = [1, 2, 3, 4];
+const double = async (n) =&gt; { await sleep(20); return n * 2; };
+const add = async (acc, n) =&gt; { await sleep(20); return acc + n; };
+
+let t = Date.now();
+console.log('mapSeries   :', JSON.stringify(await mapSeries(items, double)),
+            ' ~' + (Date.now() - t) + ' ms');
+
+t = Date.now();
+console.log('mapParallel :', JSON.stringify(await mapParallel(items, double)),
+            ' ~' + (Date.now() - t) + ' ms');
+
+t = Date.now();
+console.log('reduceSeries:', await reduceSeries(items, add, 0),
+            ' ~' + (Date.now() - t) + ' ms');
+
+t = Date.now();
+console.log('reduceChain :', await reduceChain(items, add, 0),
+            ' ~' + (Date.now() - t) + ' ms');
+
+console.log('');
+console.log('The reduce is inherently sequential -- step 3 needs the');
+console.log('accumulator from step 2. That is not a bug, it is the');
+console.log('definition of a fold.');
+console.log('');
+console.log('Naming the helper `mapSeries` rather than `mapAsync` is');
+console.log('worth doing. A reviewer can then see that the sequencing');
+console.log('was a decision, not an accident.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the reduce trap that looks parallel and is not</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const work = async (n) =&gt; { await sleep(20); return n * 2; };
+
+// (a) reduce with an async reducer -- SEQUENTIAL, as intended
+let t = Date.now();
+const seq = await [1, 2, 3, 4].reduce(async (accPromise, n) =&gt; {
+  const acc = await accPromise;
+  acc.push(await work(n));
+  return acc;
+}, Promise.resolve([]));
+console.log('async reducer   : ~' + (Date.now() - t) + ' ms ->', JSON.stringify(seq));
+
+// (b) the same shape, but the work starts BEFORE the accumulator is
+//     awaited -- accidentally parallel
+t = Date.now();
+const par = await [1, 2, 3, 4].reduce(async (accPromise, n) =&gt; {
+  const valuePromise = work(n);              // starts NOW
+  const acc = await accPromise;
+  acc.push(await valuePromise);
+  return acc;
+}, Promise.resolve([]));
+console.log('work started first: ~' + (Date.now() - t) + ' ms ->', JSON.stringify(par));
+
+console.log('');
+console.log('Same output, half the time, and the only difference is');
+console.log('one line moved above another.');
+console.log('');
+console.log('This is the whole lesson of the page in miniature: the');
+console.log('CALL starts the work, the AWAIT only decides when you');
+console.log('block. Move calls up, awaits down.');
+console.log('');
+console.log('It is also why (b) is a fragile thing to write on purpose.');
+console.log('If you want parallel, say so with Promise.all -- do not');
+console.log('rely on a reader noticing the line order.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the two traps in <code>Promise.all</code></h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Trap 1 &mdash; which shapes leak an unhandled rejection</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const failFast = async () =&gt; { await sleep(10); throw new Error('fast failure'); };
+const failSlow = async () =&gt; { await sleep(40); throw new Error('slow failure'); };
+
+let seen = [];
+const onUnhandled = (e) =&gt; seen.push(e?.message ?? String(e));
+const canObserve = typeof process !== 'undefined' &amp;&amp; !!process.on;
+if (canObserve) process.on('unhandledRejection', onUnhandled);
+
+const check = async (label, run) =&gt; {
+  seen = [];
+  try { await run(); } catch (e) { /* handled here */ }
+  await sleep(80);
+  console.log(label.padEnd(26) + (seen.length
+    ? 'UNHANDLED: ' + JSON.stringify(seen)
+    : 'no unhandled rejections'));
+};
+
+await check('Promise.all', () =&gt; Promise.all([failFast(), failSlow()]));
+await check('Promise.race', () =&gt; Promise.race([failFast(), failSlow()]));
+await check('Promise.allSettled', () =&gt; Promise.allSettled([failFast(), failSlow()]));
+
+await check('await only one of two', async () =&gt; {
+  const a = failFast();
+  const b = failSlow();      // created, never awaited, never caught
+  await a;
+});
+
+await check('forEach + async throw', async () =&gt; {
+  [1, 2].forEach(async () =&gt; { await sleep(5); throw new Error('forEach throw'); });
+});
+
+console.log('');
+console.log('The good news, and it is worth knowing precisely:');
+console.log('  Promise.all, race and allSettled all attach handlers to');
+console.log('  EVERY input promise. all rejects on the first failure');
+console.log('  and then ignores the rest -- but ignoring is not the');
+console.log('  same as not handling. Nothing leaks.');
+console.log('');
+console.log('The two shapes that DO leak:');
+console.log('  creating a promise and awaiting only some of them --');
+console.log('    the ones you never touched reject into the void;');
+console.log('  forEach with an async callback -- the promise is');
+console.log('    discarded the instant it is created.');
+console.log('');
+console.log('So the rule is not "avoid Promise.all". It is: every');
+console.log('promise you create must end up somewhere that can catch');
+console.log('it. Passing it to a combinator counts.');
+
+if (canObserve &amp;&amp; process.off) process.off('unhandledRejection', onUnhandled);</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Trap 2 &mdash; the await that runs before the all</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const fetchThing = async (n) =&gt; { await sleep(30); return n; };
+
+// looks parallel, is not: each element is AWAITED while the array
+// is being built
+let t = Date.now();
+const wrong = await Promise.all([
+  await fetchThing(1),
+  await fetchThing(2),
+  await fetchThing(3),
+]);
+console.log('with awaits inside the array : ~' + (Date.now() - t) + ' ms ->',
+            JSON.stringify(wrong));
+
+t = Date.now();
+const right = await Promise.all([
+  fetchThing(1),
+  fetchThing(2),
+  fetchThing(3),
+]);
+console.log('without them                 : ~' + (Date.now() - t) + ' ms ->',
+            JSON.stringify(right));
+
+console.log('');
+console.log('Identical output. The first version awaited each call as');
+console.log('it built the array, so by the time Promise.all saw them');
+console.log('they were plain values that had already taken 30 ms each.');
+console.log('');
+console.log('Promise.all does not make anything parallel. It waits for');
+console.log('promises that are ALREADY running. Whether they run');
+console.log('concurrently was decided by where you called them.');
+
+// the same trap wearing a different hat
+console.log('');
+t = Date.now();
+const alsoWrong = [];
+for (const n of [1, 2, 3]) alsoWrong.push(await fetchThing(n));
+await Promise.all(alsoWrong);
+console.log('push(await ...) then all     : ~' + (Date.now() - t) + ' ms');
+
+t = Date.now();
+const alsoRight = [];
+for (const n of [1, 2, 3]) alsoRight.push(fetchThing(n));   // no await
+await Promise.all(alsoRight);
+console.log('push(promise) then all       : ~' + (Date.now() - t) + ' ms');
+console.log('');
+console.log('One keyword. Collect PROMISES in the loop and await them');
+console.log('after, or use map -- never `push(await ...)` when the');
+console.log('items are independent.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">the decision table, as code</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const call = async (n) =&gt; { await sleep(20); if (n === 3) throw new Error('n=3'); return n; };
+const items = [1, 2, 3, 4];
+
+const describe = async (label, fn) =&gt; {
+  const t = Date.now();
+  try {
+    const v = await fn();
+    console.log(label.padEnd(30) + '~' + String(Date.now() - t).padStart(4) +
+                ' ms  ' + JSON.stringify(v));
+  } catch (e) {
+    console.log(label.padEnd(30) + '~' + String(Date.now() - t).padStart(4) +
+                ' ms  threw: ' + e.message);
+  }
+};
+
+await describe('all, need every result', () =&gt; Promise.all(items.map(call)));
+
+await describe('allSettled, tolerate some', async () =&gt;
+  (await Promise.allSettled(items.map(call)))
+    .map((r) =&gt; (r.status === 'fulfilled' ? r.value : 'X')));
+
+await describe('any, need one winner', () =&gt; Promise.any(items.map(call)));
+
+await describe('race, first to settle', () =&gt; Promise.race(items.map(call)));
+
+await describe('sequential, order matters', async () =&gt; {
+  const out = [];
+  for (const n of items) { try { out.push(await call(n)); } catch { out.push('X'); } }
+  return out;
+});
+
+await describe('pool of 2, bounded', async () =&gt; {
+  const results = new Array(items.length);
+  let next = 0;
+  const worker = async () =&gt; {
+    while (next &lt; items.length) {
+      const i = next++;
+      try { results[i] = await call(items[i]); } catch { results[i] = 'X'; }
+    }
+  };
+  await Promise.all([worker(), worker()]);
+  return results;
+});
+
+console.log('');
+console.log('Six shapes, and choosing between them is the actual');
+console.log('question. "Should this be parallel?" is really:');
+console.log('  do I need every result?          -> all / allSettled');
+console.log('  do I need just one?              -> any / race');
+console.log('  does step n+1 need step n?       -> sequential');
+console.log('  is there a limit on the other side? -> a pool');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Shape</th><th>Latency</th><th>Peak memory</th><th>Fails when</th></tr></thead>
+      <tbody>
+        <tr><td>Sequential</td><td class="mono">sum of all</td><td class="mono">1 result</td><td>the first failure, and it stops</td></tr>
+        <tr><td><code>Promise.all</code></td><td class="mono">the longest</td><td class="mono">n results</td><td>the first failure &mdash; the rest run on, unobserved</td></tr>
+        <tr><td><code>Promise.allSettled</code></td><td class="mono">the longest</td><td class="mono">n results</td><td>never</td></tr>
+        <tr><td>Pool of k</td><td class="mono">about sum / k</td><td class="mono">k results</td><td>configurable</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Latency is the headline, but the memory column decides real systems. <code>Promise.all</code>
+  over ten thousand rows holds ten thousand results before you can process any of them. Sequential
+  holds one. A pool holds k &mdash; which is why the pool is usually the production answer even when
+  latency does not require it.</p>
+
+  <p>The failure column is the subtle one. Sequential <strong>stops</strong> at the first error, which
+  is often exactly what you want for a series of writes. <code>Promise.all</code> reports the first
+  error while the other operations run to completion &mdash; so a partial write is possible and you
+  will not know which parts landed.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;<code>await</code> in a loop is sequential, so the latency is the sum. If the iterations
+    are independent I collect the promises &mdash; usually with <code>map</code> &mdash; and await them
+    together, which makes the latency the maximum instead. The thing to be precise about is that
+    <code>Promise.all</code> does not create parallelism: calling the async function starts the work,
+    and <code>Promise.all</code> just waits. So <code>Promise.all([await a(), await b()])</code> is
+    still sequential. I would keep it sequential when a step depends on the previous one, when order
+    is part of the result, or when the other side has a rate limit &mdash; and for a large list I would
+    use a bounded pool rather than <code>Promise.all</code>, because <code>all</code> holds every
+    result in memory at once.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. <code>await</code> in a loop over independent work</h3>
+
+  <p>Step 1. It is the most common async performance bug in JavaScript, and it always looks
+  reasonable.</p>
+
+  <h3>2. <code>forEach</code> with an async callback</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; and it swallows errors too</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+let unhandled = 0;
+const onUnhandled = () =&gt; unhandled++;
+if (typeof process !== 'undefined' &amp;&amp; process.on) {
+  process.on('unhandledRejection', onUnhandled);
+}
+
+async function saveAll(items) {
+  const saved = [];
+  items.forEach(async (item) =&gt; {
+    await sleep(10);
+    if (item === 3) throw new Error('item 3 failed to save');
+    saved.push(item);
+  });
+  return saved;                        // returns BEFORE anything saved
+}
+
+const result = await saveAll([1, 2, 3, 4]);
+console.log('returned immediately with:', JSON.stringify(result));
+console.log('  the caller believes nothing was saved');
+
+await sleep(60);
+console.log('');
+console.log('60 ms later, actually saved:', JSON.stringify(result));
+console.log('unhandled rejections:', unhandled, '-- the throw went nowhere');
+console.log('');
+console.log('Three separate bugs in four lines:');
+console.log('  1. the function returned before the work finished');
+console.log('  2. the caller cannot know when it IS finished');
+console.log('  3. the error was never reported to anyone');
+
+console.log('');
+console.log('Fixes:');
+console.log('  for...of  -> sequential, errors propagate');
+console.log('  map + all -> parallel, errors propagate');
+
+async function saveAllFixed(items) {
+  return Promise.all(items.map(async (item) =&gt; {
+    await sleep(10);
+    if (item === 3) throw new Error('item 3 failed to save');
+    return item;
+  }));
+}
+try {
+  await saveAllFixed([1, 2, 3, 4]);
+} catch (e) {
+  console.log('  map + all threw:', e.message, '-- the caller found out');
+}
+
+if (typeof process !== 'undefined' &amp;&amp; process.off) {
+  process.off('unhandledRejection', onUnhandled);
+}</code></pre>
+  </div>
+
+  <h3>3. Parallelising something that must not be</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; a lost update</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// a "database" with read-then-write semantics
+let stored = { count: 0 };
+const read = async () =&gt; { await sleep(10); return { ...stored }; };
+const write = async (doc) =&gt; { await sleep(10); stored = doc; };
+
+const increment = async () =&gt; {
+  const doc = await read();          // read
+  doc.count += 1;                    // modify
+  await write(doc);                  // write
+};
+
+// in parallel: all five read 0, all five write 1
+stored = { count: 0 };
+await Promise.all([increment(), increment(), increment(), increment(), increment()]);
+console.log('five parallel increments  -> count is', stored.count,
+            '(expected 5)');
+
+// sequentially: each reads what the last one wrote
+stored = { count: 0 };
+for (let i = 0; i &lt; 5; i++) await increment();
+console.log('five sequential increments-> count is', stored.count);
+
+console.log('');
+console.log('This is a lost update, and it happens whenever an');
+console.log('operation is read-modify-write and you run several at');
+console.log('once. JavaScript being single-threaded does not save you:');
+console.log('the await is a yield point, and another increment runs');
+console.log('there.');
+console.log('');
+console.log('Fixes, in order of preference:');
+console.log('  make the operation atomic  ($inc, UPDATE ... SET x = x+1)');
+console.log('  use optimistic concurrency (a version field, retry)');
+console.log('  serialise the operation    (a lock, or a queue of one)');
+console.log('');
+console.log('Only the last one is a JavaScript answer. The first is');
+console.log('nearly always the right one.');</code></pre>
+  </div>
+
+  <h3>4. Building the promise array with <code>await</code> in it</h3>
+
+  <p>Step 7's second trap. <code>Promise.all([await a(), await b()])</code> is sequential, and it looks
+  parallel to almost everyone who reads it.</p>
+
+  <h3>5. <code>Promise.all</code> on a list that is not bounded</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; two thousand at once</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+let inFlight = 0, peak = 0;
+const fetchRow = async (id) =&gt; {
+  inFlight++; peak = Math.max(peak, inFlight);
+  await sleep(2);
+  inFlight--;
+  return { id, payload: 'x'.repeat(200) };      // a realistic-ish response
+};
+
+const ids = Array.from({ length: 2000 }, (_, i) =&gt; i);
+
+// Promise.all: 10,000 concurrent, 10,000 results held at once
+peak = 0;
+let t = Date.now();
+const all = await Promise.all(ids.map(fetchRow));
+console.log('Promise.all  : ~' + (Date.now() - t) + ' ms, peak ' + peak +
+            ' concurrent, ' + all.length + ' results held');
+
+// a pool: bounded concurrency AND you can process-and-discard
+peak = 0;
+t = Date.now();
+let processed = 0;
+async function poolConsume(items, limit, fn, onResult) {
+  let next = 0;
+  const worker = async () =&gt; {
+    while (next &lt; items.length) {
+      const i = next++;
+      onResult(await fn(items[i], i));         // handle it, then drop it
+    }
+  };
+  await Promise.all(Array.from({ length: limit }, worker));
+}
+await poolConsume(ids, 50, fetchRow, () =&gt; { processed++; });
+console.log('pool of 50   : ~' + (Date.now() - t) + ' ms, peak ' + peak +
+            ' concurrent, 0 results held (' + processed + ' processed)');
+
+console.log('');
+console.log('The pool is slower in wall-clock terms here, and it is');
+console.log('the one you ship. Promise.all opened 2,000 sockets at once');
+console.log('and held 2,000 response bodies in memory simultaneously;');
+console.log('the pool held 50 and none of the results.');
+console.log('');
+console.log('Whenever the list length comes from data rather than from');
+console.log('a literal, Promise.all is a decision you have to justify.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Say the one-sentence rule</strong>: the call starts the work, the await decides when you
+    block. Then explain why <code>Promise.all([await a(), await b()])</code> is sequential.</li>
+    <li><strong>Write <code>mapSeries</code> and <code>mapParallel</code></strong> and name them so a
+    reader can tell the sequencing was deliberate.</li>
+    <li><strong>List the three reasons to stay sequential.</strong> Step 5 &mdash; dependency, rate
+    limit, order.</li>
+    <li><strong>Name the two shapes that leak an unhandled rejection</strong> &mdash; and why
+    <code>Promise.all</code> is <em>not</em> one of them. Step 7.</li>
+    <li><strong>Take the mixed dependency graph from Step 4</strong> and rewrite version A as version C
+    by hand. Finding calls that do not depend on the await above them is the highest-value habit on
+    this page.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Calling starts the work; awaiting only blocks you.</strong> Every item on this page is a
+    consequence: <code>forEach</code> fails because it throws away the promise, the reduce trap turns on
+    one line's position, and <code>Promise.all</code> is a <em>waiting</em> tool rather than a
+    <em>parallelising</em> one. Move your calls up and your awaits down, and check the dependency graph
+    before you decide either way.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="02-retry-backoff.html">&larr; Retry With Exponential Backoff</a>
+  <a href="04-async-pipeline.html">Next: Async Pipeline / Compose &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

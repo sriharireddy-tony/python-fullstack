@@ -1,0 +1,1067 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retry With Exponential Backoff</title>
+<meta name="description" content="Why the delay doubles, why you must add jitter, and which errors you must never retry.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Async patterns &middot; Problem 02</p>
+  <h1>Retry With Exponential Backoff</h1>
+  <p class="standfirst">Ten lines to retry, and three follow-ups that separate a working answer from a
+  correct one: <strong>why the delay doubles</strong>, <strong>why it needs jitter</strong>, and
+  <strong>which errors must never be retried at all</strong>.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>A network call fails intermittently. Try it again &mdash; but not immediately, and not forever.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; the ten-line answer</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+async function retry(fn, attempts = 3, delay = 100) {
+  let lastError;
+
+  for (let i = 0; i &lt; attempts; i++) {
+    try {
+      return await fn(i);
+    } catch (err) {
+      lastError = err;
+      if (i &lt; attempts - 1) await sleep(delay * 2 ** i);   // 100, 200, 400...
+    }
+  }
+
+  throw lastError;
+}
+
+// a call that fails twice, then succeeds
+let calls = 0;
+const flaky = async () =&gt; {
+  calls++;
+  if (calls &lt; 3) throw new Error('temporary failure ' + calls);
+  return 'succeeded on attempt ' + calls;
+};
+
+const t0 = Date.now();
+console.log(await retry(flaky));
+console.log('took ~' + (Date.now() - t0) + ' ms  (0 + 100 + 200 of waiting)');
+
+// and one that never succeeds
+calls = 0;
+const broken = async () =&gt; { calls++; throw new Error('always fails'); };
+try {
+  await retry(broken, 3, 20);
+} catch (e) {
+  console.log('');
+  console.log('after 3 attempts ->', e.message);
+  console.log('attempts made    :', calls);
+}</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Three numbers, and what each is for</span>
+    <p><strong>attempts</strong> &mdash; the total number of tries, including the first. Bounds the
+    worst case.</p>
+    <p><strong>base delay</strong> &mdash; how long to wait after the first failure. Should be longer
+    than the thing you are waiting to recover.</p>
+    <p><strong>factor</strong> &mdash; usually 2. Each wait doubles, so the total time grows fast
+    enough to actually give the dependency room, without needing many attempts.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; retrying immediately, and retrying at a fixed interval</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0a &mdash; no delay at all</span></div>
+<pre><code>async function retryImmediately(fn, attempts = 5) {
+  for (let i = 0; i &lt; attempts; i++) {
+    try { return await fn(); } catch (e) { if (i === attempts - 1) throw e; }
+  }
+}
+
+// a service that is overloaded and needs 80 ms to recover
+let load = 0;
+let recoveredAt = null;
+const t0 = Date.now();
+setTimeout(() =&gt; { recoveredAt = Date.now() - t0; }, 80);
+
+const service = async () =&gt; {
+  load++;
+  if (recoveredAt === null) throw new Error('503 overloaded');
+  return 'ok';
+};
+
+try {
+  await retryImmediately(service, 5);
+  console.log('succeeded');
+} catch (e) {
+  console.log('failed after', load, 'immediate attempts in',
+              (Date.now() - t0) + ' ms');
+}
+
+console.log('');
+console.log('Five requests fired in under a millisecond, all of them');
+console.log('while the service was still down. They did not help --');
+console.log('they added load to something already struggling.');
+console.log('');
+console.log('This is the retry storm: every client, seeing an error,');
+console.log('immediately makes it worse. It is how a brief blip turns');
+console.log('into an outage.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0b &mdash; a fixed delay, and why doubling beats it</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+function schedule(kind, base, attempts) {
+  const out = [];
+  for (let i = 0; i &lt; attempts; i++) {
+    out.push(kind === 'fixed' ? base : base * 2 ** i);
+  }
+  return out;
+}
+
+const attempts = 8;
+for (const [label, kind] of [['fixed 100 ms', 'fixed'], ['exponential  ', 'exp']]) {
+  const waits = schedule(kind, 100, attempts);
+  const total = waits.reduce((a, b) =&gt; a + b, 0);
+  console.log(label + ':');
+  console.log('  waits : ' + waits.join(', ') + ' ms');
+  console.log('  total : ' + (total / 1000).toFixed(1) + ' s of waiting');
+  console.log('  requests sent in the first second: ' +
+              waits.reduce((n, w, i) =&gt; {
+                const elapsed = waits.slice(0, i).reduce((a, b) =&gt; a + b, 0);
+                return elapsed &lt; 1000 ? n + 1 : n;
+              }, 0));
+  console.log('');
+}
+
+console.log('Fixed spacing sends a steady stream of requests forever.');
+console.log('Exponential backs off fast: after a few failures it is');
+console.log('barely touching the service, which is exactly what a');
+console.log('struggling service needs.');
+console.log('');
+console.log('And it covers a much longer window for the same number of');
+console.log('attempts -- 8 exponential retries span 25 seconds; 8');
+console.log('fixed ones span 0.8.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why jitter is not optional</h2>
+
+  <p>Suppose a service goes down and a thousand clients all start retrying. Without jitter they all
+  wait the same 100&nbsp;ms, then the same 200, then the same 400 &mdash; and hit the recovering
+  service in perfectly synchronised waves.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Demo &mdash; the thundering herd</span></div>
+<pre><code>// simulate 1000 clients that all failed at t=0 and are now retrying
+const CLIENTS = 1000;
+const BASE = 100;
+const ATTEMPTS = 5;
+
+function simulate(jitterKind) {
+  const hits = new Map();     // millisecond bucket -> number of requests
+
+  for (let c = 0; c &lt; CLIENTS; c++) {
+    let elapsed = 0;
+    for (let i = 0; i &lt; ATTEMPTS; i++) {
+      const exp = BASE * 2 ** i;
+      let wait;
+      if (jitterKind === 'none') wait = exp;
+      else if (jitterKind === 'full') wait = Math.random() * exp;
+      else if (jitterKind === 'equal') wait = exp / 2 + Math.random() * exp / 2;
+      elapsed += wait;
+      const bucket = Math.floor(elapsed / 50) * 50;      // 50 ms buckets
+      hits.set(bucket, (hits.get(bucket) || 0) + 1);
+    }
+  }
+
+  return hits;
+}
+
+function report(label, hits) {
+  const buckets = [...hits.entries()].sort((a, b) =&gt; a[0] - b[0]);
+  const peak = Math.max(...buckets.map((b) =&gt; b[1]));
+  console.log(label);
+  console.log('  busiest 50 ms window: ' + peak + ' requests');
+  console.log('  spread over ' + buckets.length + ' windows');
+  console.log('  first few windows:');
+  for (const [ms, n] of buckets.slice(0, 6)) {
+    const bar = '#'.repeat(Math.max(1, Math.round(n / 40)));
+    console.log('    ' + String(ms).padStart(5) + ' ms  ' +
+                String(n).padStart(5) + '  ' + bar);
+  }
+  console.log('');
+}
+
+report('no jitter    (wait = exp)', simulate('none'));
+report('full jitter  (wait = random(0, exp))', simulate('full'));
+report('equal jitter (wait = exp/2 + random(0, exp/2))', simulate('equal'));
+
+console.log('Without jitter every client retries in lockstep: five');
+console.log('spikes of 1000 requests each, in five 50 ms windows. The');
+console.log('service, which was already failing, gets hit by a wall');
+console.log('five times.');
+console.log('');
+console.log('Full jitter spreads the same 5000 requests over ~56');
+console.log('windows and cuts the peak substantially.');
+console.log('');
+console.log('Equal jitter is interesting: it spreads over just as many');
+console.log('windows, but its FIRST window is still 1000, because');
+console.log('exp/2 + random(0, exp/2) with exp=100 always lands between');
+console.log('50 and 100 ms -- inside a single 50 ms bucket. The');
+console.log('guaranteed minimum wait is exactly what re-synchronises');
+console.log('the first retry.');
+console.log('');
+console.log('So: equal jitter preserves the backoff property and still');
+console.log('lets the first wave land together; full jitter breaks the');
+console.log('wave completely but can retry almost immediately. Pick');
+console.log('based on which of those two you care about, and know that');
+console.log('the difference shows up in the FIRST retry, not the later');
+console.log('ones.');</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Which jitter to use</span>
+    <p><strong>Full jitter</strong> &mdash; <code>random(0, exp)</code> &mdash; spreads the load best,
+    and AWS's own analysis recommends it. The cost is that a retry can happen almost immediately.</p>
+    <p><strong>Equal jitter</strong> &mdash; <code>exp/2 + random(0, exp/2)</code> &mdash; keeps a
+    guaranteed minimum wait while still spreading. A reasonable default when you want the backoff
+    property preserved.</p>
+    <p><strong>Decorrelated jitter</strong> &mdash; <code>random(base, previous * 3)</code> &mdash;
+    spreads even better over long retry sequences. Worth mentioning; rarely needed.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; decide what is retryable first</h2>
+
+  <p>Before any backoff maths, the more important question: <strong>should this error be retried at
+  all?</strong> Retrying a permanent failure is pure waste; retrying a non-idempotent write is a
+  correctness bug.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Failure</th><th>Retry?</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Network timeout, connection reset</td><td>yes</td><td>transient by definition</td></tr>
+        <tr><td>500, 502, 503, 504</td><td>yes</td><td>the server said it is having a bad time</td></tr>
+        <tr><td>429 Too Many Requests</td><td>yes &mdash; but honour <code>Retry-After</code></td><td>the server told you when</td></tr>
+        <tr><td>400 Bad Request</td><td><strong>no</strong></td><td>the request is wrong; it will be wrong next time</td></tr>
+        <tr><td>401, 403</td><td><strong>no</strong></td><td>refresh the token instead, then make one new attempt</td></tr>
+        <tr><td>404</td><td><strong>no</strong></td><td>it is not there</td></tr>
+        <tr><td>422 validation</td><td><strong>no</strong></td><td>same as 400</td></tr>
+        <tr><td>A non-idempotent POST</td><td><strong>careful</strong></td><td>the first one may have succeeded</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The one that causes real damage</span>
+    <p>A <code>POST /charge</code> that times out may well have <em>succeeded</em> &mdash; the response
+    was lost, not the request. Retry it and you have charged the customer twice.</p>
+    <p>The fix is an <strong>idempotency key</strong>: the client generates a unique id per logical
+    operation and sends it with every attempt; the server records it and returns the original result
+    for a repeat. Retry safely only when the operation is idempotent, by nature or by key.</p>
+  </div>
+
+  <div class="trace">
+<pre>  retry(fn, { attempts, baseDelay, factor, maxDelay, isRetryable }):
+
+      for i in 0 .. attempts-1:
+
+          try:
+              return await fn(i)
+
+          catch err:
+              if not isRetryable(err):     ->  throw immediately
+              if i is the last attempt:    ->  throw
+
+              exp    = min(baseDelay * factor^i, maxDelay)
+              wait   = jitter(exp)
+              await sleep(wait)
+
+  Four guards, in order:
+      1. is it retryable at all
+      2. have we run out of attempts
+      3. cap the delay so it does not reach hours
+      4. jitter it so clients do not synchronise
+</pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; watch the delays grow</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const t0 = Date.now();
+const at = () =&gt; String(Date.now() - t0).padStart(5) + ' ms  ';
+
+async function retryLoud(fn, opts = {}) {
+  const attempts = opts.attempts ?? 5;
+  const base = opts.baseDelay ?? 50;
+  const factor = opts.factor ?? 2;
+  const maxDelay = opts.maxDelay ?? Infinity;
+  const isRetryable = opts.isRetryable ?? (() =&gt; true);
+
+  let lastError;
+
+  for (let i = 0; i &lt; attempts; i++) {
+    console.log(at() + 'attempt ' + (i + 1) + ' of ' + attempts);
+    try {
+      const value = await fn(i);
+      console.log(at() + '  SUCCESS -> ' + JSON.stringify(value));
+      return value;
+    } catch (err) {
+      lastError = err;
+      console.log(at() + '  failed: ' + err.message);
+
+      if (!isRetryable(err)) {
+        console.log(at() + '  not retryable -- giving up now');
+        throw err;
+      }
+      if (i === attempts - 1) {
+        console.log(at() + '  no attempts left');
+        break;
+      }
+
+      const exp = Math.min(base * factor ** i, maxDelay);
+      console.log(at() + '  backoff: ' + base + ' * ' + factor + '^' + i +
+                  ' = ' + exp + ' ms' +
+                  (base * factor ** i &gt; maxDelay ? '  (capped)' : ''));
+      await sleep(exp);
+    }
+  }
+
+  throw lastError;
+}
+
+let n = 0;
+const flaky = async () =&gt; {
+  n++;
+  if (n &lt; 4) throw new Error('503 service unavailable');
+  return 'recovered';
+};
+
+console.log('=== succeeds on the 4th attempt ===');
+await retryLoud(flaky, { baseDelay: 50, maxDelay: 150 });
+
+console.log('');
+console.log('=== a non-retryable error stops at once ===');
+n = 0;
+const badRequest = async () =&gt; { n++; const e = new Error('400 bad request'); e.status = 400; throw e; };
+try {
+  await retryLoud(badRequest, {
+    baseDelay: 50,
+    isRetryable: (e) =&gt; e.status &gt;= 500 || e.status === 429,
+  });
+} catch (e) {
+  console.log('threw after', n, 'attempt -- no time wasted backing off');
+}</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without the modern syntax</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; promise chaining, no async/await</span></div>
+<pre><code>function sleep(ms) {
+  return new Promise(function (resolve) { setTimeout(resolve, ms); });
+}
+
+function retry(fn, attempts, delay) {
+  if (attempts === undefined) attempts = 3;
+  if (delay === undefined) delay = 100;
+
+  function attempt(i) {
+    return Promise.resolve()
+      .then(function () { return fn(i); })      // catches a SYNCHRONOUS throw too
+      .catch(function (err) {
+        if (i &gt;= attempts - 1) throw err;
+        return sleep(delay * Math.pow(2, i)).then(function () {
+          return attempt(i + 1);                // recursive, not a loop
+        });
+      });
+  }
+
+  return attempt(0);
+}
+
+var calls = 0;
+var flaky = function () {
+  calls++;
+  if (calls &lt; 3) return Promise.reject(new Error('fail ' + calls));
+  return Promise.resolve('ok on ' + calls);
+};
+
+var t0 = Date.now();
+console.log(await retry(flaky, 5, 20));
+console.log('took ~' + (Date.now() - t0) + ' ms');
+
+// note the Promise.resolve().then(fn) wrapper: it means a function
+// that throws SYNCHRONOUSLY is still retried, not thrown immediately
+calls = 0;
+var throwsSync = function () {
+  calls++;
+  if (calls &lt; 3) throw new Error('synchronous throw ' + calls);
+  return Promise.resolve('recovered from a sync throw');
+};
+console.log('');
+console.log(await retry(throwsSync, 5, 20));
+console.log('attempts:', calls);
+console.log('');
+console.log('Without that wrapper, `fn()` throwing synchronously would');
+console.log('escape retry() entirely -- no retries, no catch, just a');
+console.log('throw from a function that returns a promise.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the sync-throw trap, demonstrated</span></div>
+<pre><code>function sleep(ms) { return new Promise((r) =&gt; setTimeout(r, ms)); }
+
+// unsafe: calls fn() outside any try
+function retryUnsafe(fn, attempts) {
+  function attempt(i) {
+    return fn(i).catch((err) =&gt; {          // fn() itself is not guarded
+      if (i &gt;= attempts - 1) throw err;
+      return sleep(5).then(() =&gt; attempt(i + 1));
+    });
+  }
+  return attempt(0);
+}
+
+// safe: everything goes through a promise
+function retrySafe(fn, attempts) {
+  function attempt(i) {
+    return Promise.resolve().then(() =&gt; fn(i)).catch((err) =&gt; {
+      if (i &gt;= attempts - 1) throw err;
+      return sleep(5).then(() =&gt; attempt(i + 1));
+    });
+  }
+  return attempt(0);
+}
+
+let calls = 0;
+const throwsSync = () =&gt; {
+  calls++;
+  if (calls &lt; 3) throw new Error('sync throw ' + calls);
+  return Promise.resolve('ok');
+};
+
+calls = 0;
+try {
+  await retryUnsafe(throwsSync, 5);
+  console.log('unsafe: succeeded');
+} catch (e) {
+  console.log('unsafe:', e.message, '-- after', calls, 'attempt(s)');
+}
+
+calls = 0;
+console.log('safe  :', await retrySafe(throwsSync, 5), '-- after', calls, 'attempts');
+
+console.log('');
+console.log('An `async function` never throws synchronously -- it');
+console.log('always returns a rejected promise. But a plain function');
+console.log('that returns a promise CAN, and so can one that validates');
+console.log('its arguments before doing any work.');
+console.log('');
+console.log('Inside an async retry, `try { await fn() }` already covers');
+console.log('both cases. It is the promise-chaining version that needs');
+console.log('the explicit wrapper.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the one to write</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>const sleep = (ms, signal) =&gt; new Promise((resolve, reject) =&gt; {
+  const timer = setTimeout(resolve, ms);
+  if (signal) signal.addEventListener('abort', () =&gt; {
+    clearTimeout(timer);
+    reject(new Error('aborted'));
+  });
+});
+
+async function retry(fn, options = {}) {
+  const {
+    attempts = 3,
+    baseDelay = 100,
+    factor = 2,
+    maxDelay = 30000,
+    jitter = 'equal',            // 'none' | 'full' | 'equal'
+    isRetryable = () =&gt; true,
+    onRetry = () =&gt; {},
+    signal,
+  } = options;
+
+  let lastError;
+
+  for (let i = 0; i &lt; attempts; i++) {
+    if (signal?.aborted) throw new Error('aborted');
+
+    try {
+      return await fn(i);
+    } catch (err) {
+      lastError = err;
+
+      if (!isRetryable(err, i)) throw err;      // permanent -- stop now
+      if (i === attempts - 1) break;            // out of attempts
+
+      const exp = Math.min(baseDelay * factor ** i, maxDelay);
+      const wait =
+        jitter === 'full' ? Math.random() * exp :
+        jitter === 'equal' ? exp / 2 + Math.random() * (exp / 2) :
+        exp;
+
+      onRetry({ attempt: i + 1, error: err, delay: Math.round(wait) });
+      await sleep(wait, signal);
+    }
+  }
+
+  throw lastError;
+}
+
+// --- a realistic HTTP-shaped policy -----------------------------
+const isRetryableHttp = (err) =&gt; {
+  if (err.name === 'AbortError') return false;
+  if (err.status === undefined) return true;             // network error
+  if (err.status === 429) return true;
+  return err.status &gt;= 500 &amp;&amp; err.status &lt; 600;
+};
+
+const httpError = (status) =&gt; Object.assign(new Error('HTTP ' + status), { status });
+
+let calls = 0;
+const service = async () =&gt; {
+  calls++;
+  if (calls === 1) throw httpError(503);
+  if (calls === 2) throw httpError(502);
+  return { ok: true, onAttempt: calls };
+};
+
+const t0 = Date.now();
+const result = await retry(service, {
+  attempts: 5,
+  baseDelay: 30,
+  isRetryable: isRetryableHttp,
+  onRetry: ({ attempt, error, delay }) =&gt;
+    console.log('  retry ' + attempt + ' after ' + error.message +
+                ', waiting ~' + delay + ' ms'),
+});
+console.log('result:', result, ' total ~' + (Date.now() - t0) + ' ms');
+
+// a permanent error stops immediately
+calls = 0;
+console.log('');
+try {
+  await retry(async () =&gt; { calls++; throw httpError(400); }, {
+    attempts: 5, baseDelay: 30, isRetryable: isRetryableHttp,
+    onRetry: () =&gt; console.log('  (this should never print)'),
+  });
+} catch (e) {
+  console.log('400 ->', e.message, 'after', calls, 'attempt, no backoff');
+}
+
+// and one that exhausts its attempts
+calls = 0;
+console.log('');
+try {
+  await retry(async () =&gt; { calls++; throw httpError(503); }, {
+    attempts: 3, baseDelay: 20, isRetryable: isRetryableHttp,
+    onRetry: ({ attempt, delay }) =&gt;
+      console.log('  retry ' + attempt + ', waiting ~' + delay + ' ms'),
+  });
+} catch (e) {
+  console.log('503 ->', e.message, 'after', calls, 'attempts');
+}</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">honouring Retry-After, and a per-attempt timeout</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// 1. When the server tells you when to come back, listen to it.
+async function retryHonouringHeader(fn, opts = {}) {
+  const { attempts = 4, baseDelay = 50, maxDelay = 5000 } = opts;
+  let lastError;
+
+  for (let i = 0; i &lt; attempts; i++) {
+    try { return await fn(i); }
+    catch (err) {
+      lastError = err;
+      if (i === attempts - 1) break;
+
+      let wait;
+      if (typeof err.retryAfterMs === 'number') {
+        wait = err.retryAfterMs;                       // the server's number wins
+        console.log('  server said Retry-After ' + wait + ' ms');
+      } else {
+        wait = Math.min(baseDelay * 2 ** i, maxDelay);
+        wait = wait / 2 + Math.random() * wait / 2;
+        console.log('  backing off ~' + Math.round(wait) + ' ms');
+      }
+      await sleep(wait);
+    }
+  }
+  throw lastError;
+}
+
+let calls = 0;
+const rateLimited = async () =&gt; {
+  calls++;
+  if (calls === 1) {
+    throw Object.assign(new Error('429'), { status: 429, retryAfterMs: 120 });
+  }
+  if (calls === 2) throw Object.assign(new Error('503'), { status: 503 });
+  return 'ok on attempt ' + calls;
+};
+
+const t0 = Date.now();
+console.log(await retryHonouringHeader(rateLimited, { baseDelay: 30 }));
+console.log('total ~' + (Date.now() - t0) + ' ms');
+
+// 2. A per-attempt timeout, so a hung request does not block all retries
+function withTimeout(promise, ms) {
+  let timer;
+  return Promise.race([
+    promise.finally(() =&gt; clearTimeout(timer)),
+    new Promise((_, reject) =&gt; {
+      timer = setTimeout(() =&gt; reject(new Error('timed out after ' + ms + ' ms')), ms);
+    }),
+  ]);
+}
+
+let attempt = 0;
+const sometimesHangs = () =&gt; {
+  attempt++;
+  const ms = attempt &lt; 3 ? 500 : 10;      // hangs twice, then responds
+  return sleep(ms).then(() =&gt; 'responded on attempt ' + attempt);
+};
+
+console.log('');
+const t1 = Date.now();
+const value = await retryHonouringHeader(
+  () =&gt; withTimeout(sometimesHangs(), 60),
+  { attempts: 5, baseDelay: 20 }
+);
+console.log(value, ' total ~' + (Date.now() - t1) + ' ms');
+console.log('');
+console.log('Without the per-attempt timeout the first hang would have');
+console.log('cost 500 ms on its own. Retry bounds the number of');
+console.log('attempts; a timeout bounds each one.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the circuit breaker &mdash; when retrying is the wrong answer</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// Retrying helps with a blip. If a dependency is properly down,
+// every client retrying just prolongs it. A circuit breaker stops
+// trying at all for a while.
+function createBreaker(fn, { threshold = 3, cooldown = 100 } = {}) {
+  let failures = 0;
+  let state = 'closed';          // closed = normal, open = refusing
+  let openedAt = 0;
+  let calls = 0;
+
+  return {
+    async call(...args) {
+      if (state === 'open') {
+        if (Date.now() - openedAt &lt; cooldown) {
+          throw new Error('circuit open -- not even trying');
+        }
+        state = 'half-open';     // let ONE request through to test
+      }
+
+      try {
+        calls++;
+        const value = await fn(...args);
+        failures = 0;
+        state = 'closed';
+        return value;
+      } catch (err) {
+        failures++;
+        if (failures &gt;= threshold) { state = 'open'; openedAt = Date.now(); }
+        throw err;
+      }
+    },
+    get state() { return state; },
+    get calls() { return calls; },
+  };
+}
+
+let down = true;
+const service = async () =&gt; {
+  if (down) throw new Error('service down');
+  return 'ok';
+};
+
+const breaker = createBreaker(service, { threshold: 3, cooldown: 80 });
+
+for (let i = 1; i &lt;= 8; i++) {
+  try { await breaker.call(); console.log(i + '. ok'); }
+  catch (e) { console.log(i + '. ' + e.message + '   [' + breaker.state + ']'); }
+}
+console.log('  actual calls to the service:', breaker.calls, 'out of 8');
+
+console.log('');
+console.log('after the cooldown, and with the service back:');
+down = false;
+await sleep(100);
+for (let i = 1; i &lt;= 3; i++) {
+  try { console.log('  ' + await breaker.call() + '   [' + breaker.state + ']'); }
+  catch (e) { console.log('  ' + e.message); }
+}
+
+console.log('');
+console.log('Retry and circuit-break solve different halves of the same');
+console.log('problem. Retry handles a transient failure; a breaker');
+console.log('handles a sustained one, by refusing to add load. Real');
+console.log('systems use both, with the breaker outside the retry.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <p>The interesting number is not time complexity, it is <strong>worst-case latency</strong> &mdash;
+  and it is easy to get badly wrong.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>attempts</th><th>base</th><th>factor 2, total waiting</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">3</td><td class="mono">100 ms</td><td class="mono">0.3 s</td></tr>
+        <tr><td class="mono">5</td><td class="mono">100 ms</td><td class="mono">1.5 s</td></tr>
+        <tr><td class="mono">8</td><td class="mono">100 ms</td><td class="mono">12.7 s</td></tr>
+        <tr><td class="mono">10</td><td class="mono">100 ms</td><td class="mono">51 s</td></tr>
+        <tr><td class="mono">10</td><td class="mono">1000 ms</td><td class="mono">8.5 minutes</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The total waiting for <code>n</code> attempts is
+  <code>base &middot; (2<sup>n-1</sup> - 1)</code> &mdash; it doubles with every attempt you add. Two
+  more attempts is four times the worst case. <strong>Always set a <code>maxDelay</code></strong>, and
+  ideally a total deadline for the whole operation.</p>
+
+  <p>The other cost is invisible in a diagram: a retrying request holds a connection, a request
+  context, and whatever the caller is holding, for the entire retry window. Retry an upstream call
+  inside a request handler and you extend the lifetime of everything in that handler.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;A loop with a try/catch: on failure, check whether the error is retryable at all, check
+    whether attempts remain, then sleep for <code>min(base &middot; factor^i, maxDelay)</code> with
+    jitter applied. The delay doubles so a struggling dependency gets exponentially more room; the
+    jitter is there because otherwise every client that failed at the same moment retries at the same
+    moment, which is a thundering herd. I would never retry a 4xx other than 429, and I would only
+    retry a write if it is idempotent or carries an idempotency key &mdash; a timed-out POST may
+    already have succeeded.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Retrying everything</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; five attempts at a request that can never work</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+async function retryEverything(fn, attempts = 5, base = 30) {
+  let last;
+  for (let i = 0; i &lt; attempts; i++) {
+    try { return await fn(); }
+    catch (e) { last = e; if (i &lt; attempts - 1) await sleep(base * 2 ** i); }
+  }
+  throw last;
+}
+
+const httpError = (s, m) =&gt; Object.assign(new Error(m), { status: s });
+
+let calls = 0;
+const t0 = Date.now();
+try {
+  await retryEverything(async () =&gt; {
+    calls++;
+    throw httpError(400, 'email address is not valid');
+  });
+} catch (e) {
+  console.log('400 bad request:');
+  console.log('  attempts :', calls);
+  console.log('  time lost: ~' + (Date.now() - t0) + ' ms');
+  console.log('  the email was never going to become valid.');
+}
+
+// worse: a 401 that should have triggered a token refresh
+calls = 0;
+try {
+  await retryEverything(async () =&gt; {
+    calls++;
+    throw httpError(401, 'token expired');
+  }, 4, 20);
+} catch (e) {
+  console.log('');
+  console.log('401 unauthorized:');
+  console.log('  attempts:', calls, '-- four failed calls with a dead token');
+  console.log('  the fix is to refresh the token, then try ONCE more.');
+}
+
+console.log('');
+console.log('And the retry that is actively harmful:');
+let charges = 0;
+const chargeCard = async () =&gt; {
+  charges++;                                   // the charge DID go through
+  throw new Error('timeout waiting for response');   // the response was lost
+};
+try { await retryEverything(chargeCard, 3, 10); } catch (e) { /* expected */ }
+console.log('  POST /charge timed out 3 times.');
+console.log('  actual charges applied:', charges);
+console.log('  the customer was billed', charges + 'x.');</code></pre>
+  </div>
+
+  <h3>2. No cap on the delay</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the tenth retry is 51 seconds away</span></div>
+<pre><code>function schedule(base, factor, attempts, maxDelay) {
+  const waits = [];
+  for (let i = 0; i &lt; attempts - 1; i++) {
+    waits.push(Math.min(base * factor ** i, maxDelay ?? Infinity));
+  }
+  return waits;
+}
+
+const fmt = (ms) =&gt; ms &gt;= 60000 ? (ms / 60000).toFixed(1) + ' min'
+                  : ms &gt;= 1000 ? (ms / 1000).toFixed(1) + ' s'
+                  : ms + ' ms';
+
+for (const [label, cap] of [['no cap        ', null], ['capped at 5 s ', 5000]]) {
+  const waits = schedule(1000, 2, 12, cap);
+  const total = waits.reduce((a, b) =&gt; a + b, 0);
+  console.log(label + ':');
+  console.log('  waits: ' + waits.map(fmt).join(', '));
+  console.log('  total: ' + fmt(total));
+  console.log('');
+}
+
+console.log('Twelve attempts with a 1 s base and no cap means the last');
+console.log('wait alone is over a quarter of an hour, and the whole');
+console.log('operation takes over half an hour to fail.');
+console.log('');
+console.log('Nobody is waiting half an hour. The request context, the');
+console.log('connection and everything the handler holds are alive that');
+console.log('whole time.');
+console.log('');
+console.log('A cap turns it into "retry every 5 seconds after a while",');
+console.log('which is what you actually wanted. Add a total deadline');
+console.log('too -- give up after 30 seconds regardless of attempts.');</code></pre>
+  </div>
+
+  <h3>3. No jitter</h3>
+
+  <p>Step 3's simulation. It is invisible with one client and catastrophic with a thousand, which is
+  exactly why it never shows up in testing.</p>
+
+  <h3>4. Retrying inside a retry</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the attempt counts multiply</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+async function retry(fn, attempts = 3, base = 5) {
+  let last;
+  for (let i = 0; i &lt; attempts; i++) {
+    try { return await fn(); }
+    catch (e) { last = e; if (i &lt; attempts - 1) await sleep(base * 2 ** i); }
+  }
+  throw last;
+}
+
+let networkCalls = 0;
+const rawFetch = async () =&gt; { networkCalls++; throw new Error('down'); };
+
+// layer 1: the HTTP client retries
+const httpClient = () =&gt; retry(rawFetch, 3);
+
+// layer 2: the service wrapper retries
+const userService = () =&gt; retry(httpClient, 3);
+
+// layer 3: the caller retries too, "just in case"
+const handler = () =&gt; retry(userService, 3);
+
+networkCalls = 0;
+const t0 = Date.now();
+try { await handler(); } catch (e) { /* expected */ }
+
+console.log('three layers, each configured for 3 attempts');
+console.log('  actual network calls:', networkCalls);
+console.log('  time                : ~' + (Date.now() - t0) + ' ms');
+console.log('');
+console.log('3 x 3 x 3 = 27. Nobody wrote 27 anywhere. Each layer was');
+console.log('reasonable on its own.');
+console.log('');
+console.log('Retry in exactly ONE place -- normally the lowest layer');
+console.log('that understands which errors are transient. Everything');
+console.log('above it should pass the failure up.');
+console.log('');
+console.log('And note the delays compound too: the outer retry waits');
+console.log('for the inner retry to exhaust ITS backoff before it even');
+console.log('starts counting.');</code></pre>
+  </div>
+
+  <h3>5. Recursing without a base case, or losing the original error</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; two ways to lose information</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// (a) the error that surfaces is the LAST one, and often the least
+//     informative
+async function retryLosesContext(fn, attempts = 3) {
+  let last;
+  for (let i = 0; i &lt; attempts; i++) {
+    try { return await fn(i); }
+    catch (e) { last = e; await sleep(5); }
+  }
+  throw last;
+}
+
+let n = 0;
+const service = async () =&gt; {
+  n++;
+  if (n === 1) throw new Error('503 upstream database unreachable');
+  if (n === 2) throw new Error('503 upstream database unreachable');
+  throw new Error('429 rate limited');           // caused BY the retries
+};
+
+try { await retryLosesContext(service, 3); }
+catch (e) { console.log('a) reported:', e.message); }
+console.log('   the real cause -- the database -- is gone from the');
+console.log('   message. On call at 3 a.m. you would chase the wrong');
+console.log('   thing.');
+
+// the fix: keep them all
+async function retryKeepingErrors(fn, attempts = 3) {
+  const errors = [];
+  for (let i = 0; i &lt; attempts; i++) {
+    try { return await fn(i); }
+    catch (e) { errors.push(e); await sleep(5); }
+  }
+  const err = new Error('all ' + attempts + ' attempts failed: ' +
+                        errors.map((e) =&gt; e.message).join(' | '));
+  err.attempts = errors;
+  err.cause = errors[0];                          // the FIRST one, usually the cause
+  throw err;
+}
+
+n = 0;
+console.log('');
+try { await retryKeepingErrors(service, 3); }
+catch (e) {
+  console.log('b) reported:', e.message);
+  console.log('   first cause:', e.cause.message);
+}
+
+// (b) an unbounded recursive retry
+console.log('');
+let attempts = 0;
+async function retryForever(fn) {
+  try { return await fn(); }
+  catch (e) {
+    if (++attempts &gt; 1000) throw new Error('guard tripped after 1000 attempts');
+    await sleep(0);
+    return retryForever(fn);                      // no attempt limit -- bug
+  }
+}
+try { await retryForever(async () =&gt; { throw new Error('always down'); }); }
+catch (e) { console.log('c)', e.message); }
+console.log('   Without the guard this never stops. "Retry until it');
+console.log('   works" is not a policy -- some things never work.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the ten-line version from memory</strong>, then immediately add the two guards
+    that matter: <code>isRetryable</code> and <code>maxDelay</code>.</li>
+    <li><strong>Explain jitter in one sentence</strong> and give the two formulas &mdash; full and
+    equal.</li>
+    <li><strong>List the retryable and non-retryable status codes.</strong> Step 4. Then explain the
+    idempotency-key answer for a POST.</li>
+    <li><strong>Add a per-attempt timeout.</strong> Step 7 &mdash; <code>Promise.race</code> with a
+    timer, and remember to clear it. That is the next page.</li>
+    <li><strong>Write the circuit breaker.</strong> Step 7. Be able to say why it belongs outside the
+    retry rather than inside.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>A retry is a load multiplier.</strong> Every retry policy you write is a decision about
+    how much extra traffic a failing dependency receives, and the default answer &mdash; retry
+    everything, immediately, at every layer &mdash; is the one that turns a blip into an outage.
+    Classify the error first, back off exponentially, add jitter, cap the delay, and retry in exactly
+    one place.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="01-concurrency-limit.html">&larr; Concurrency Limit</a>
+  <a href="03-sequential-vs-parallel.html">Next: Sequential vs Parallel &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

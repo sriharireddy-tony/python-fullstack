@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kth Largest Element</title>
+<meta name="description" content="Sort, heap, or quickselect — three answers with genuinely different trade-offs, and how to choose.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Searching &amp; sorting &middot; Problem 04</p>
+  <h1>Kth Largest Element</h1>
+  <p class="standfirst">Three genuinely different answers, and the interview is mostly about
+  <strong>choosing between them</strong>: sort it (simplest), a size-k heap (best for streams), or
+  quickselect (best average time). Knowing when each wins matters more than any one of them.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Return the <code>k</code>th largest element in an unsorted array. Note: the kth largest
+  <strong>value by position in sorted order</strong>, not the kth distinct value.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th class="mono">k</th><th>Answer</th><th>Sorted descending</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[3,2,1,5,6,4]</td><td class="mono">2</td><td class="mono">5</td><td class="mono">6,<strong>5</strong>,4,3,2,1</td></tr>
+        <tr><td class="mono">[3,2,3,1,2,4,5,5,6]</td><td class="mono">4</td><td class="mono">4</td><td class="mono">6,5,5,<strong>4</strong>,3,...</td></tr>
+        <tr><td class="mono">[1]</td><td class="mono">1</td><td class="mono">1</td><td></td></tr>
+        <tr><td class="mono">[7,7,7]</td><td class="mono">2</td><td class="mono">7</td><td class="mono">7,<strong>7</strong>,7</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Duplicates count &mdash; ask about this</span>
+    <p>In row two the two 5s occupy positions 2 and 3, so the 4th largest is 4. If the question wanted
+    the 4th <em>distinct</em> value it would be 3. These are different problems and the wording is
+    often ambiguous &mdash; clarify before coding.</p>
+    <p>Row four makes it stark: the 2nd largest of <code>[7,7,7]</code> is 7. There is no 2nd distinct
+    value at all.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; sort it</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; sort and index</span></div>
+<pre><code>function kthLargestSort(nums, k) {
+  const sorted = [...nums].sort((a, b) =&gt; b - a);   // descending
+  return sorted[k - 1];
+}
+
+console.log(kthLargestSort([3,2,1,5,6,4], 2));          // 5
+console.log(kthLargestSort([3,2,3,1,2,4,5,5,6], 4));    // 4
+console.log(kthLargestSort([1], 1));                    // 1
+console.log(kthLargestSort([7,7,7], 2));                // 7
+
+// Or ascending, and index from the other end -- same thing:
+const kthAsc = (nums, k) =&gt;
+  [...nums].sort((a, b) =&gt; a - b)[nums.length - k];
+
+console.log('');
+console.log(kthAsc([3,2,1,5,6,4], 2));                  // 5
+console.log(kthAsc([3,2,3,1,2,4,5,5,6], 4));            // 4
+
+// Two lines, O(n log n), impossible to get wrong.
+// This is the right answer most of the time. Say it first.</code></pre>
+  </div>
+
+  <p>Do not apologise for this solution. It is two lines, it is obviously correct, and on any array
+  small enough to fit in memory it is fast. The interview question is what to do when
+  <em>n</em> is huge or the data is a stream.</p>
+
+  <div class="note">
+    <span class="t">The off-by-one, both ways</span>
+    <p>Descending: the kth largest is at index <code>k - 1</code>.<br>
+    Ascending: it is at index <code>n - k</code>.</p>
+    <p>Check both on <code>k = 1</code>: descending gives index 0 (the maximum), ascending gives
+    index <code>n - 1</code> (also the maximum). Verifying with <code>k = 1</code> takes two seconds
+    and catches the mistake.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why sorting can be more than you need</h2>
+
+  <p>Sorting produces a total order over all <code>n</code> elements. You asked for <em>one</em>
+  element. Everything below position <code>k</code> is ordered for nothing.</p>
+
+  <p>Two situations where that matters:</p>
+
+  <ul>
+    <li><strong><code>k</code> is small and <code>n</code> is huge.</strong> Finding the top 10 of a
+    hundred million values does not require ordering the other 99,999,990.</li>
+    <li><strong>The data is a stream.</strong> You cannot sort what you cannot hold.</li>
+  </ul>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; all three approaches</span></div>
+<pre><code>const N = 2000000;
+const base = [];
+for (let i = 0; i &lt; N; i++) base.push(Math.floor(Math.random() * 1000000));
+const K = 10;
+
+function bySorting(a, k) {
+  return [...a].sort((x, y) =&gt; y - x)[k - 1];
+}
+
+// a size-k min-heap: the smallest of the k largest sits on top
+function byHeap(a, k) {
+  const heap = [];
+  const up = (i) =&gt; {
+    while (i &gt; 0) {
+      const p = (i - 1) &gt;&gt; 1;
+      if (heap[p] &lt;= heap[i]) break;
+      [heap[p], heap[i]] = [heap[i], heap[p]];
+      i = p;
+    }
+  };
+  const down = () =&gt; {
+    let i = 0;
+    for (;;) {
+      const l = 2 * i + 1, r = 2 * i + 2;
+      let s = i;
+      if (l &lt; heap.length &amp;&amp; heap[l] &lt; heap[s]) s = l;
+      if (r &lt; heap.length &amp;&amp; heap[r] &lt; heap[s]) s = r;
+      if (s === i) break;
+      [heap[i], heap[s]] = [heap[s], heap[i]];
+      i = s;
+    }
+  };
+
+  for (const v of a) {
+    if (heap.length &lt; k) { heap.push(v); up(heap.length - 1); }
+    else if (v &gt; heap[0]) { heap[0] = v; down(); }
+  }
+  return heap[0];
+}
+
+function byQuickselect(a, k) {
+  const arr = [...a];
+  let target = arr.length - k;      // the index in ASCENDING order
+  let lo = 0, hi = arr.length - 1;
+
+  while (lo &lt; hi) {
+    const pivot = arr[lo + Math.floor(Math.random() * (hi - lo + 1))];
+    let i = lo, j = hi, m = lo;
+    while (m &lt;= j) {
+      if (arr[m] &lt; pivot) { [arr[i], arr[m]] = [arr[m], arr[i]]; i++; m++; }
+      else if (arr[m] &gt; pivot) { [arr[j], arr[m]] = [arr[m], arr[j]]; j--; }
+      else m++;
+    }
+    if (target &lt; i) hi = i - 1;
+    else if (target &gt; j) lo = j + 1;
+    else return pivot;              // target landed in the equal block
+  }
+  return arr[lo];
+}
+
+let t = performance.now();
+const a = bySorting(base, K);
+const sortMs = performance.now() - t;
+
+t = performance.now();
+const b = byHeap(base, K);
+const heapMs = performance.now() - t;
+
+t = performance.now();
+const c = byQuickselect(base, K);
+const qsMs = performance.now() - t;
+
+console.log('sort         : ' + a + '   in ' + sortMs.toFixed(1) + ' ms');
+console.log('size-k heap  : ' + b + '   in ' + heapMs.toFixed(1) + ' ms');
+console.log('quickselect  : ' + c + '   in ' + qsMs.toFixed(1) + ' ms');
+console.log('all agree:', a === b &amp;&amp; b === c);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better ideas &mdash; two of them</h2>
+
+  <h3>Idea A: a min-heap of size k</h3>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Keep only the <strong>k largest values seen so far</strong>, in a <em>min</em>-heap. The
+    smallest of those k sits on top &mdash; and that top element <em>is</em> the kth largest.</p>
+    <p>For each new value: if the heap is not full, push it. Otherwise, if the value beats the top,
+    replace the top. Anything smaller than the top can never be in the top k, so discard it
+    immediately.</p>
+  </div>
+
+  <p>Why a <em>min</em>-heap when we want the largest? Because the thing you need cheap access to is
+  the <strong>weakest member of the winning group</strong> &mdash; the one to evict. A max-heap would
+  give you the strongest, which you never need to remove.</p>
+
+  <div class="trace">
+<pre>  nums = [3, 2, 1, 5, 6, 4]     k = 2
+
+  3    heap not full  ->  [3]
+  2    heap not full  ->  [2, 3]         (min on top)
+  1    1 > 2?  no     ->  discard
+  5    5 > 2?  yes    ->  replace top    [3, 5]
+  6    6 > 3?  yes    ->  replace top    [5, 6]
+  4    4 > 5?  no     ->  discard
+
+  heap = [5, 6],  top = 5   ->  the 2nd largest
+</pre>
+  </div>
+
+  <h3>Idea B: quickselect</h3>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Partition around a pivot, exactly as quicksort does. Now you know the pivot&rsquo;s final
+    position. If that position <em>is</em> the one you want, you are done. Otherwise recurse into
+    <strong>only the side that contains your target</strong> &mdash; never both.</p>
+  </div>
+
+  <p>Quicksort recurses into both halves, giving O(n log n). Quickselect recurses into one, and the
+  work halves each time: <code>n + n/2 + n/4 + &hellip;</code> which sums to <code>2n</code>. So
+  <strong>O(n) on average</strong>.</p>
+
+  <div class="trace">
+<pre>  looking for the 2nd largest of [3,2,1,5,6,4]
+  = the element at ASCENDING index 6 - 2 = 4
+
+  partition around 3:   [2, 1 | 3 | 5, 6, 4]
+                                     indexes 0 1  2  3 4 5
+  the pivot 3 landed at index 2.  We want index 4.
+  4 > 2  ->  recurse RIGHT only: [5, 6, 4]
+
+  partition around 5:   [4 | 5 | 6]  within indexes 3..5
+  the pivot 5 landed at index 4.  That is our target  ->  answer 5
+</pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Quickselect&rsquo;s two hazards</span>
+    <p><strong>Worst case O(n&sup2;).</strong> Always picking the smallest element as pivot removes one
+    element per pass. A <em>random</em> pivot makes that astronomically unlikely, and picking one is
+    not optional &mdash; a fixed pivot on already-sorted input hits the worst case every time.</p>
+    <p><strong>It mutates the array</strong> and produces a partially-sorted mess. Copy first if the
+    caller cares.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace the heap</h2>
+
+  <p><code>nums = [3,2,3,1,2,4,5,5,6]</code>, <code>k = 4</code>. The answer is 4.</p>
+
+  <div class="trace">
+<pre>heap holds the 4 largest so far, smallest on top
+
+3    not full  ->  [3]
+2    not full  ->  [2, 3]
+3    not full  ->  [2, 3, 3]
+1    not full  ->  [1, 3, 3, 2]        top = 1
+2    2 > 1  yes  ->  evict 1, insert 2   [2, 3, 3, 2]   top = 2
+4    4 > 2  yes  ->  evict 2, insert 4   [2, 3, 3, 4]   top = 2
+5    5 > 2  yes  ->  evict 2, insert 5   [3, 4, 3, 5]   top = 3
+5    5 > 3  yes  ->  evict 3, insert 5   [3, 4, 5, 5]   top = 3
+6    6 > 3  yes  ->  evict 3, insert 6   [4, 5, 5, 6]   top = 4
+
+heap contains the four largest: 4, 5, 5, 6
+top = 4   ->  the 4th largest
+</pre>
+  </div>
+
+  <p>Notice the heap arrays above are shown as heap-ordered, not sorted &mdash; only the
+  <em>top</em> is guaranteed to be the minimum. That is all you need.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the heap, narrating itself</span></div>
+<pre><code>class MinHeap {
+  constructor() { this.a = []; }
+  get size() { return this.a.length; }
+  peek() { return this.a[0]; }
+
+  push(v) {
+    this.a.push(v);
+    let i = this.a.length - 1;
+    while (i &gt; 0) {
+      const p = (i - 1) &gt;&gt; 1;
+      if (this.a[p] &lt;= this.a[i]) break;
+      [this.a[p], this.a[i]] = [this.a[i], this.a[p]];
+      i = p;
+    }
+  }
+
+  pop() {
+    const top = this.a[0];
+    const last = this.a.pop();
+    if (this.a.length) {
+      this.a[0] = last;
+      let i = 0;
+      for (;;) {
+        const l = 2 * i + 1, r = 2 * i + 2;
+        let s = i;
+        if (l &lt; this.a.length &amp;&amp; this.a[l] &lt; this.a[s]) s = l;
+        if (r &lt; this.a.length &amp;&amp; this.a[r] &lt; this.a[s]) s = r;
+        if (s === i) break;
+        [this.a[i], this.a[s]] = [this.a[s], this.a[i]];
+        i = s;
+      }
+    }
+    return top;
+  }
+}
+
+function kthLargestExplained(nums, k) {
+  const heap = new MinHeap();
+  console.log('nums =', nums, '  k =', k);
+  console.log('');
+
+  for (const v of nums) {
+    if (heap.size &lt; k) {
+      heap.push(v);
+      console.log(String(v).padStart(2) + '   not full  -> push        heap = [' +
+                  heap.a.join(', ') + ']   top = ' + heap.peek());
+    } else if (v &gt; heap.peek()) {
+      const evicted = heap.pop();
+      heap.push(v);
+      console.log(String(v).padStart(2) + '   ' + v + ' &gt; ' + evicted +
+                  '   -> evict ' + evicted + ', insert ' + v +
+                  '   heap = [' + heap.a.join(', ') + ']   top = ' + heap.peek());
+    } else {
+      console.log(String(v).padStart(2) + '   ' + v + ' &lt;= ' + heap.peek() +
+                  '  -> discard             heap = [' + heap.a.join(', ') +
+                  ']   top = ' + heap.peek());
+    }
+  }
+
+  console.log('');
+  console.log('the heap holds the ' + k + ' largest values');
+  console.log('its minimum is the ' + k + 'th largest: ' + heap.peek());
+  console.log('');
+  return heap.peek();
+}
+
+console.log('ANSWER:', kthLargestExplained([3,2,3,1,2,4,5,5,6], 4));
+console.log('==========================================');
+console.log('ANSWER:', kthLargestExplained([3,2,1,5,6,4], 2));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; a min-heap, written out</span></div>
+<pre><code>function kthLargestHeapManual(nums, k) {
+  const heap = [];       // a binary min-heap stored in an array
+  let size = 0;
+
+  function siftUp(i) {
+    while (i &gt; 0) {
+      const parent = (i - 1 - ((i - 1) % 2)) / 2;
+      if (heap[parent] &lt;= heap[i]) break;
+      const t = heap[parent]; heap[parent] = heap[i]; heap[i] = t;
+      i = parent;
+    }
+  }
+
+  function siftDown(i) {
+    for (;;) {
+      const left = 2 * i + 1;
+      const right = 2 * i + 2;
+      let smallest = i;
+
+      if (left &lt; size &amp;&amp; heap[left] &lt; heap[smallest]) smallest = left;
+      if (right &lt; size &amp;&amp; heap[right] &lt; heap[smallest]) smallest = right;
+      if (smallest === i) break;
+
+      const t = heap[i]; heap[i] = heap[smallest]; heap[smallest] = t;
+      i = smallest;
+    }
+  }
+
+  for (let idx = 0; idx &lt; nums.length; idx++) {
+    const v = nums[idx];
+
+    if (size &lt; k) {
+      heap[size] = v;
+      size = size + 1;
+      siftUp(size - 1);
+    } else if (v &gt; heap[0]) {
+      heap[0] = v;          // overwrite the weakest survivor
+      siftDown(0);
+    }
+    // anything &lt;= heap[0] can never be in the top k
+  }
+
+  return heap[0];
+}
+
+console.log(kthLargestHeapManual([3,2,1,5,6,4], 2));          // 5
+console.log(kthLargestHeapManual([3,2,3,1,2,4,5,5,6], 4));    // 4
+console.log(kthLargestHeapManual([1], 1));                    // 1
+console.log(kthLargestHeapManual([7,7,7], 2));                // 7
+console.log(kthLargestHeapManual([5,4,3,2,1], 1));            // 5
+console.log(kthLargestHeapManual([5,4,3,2,1], 5));            // 1
+console.log(kthLargestHeapManual([-1,-5,-3], 2));             // -3</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; quickselect, written out</span></div>
+<pre><code>function kthLargestQuickselectManual(nums, k) {
+  // work on a copy: quickselect reorders the array
+  const a = [];
+  for (let i = 0; i &lt; nums.length; i++) a[i] = nums[i];
+
+  // the kth LARGEST is at ascending index length - k
+  const target = a.length - k;
+
+  let lo = 0;
+  let hi = a.length - 1;
+
+  while (lo &lt; hi) {
+    // RANDOM pivot -- a fixed one hits O(n^2) on sorted input
+    const pivotIndex = lo + ((Math.random() * (hi - lo + 1)) | 0);
+    const pivot = a[pivotIndex];
+
+    // three-way partition: less | equal | greater  (Dutch flag)
+    let i = lo;      // end of the "less" block
+    let m = lo;      // scanner
+    let j = hi;      // start of the "greater" block
+
+    while (m &lt;= j) {
+      if (a[m] &lt; pivot) {
+        const t = a[i]; a[i] = a[m]; a[m] = t;
+        i = i + 1; m = m + 1;
+      } else if (a[m] &gt; pivot) {
+        const t = a[j]; a[j] = a[m]; a[m] = t;
+        j = j - 1;
+      } else {
+        m = m + 1;
+      }
+    }
+
+    // now: [lo..i-1] &lt; pivot,  [i..j] === pivot,  [j+1..hi] > pivot
+    if (target &lt; i) {
+      hi = i - 1;              // the target is in the "less" block
+    } else if (target &gt; j) {
+      lo = j + 1;              // the target is in the "greater" block
+    } else {
+      return pivot;            // the target is inside the equal block
+    }
+  }
+
+  return a[lo];
+}
+
+console.log(kthLargestQuickselectManual([3,2,1,5,6,4], 2));         // 5
+console.log(kthLargestQuickselectManual([3,2,3,1,2,4,5,5,6], 4));   // 4
+console.log(kthLargestQuickselectManual([1], 1));                   // 1
+console.log(kthLargestQuickselectManual([7,7,7], 2));               // 7
+console.log(kthLargestQuickselectManual([5,4,3,2,1], 1));           // 5
+console.log(kthLargestQuickselectManual([5,4,3,2,1], 5));           // 1
+console.log(kthLargestQuickselectManual([-1,-5,-3], 2));            // -3
+
+// The THREE-way partition matters: with a two-way partition an
+// array of all-equal values degrades to O(n^2). The equal block
+// lets us return immediately.
+const allSame = new Array(200000).fill(7);
+const t0 = performance.now();
+console.log('200k identical values, k=1000:',
+            kthLargestQuickselectManual(allSame, 1000),
+            'in', (performance.now() - t0).toFixed(1) + ' ms');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">checking all three agree, on many inputs</span></div>
+<pre><code>function bySort(a, k) { return [...a].sort((x, y) =&gt; y - x)[k - 1]; }
+
+function byHeap(a, k) {
+  const h = [];
+  const up = i =&gt; { while (i &gt; 0) { const p = (i-1)&gt;&gt;1; if (h[p] &lt;= h[i]) break;
+    [h[p],h[i]]=[h[i],h[p]]; i = p; } };
+  const down = () =&gt; { let i = 0; for(;;){ const l=2*i+1,r=2*i+2; let s=i;
+    if(l&lt;h.length&amp;&amp;h[l]&lt;h[s])s=l; if(r&lt;h.length&amp;&amp;h[r]&lt;h[s])s=r;
+    if(s===i)break; [h[i],h[s]]=[h[s],h[i]]; i=s; } };
+  for (const v of a) {
+    if (h.length &lt; k) { h.push(v); up(h.length - 1); }
+    else if (v &gt; h[0]) { h[0] = v; down(); }
+  }
+  return h[0];
+}
+
+function byQuick(nums, k) {
+  const a = [...nums];
+  const target = a.length - k;
+  let lo = 0, hi = a.length - 1;
+  while (lo &lt; hi) {
+    const pivot = a[lo + ((Math.random() * (hi - lo + 1)) | 0)];
+    let i = lo, m = lo, j = hi;
+    while (m &lt;= j) {
+      if (a[m] &lt; pivot) { [a[i],a[m]]=[a[m],a[i]]; i++; m++; }
+      else if (a[m] &gt; pivot) { [a[j],a[m]]=[a[m],a[j]]; j--; }
+      else m++;
+    }
+    if (target &lt; i) hi = i - 1;
+    else if (target &gt; j) lo = j + 1;
+    else return pivot;
+  }
+  return a[lo];
+}
+
+let agree = 0, total = 0;
+for (let trial = 0; trial &lt; 2000; trial++) {
+  const n = 1 + Math.floor(Math.random() * 12);
+  const a = [];
+  for (let i = 0; i &lt; n; i++) a.push(Math.floor(Math.random() * 8) - 3);
+  const k = 1 + Math.floor(Math.random() * n);
+
+  total++;
+  const s = bySort(a, k);
+  if (byHeap(a, k) === s &amp;&amp; byQuick(a, k) === s) agree++;
+  else console.log('DISAGREE', JSON.stringify(a), 'k=' + k,
+                   s, byHeap(a, k), byQuick(a, k));
+}
+console.log(total + ' random cases, all three methods agree: ' + agree);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; what to write, in order of preference</span></div>
+<pre><code>// 1. The one to write first. Two lines, obviously right.
+function kthLargest(nums, k) {
+  return [...nums].sort((a, b) =&gt; b - a)[k - 1];
+}
+
+console.log(kthLargest([3,2,1,5,6,4], 2));          // 5
+console.log(kthLargest([3,2,3,1,2,4,5,5,6], 4));    // 4
+
+// 2. The kth SMALLEST -- the same thing from the other end.
+const kthSmallest = (nums, k) =&gt; [...nums].sort((a, b) =&gt; a - b)[k - 1];
+console.log(kthSmallest([3,2,1,5,6,4], 2));         // 2
+
+// 3. The top k values, not just the kth.
+const topK = (nums, k) =&gt; [...nums].sort((a, b) =&gt; b - a).slice(0, k);
+console.log(topK([3,2,1,5,6,4], 3));                // [6,5,4]
+
+// 4. The kth largest DISTINCT value -- a different question.
+const kthDistinct = (nums, k) =&gt;
+  [...new Set(nums)].sort((a, b) =&gt; b - a)[k - 1];
+console.log(kthDistinct([3,2,3,1,2,4,5,5,6], 4));   // 3, not 4
+console.log(kthLargest([3,2,3,1,2,4,5,5,6], 4));    // 4</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the streaming version &mdash; where the heap is essential</span></div>
+<pre><code>// "KthLargest" as a class: values arrive over time and after each
+// one you report the current kth largest. You cannot sort a stream.
+class KthLargest {
+  constructor(k, initial = []) {
+    this.k = k;
+    this.h = [];
+    for (const v of initial) this.add(v);
+  }
+
+  _up(i) {
+    while (i &gt; 0) {
+      const p = (i - 1) &gt;&gt; 1;
+      if (this.h[p] &lt;= this.h[i]) break;
+      [this.h[p], this.h[i]] = [this.h[i], this.h[p]];
+      i = p;
+    }
+  }
+
+  _down() {
+    let i = 0;
+    for (;;) {
+      const l = 2 * i + 1, r = 2 * i + 2;
+      let s = i;
+      if (l &lt; this.h.length &amp;&amp; this.h[l] &lt; this.h[s]) s = l;
+      if (r &lt; this.h.length &amp;&amp; this.h[r] &lt; this.h[s]) s = r;
+      if (s === i) break;
+      [this.h[i], this.h[s]] = [this.h[s], this.h[i]];
+      i = s;
+    }
+  }
+
+  add(v) {
+    if (this.h.length &lt; this.k) { this.h.push(v); this._up(this.h.length - 1); }
+    else if (v &gt; this.h[0]) { this.h[0] = v; this._down(); }
+    return this.h.length &lt; this.k ? null : this.h[0];
+  }
+}
+
+const stream = new KthLargest(3, [4, 5, 8, 2]);
+console.log('after init, 3rd largest:', stream.h[0]);   // 4
+console.log('add 3  ->', stream.add(3));                // 4
+console.log('add 5  ->', stream.add(5));                // 5
+console.log('add 10 ->', stream.add(10));               // 5
+console.log('add 9  ->', stream.add(9));                // 8
+console.log('add 4  ->', stream.add(4));                // 8
+
+// Memory used: k values, forever. A billion inputs, three slots.
+// This is the reason to know the heap version.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">and the trap: JavaScript has no built-in heap</span></div>
+<pre><code>// Many languages ship a priority queue. JavaScript does not.
+console.log('Array has sort:', typeof [].sort);                    // function
+console.log('globalThis.PriorityQueue:', typeof globalThis.PriorityQueue);  // undefined
+console.log('globalThis.Heap:', typeof globalThis.Heap);            // undefined
+
+// So a "use a heap" answer in JavaScript means you have to WRITE
+// the heap -- about 25 lines. That is why the sort answer is worth
+// leading with, and why quickselect is often the better "beat
+// n log n" answer in an interview: it needs no data structure.
+
+// The tempting fake heap, and why it is not one:
+const fakeHeap = [];
+function badPush(v) { fakeHeap.push(v); fakeHeap.sort((a, b) =&gt; a - b); }
+
+const t0 = performance.now();
+for (let i = 0; i &lt; 8000; i++) badPush(Math.random());
+console.log('8000 pushes with sort-every-time:',
+            (performance.now() - t0).toFixed(1) + ' ms');
+
+// Sorting after every push is O(n log n) per insert. A real heap
+// is O(log n). The shortcut is not a shortcut.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>Best when</th></tr></thead>
+      <tbody>
+        <tr><td>Sort and index</td><td class="mono">O(n log n)</td><td class="mono">O(n)</td><td>almost always, in real code</td></tr>
+        <tr><td>Size-k min-heap</td><td class="mono">O(n log k)</td><td class="mono">O(k)</td><td>streams, or k much smaller than n</td></tr>
+        <tr><td><strong>Quickselect</strong></td><td class="mono">O(n) average, O(n&sup2;) worst</td><td class="mono">O(1) extra</td><td>one-off query, array in memory</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Why the heap is O(n log k):</strong> each of the <code>n</code> values does at most one
+  heap operation, and the heap never holds more than <code>k</code> items, so each operation is
+  <code>log k</code>. When <code>k</code> is 10 and <code>n</code> is a million,
+  <code>log k</code> is about 3 &mdash; effectively linear.</p>
+
+  <p><strong>Why quickselect is O(n) on average:</strong> a random pivot splits the range roughly in
+  half, and you only recurse into one side. The work is
+  <code>n + n/2 + n/4 + &hellip; = 2n</code>. The worst case is O(n&sup2;) when every pivot is
+  extreme, which random pivoting makes vanishingly unlikely.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Sorting and indexing is O(n log n) and two lines &mdash; I would ship that. If k is much
+    smaller than n, a min-heap of size k gives O(n log k) and only O(k) memory, which also works on a
+    stream. If the whole array is in memory and I want the best average time, quickselect partitions
+    around a random pivot and recurses into only the side containing the target, giving O(n) average
+    and O(1) extra space, with an O(n&sup2;) worst case that random pivoting makes negligible. I would
+    use a three-way partition so arrays of equal values do not degrade.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. The off-by-one on <code>k</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; index k instead of k - 1</span></div>
+<pre><code>const broken = (nums, k) =&gt; [...nums].sort((a, b) =&gt; b - a)[k];
+
+console.log(broken([3,2,1,5,6,4], 2));   // 4   WRONG, should be 5
+console.log(broken([3,2,1,5,6,4], 1));   // 5   WRONG, should be 6
+console.log(broken([1], 1));             // undefined  WRONG, should be 1
+
+// The 1st largest is at index 0. Always sanity-check k = 1:
+// descending -> index 0, ascending -> index length - 1.</code></pre>
+  </div>
+
+  <h3>2. Using the default comparator</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; string sort</span></div>
+<pre><code>const broken = (nums, k) =&gt; [...nums].sort().reverse()[k - 1];
+
+console.log(broken([3,2,1,5,6,4], 2));         // 5   fine, single digits
+console.log(broken([10, 9, 100, 20], 1));      // 9   WRONG, should be 100
+console.log(broken([10, 9, 100, 20], 2));      // 20  WRONG, should be 20? no:
+// descending truth is 100, 20, 10, 9 -- so the 2nd is 20. Right by luck.
+console.log(broken([10, 9, 100, 20], 3));      // 100 WRONG, should be 10
+
+console.log('what sort() actually gives:', [10, 9, 100, 20].sort());
+// [10, 100, 20, 9] -- alphabetical
+
+// Every numeric sort needs (a, b) => a - b or (a, b) => b - a.</code></pre>
+  </div>
+
+  <h3>3. Using a max-heap for &ldquo;kth largest&rdquo;</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">why min-heap is the right choice</span></div>
+<pre><code>// A max-heap of ALL n values also works: push everything, pop k times.
+function byMaxHeap(nums, k) {
+  const h = [...nums];
+  // build a max-heap in place
+  const down = (i, n) =&gt; {
+    for (;;) {
+      const l = 2*i+1, r = 2*i+2;
+      let big = i;
+      if (l &lt; n &amp;&amp; h[l] &gt; h[big]) big = l;
+      if (r &lt; n &amp;&amp; h[r] &gt; h[big]) big = r;
+      if (big === i) break;
+      [h[i], h[big]] = [h[big], h[i]];
+      i = big;
+    }
+  };
+  for (let i = (h.length &gt;&gt; 1) - 1; i &gt;= 0; i--) down(i, h.length);
+
+  let n = h.length;
+  for (let popped = 0; popped &lt; k - 1; popped++) {
+    [h[0], h[n - 1]] = [h[n - 1], h[0]];
+    n--;
+    down(0, n);
+  }
+  return h[0];
+}
+
+console.log(byMaxHeap([3,2,1,5,6,4], 2));         // 5
+console.log(byMaxHeap([3,2,3,1,2,4,5,5,6], 4));   // 4
+
+// Correct, and O(n + k log n) time with O(n) SPACE -- it holds the
+// whole array. The size-k MIN-heap holds only k. When k is 10 and
+// n is a billion, that is the difference between 10 slots and a
+// billion. Pick the heap by what you need to EVICT.</code></pre>
+  </div>
+
+  <h3>4. Quickselect with a fixed pivot</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; O(n&sup2;) on sorted input</span></div>
+<pre><code>function fixedPivot(nums, k) {
+  const a = [...nums];
+  const target = a.length - k;
+  let lo = 0, hi = a.length - 1, comparisons = 0;
+
+  while (lo &lt; hi) {
+    const pivot = a[hi];                  // ALWAYS the last element
+    let i = lo;
+    for (let j = lo; j &lt; hi; j++) {
+      comparisons++;
+      if (a[j] &lt; pivot) { [a[i], a[j]] = [a[j], a[i]]; i++; }
+    }
+    [a[i], a[hi]] = [a[hi], a[i]];
+    if (i === target) return { value: a[i], comparisons };
+    if (i &lt; target) lo = i + 1; else hi = i - 1;
+  }
+  return { value: a[lo], comparisons };
+}
+
+const N = 4000;
+const sorted = [];
+for (let i = 0; i &lt; N; i++) sorted.push(i);
+
+// ask for the SMALLEST (k = N). With the pivot always taken from
+// the end of a sorted range, each pass peels off exactly one element.
+console.log('sorted input, fixed pivot:', fixedPivot(sorted, N));
+// note the comparison count: about N^2 / 2
+
+const shuffled = [...sorted];
+for (let i = shuffled.length - 1; i &gt; 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+}
+console.log('shuffled input, same code:', fixedPivot(shuffled, N));
+// far fewer comparisons -- the input order was the whole problem
+
+console.log('');
+console.log('A random pivot makes the sorted case behave like the');
+console.log('shuffled one. It is not an optimisation, it is a fix.');</code></pre>
+  </div>
+
+  <h3>5. Forgetting that quickselect mutates</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; scrambles the caller's array</span></div>
+<pre><code>function quickselectInPlace(a, k) {
+  const target = a.length - k;
+  let lo = 0, hi = a.length - 1;
+  while (lo &lt; hi) {
+    const pivot = a[lo + ((Math.random() * (hi - lo + 1)) | 0)];
+    let i = lo, m = lo, j = hi;
+    while (m &lt;= j) {
+      if (a[m] &lt; pivot) { [a[i],a[m]]=[a[m],a[i]]; i++; m++; }
+      else if (a[m] &gt; pivot) { [a[j],a[m]]=[a[m],a[j]]; j--; }
+      else m++;
+    }
+    if (target &lt; i) hi = i - 1;
+    else if (target &gt; j) lo = j + 1;
+    else return pivot;
+  }
+  return a[lo];
+}
+
+const original = [3, 2, 1, 5, 6, 4];
+console.log('before:', [...original]);
+console.log('answer:', quickselectInPlace(original, 2));
+console.log('after :', original);        // reordered, not sorted
+
+// Partially-sorted garbage. If the caller still needs the original
+// order, copy first -- [...nums] -- and say that you are doing so.</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the two-line sort version</strong> and verify the index with <code>k = 1</code>.
+    Then say the three options and their trade-offs out loud &mdash; that summary <em>is</em> the
+    interview answer.</li>
+    <li><strong>Write the min-heap from scratch.</strong> About 25 lines, and JavaScript has no
+    built-in one, so it is genuinely worth being able to produce.</li>
+    <li><strong>Kth smallest.</strong> Flip the comparator, or use a max-heap of size k. Both; then
+    say which you prefer.</li>
+    <li><strong>Top K Frequent Elements.</strong> Already in the hashmap topic &mdash; and it is
+    &ldquo;kth largest&rdquo; applied to counts rather than values. Notice the bucket-sort answer
+    beats both the heap and the sort there, because counts are bounded.</li>
+    <li><strong>Median of an unsorted array.</strong> Quickselect for position <code>n/2</code>
+    &mdash; O(n) average instead of sorting. For an even-length array you need two selects, or one
+    select plus a scan.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>&ldquo;Find the kth best&rdquo; almost never needs a full sort.</strong> Three tools cover
+    it: sort when simplicity wins, a size-k heap when memory or streaming matters, quickselect when
+    average speed matters. And the general lesson from the heap: <em>choose the data structure by
+    what you need cheap access to</em>. Here that is the weakest member of the winning group, which
+    is why a min-heap answers a question about the largest values.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="03-find-peak-element.html">&larr; Find Peak Element</a>
+  <a href="05-merge-sorted-arrays.html">Next: Merge Sorted Arrays &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

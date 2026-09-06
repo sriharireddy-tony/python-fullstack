@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Insert Interval</title>
+<meta name="description" content="Three phases, no sorting: everything before, everything overlapping, everything after.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Arrays &middot; Problem 08</p>
+  <h1>Insert Interval</h1>
+  <p class="standfirst">Merge Intervals&rsquo; sibling, with one extra gift: the list is
+  <strong>already sorted and already merged</strong>. Use that gift and the sort disappears &mdash;
+  this becomes an O(n) problem with a very tidy three-phase shape.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>You are given a list of non-overlapping intervals, already sorted by start time, and one new
+  interval. Insert it, merging anything it now overlaps, and keep the result sorted and
+  non-overlapping.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Existing</th><th>New</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[[1,3],[6,9]]</td><td class="mono">[2,5]</td><td class="mono">[[1,5],[6,9]]</td></tr>
+        <tr><td class="mono">[[1,2],[3,5],[6,7],[8,10],[12,16]]</td><td class="mono">[4,8]</td><td class="mono">[[1,2],[3,10],[12,16]]</td></tr>
+        <tr><td class="mono">[]</td><td class="mono">[5,7]</td><td class="mono">[[5,7]]</td></tr>
+        <tr><td class="mono">[[1,5]]</td><td class="mono">[2,3]</td><td class="mono">[[1,5]]</td></tr>
+        <tr><td class="mono">[[1,5]]</td><td class="mono">[6,8]</td><td class="mono">[[1,5],[6,8]]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Row two is the interesting one. The new interval <code>[4,8]</code> swallows <em>three</em>
+  existing intervals at once &mdash; <code>[3,5]</code>, <code>[6,7]</code> and <code>[8,10]</code>
+  &mdash; and they all collapse into <code>[3,10]</code>. Draw it:</p>
+
+  <div class="trace">
+<pre>          1  2  3  4  5  6  7  8  9 10    12       16
+[1,2]     |==|
+[3,5]           |=====|
+[6,7]                    |==|
+[8,10]                         |=====|
+[12,16]                                   |========|
+
+new [4,8]          |==============|
+
+result:
+[1,2]     |==|
+[3,10]          |====================|
+[12,16]                                   |========|
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why you must not just sort and re-merge</span>
+    <p>You <em>can</em>: push the new interval onto the list, sort, and run the previous page&rsquo;s
+    algorithm. It gives the right answer and it is O(n log n). But the input was handed to you
+    already sorted, and throwing that away is exactly what an interviewer is watching for.
+    The point of this problem is to solve it in <strong>O(n)</strong>.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; append, sort, merge</span></div>
+<pre><code>function insertBrute(intervals, newInterval) {
+  const all = [...intervals.map(iv =&gt; [...iv]), [...newInterval]];
+  all.sort((a, b) =&gt; a[0] - b[0]);
+
+  const out = [all[0]];
+  for (let i = 1; i &lt; all.length; i++) {
+    const last = out[out.length - 1];
+    if (all[i][0] &lt;= last[1]) last[1] = Math.max(last[1], all[i][1]);
+    else out.push(all[i]);
+  }
+  return out;
+}
+
+console.log(JSON.stringify(insertBrute([[1,3],[6,9]], [2,5])));
+// [[1,5],[6,9]]
+console.log(JSON.stringify(insertBrute([[1,2],[3,5],[6,7],[8,10],[12,16]], [4,8])));
+// [[1,2],[3,10],[12,16]]
+
+// Correct. O(n log n). And it ignores the fact that the list was
+// already sorted for us, which is the whole point of this problem.</code></pre>
+  </div>
+
+  <p>Keep this in your pocket. If you blank in an interview, writing this and saying
+  <em>&ldquo;this works but wastes the sorted input &mdash; let me do it in linear time&rdquo;</em>
+  is a good place to be standing.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is wasteful</h2>
+
+  <p>Not slow exactly &mdash; O(n log n) is perfectly respectable &mdash; but <em>wasteful</em>.
+  Sorting an already-sorted array of n items still costs n log n comparisons. With 100,000 existing
+  intervals that is around 1.7 million comparisons to discover an order you were given for free.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 200000;
+const intervals = [];
+for (let i = 0; i &lt; N; i++) intervals.push([i * 10, i * 10 + 5]);   // sorted, disjoint
+const newInterval = [55, 95];
+
+function sortAndMerge(list, ni) {
+  const all = [...list.map(iv =&gt; [...iv]), [...ni]];
+  all.sort((a, b) =&gt; a[0] - b[0]);
+  const out = [all[0]];
+  for (let i = 1; i &lt; all.length; i++) {
+    const last = out[out.length - 1];
+    if (all[i][0] &lt;= last[1]) last[1] = Math.max(last[1], all[i][1]);
+    else out.push(all[i]);
+  }
+  return out;
+}
+
+function threePhase(list, ni) {
+  const out = [];
+  let i = 0;
+  const n = list.length;
+  let [start, end] = ni;
+
+  while (i &lt; n &amp;&amp; list[i][1] &lt; start) out.push(list[i++]);
+  while (i &lt; n &amp;&amp; list[i][0] &lt;= end) {
+    start = Math.min(start, list[i][0]);
+    end   = Math.max(end,   list[i][1]);
+    i++;
+  }
+  out.push([start, end]);
+  while (i &lt; n) out.push(list[i++]);
+
+  return out;
+}
+
+let t = performance.now();
+const a = sortAndMerge(intervals, newInterval);
+const sortMs = performance.now() - t;
+
+t = performance.now();
+const b = threePhase(intervals, newInterval);
+const fastMs = performance.now() - t;
+
+console.log('sort + merge :', a.length, 'intervals in', sortMs.toFixed(1) + ' ms');
+console.log('three phases :', b.length, 'intervals in', fastMs.toFixed(1) + ' ms');
+console.log('same answer:', JSON.stringify(a) === JSON.stringify(b));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; three phases</h2>
+
+  <p>Because the list is sorted and non-overlapping, the intervals split cleanly into three groups,
+  and they are always in this order:</p>
+
+  <div class="trace">
+<pre>       [ before ]   [ overlapping ]   [ after ]
+                        ^
+                 the new interval lives here
+
+before        : ends entirely BEFORE the new interval starts
+overlapping   : touches the new interval somewhere
+after         : starts entirely AFTER the new interval ends
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>The three groups are <strong>contiguous blocks</strong> of the sorted list, in that order.
+    So you can walk once and handle each block with its own <code>while</code> loop &mdash; no
+    searching, no sorting, no going back.</p>
+  </div>
+
+  <p>Each phase has one job:</p>
+
+  <ol>
+    <li><strong>Copy the &ldquo;before&rdquo; ones straight through.</strong> The test:
+    <code>interval.end &lt; newStart</code>. They finish before the new one begins, so they are
+    unaffected.</li>
+    <li><strong>Absorb the overlapping ones.</strong> While
+    <code>interval.start &lt;= newEnd</code>, widen the new interval to swallow it:
+    <code>newStart = min(...)</code>, <code>newEnd = max(...)</code>. Do not push these &mdash; they are
+    being eaten. When the loop ends, push the widened interval once.</li>
+    <li><strong>Copy the &ldquo;after&rdquo; ones straight through.</strong> No test needed &mdash; if
+    phase 2 stopped, everything remaining starts after the new end.</li>
+  </ol>
+
+  <p>The subtle bit is that <strong>the new interval keeps growing during phase 2</strong>. In row two
+  of the table, <code>[4,8]</code> first absorbs <code>[3,5]</code> and becomes <code>[3,8]</code>,
+  then absorbs <code>[6,7]</code> (no change to the bounds), then absorbs <code>[8,10]</code> and
+  becomes <code>[3,10]</code>. Each absorption can extend the reach, which lets it catch the next
+  one. That chain is why a single pass is enough.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>intervals = [[1,2],[3,5],[6,7],[8,10],[12,16]]</code>, <code>newInterval = [4,8]</code>.</p>
+
+  <div class="trace">
+<pre>start = 4   end = 8   out = []   i = 0
+
+PHASE 1 -- copy everything that ends before start (4)
+  i=0  [1,2]   is 2 &lt; 4?  YES  ->  copy       out = [[1,2]]   i=1
+  i=1  [3,5]   is 5 &lt; 4?  NO   ->  stop phase 1
+
+PHASE 2 -- absorb everything that starts at or before end
+  i=1  [3,5]   is 3 &lt;= 8?  YES  ->  absorb
+               start = min(4, 3) = 3
+               end   = max(8, 5) = 8          i=2
+  i=2  [6,7]   is 6 &lt;= 8?  YES  ->  absorb
+               start = min(3, 6) = 3
+               end   = max(8, 7) = 8          i=3
+  i=3  [8,10]  is 8 &lt;= 8?  YES  ->  absorb    (touching counts)
+               start = min(3, 8) = 3
+               end   = max(8, 10) = 10        i=4
+  i=4  [12,16] is 12 &lt;= 10?  NO  ->  stop phase 2
+
+  push the grown interval                     out = [[1,2],[3,10]]
+
+PHASE 3 -- copy the rest
+  i=4  [12,16]  copy                          out = [[1,2],[3,10],[12,16]]
+
+answer: [[1,2],[3,10],[12,16]]
+</pre>
+  </div>
+
+  <p>Watch <code>end</code> across phase 2: 8, then 8, then <strong>10</strong>. Absorbing
+  <code>[8,10]</code> stretched it. Had <code>[11,13]</code> come next it would now be caught too,
+  because <code>11 &lt;= 10</code> is&hellip; false. Fine &mdash; but had it been <code>[10,13]</code>,
+  it would have been absorbed. The comparison is against the <em>current</em> end, not the original.</p>
+
+  <p>Now the &ldquo;fits in a gap&rdquo; case, <code>[[1,3],[6,9]]</code> with <code>[4,5]</code>:</p>
+
+  <div class="trace">
+<pre>start = 4   end = 5
+
+PHASE 1   [1,3]   3 &lt; 4?  YES  ->  copy      out = [[1,3]]
+          [6,9]   9 &lt; 4?  NO   ->  stop
+
+PHASE 2   [6,9]   6 &lt;= 5?  NO  ->  absorbs nothing at all
+          push [4,5]                          out = [[1,3],[4,5]]
+
+PHASE 3   [6,9]   copy                        out = [[1,3],[4,5],[6,9]]
+
+answer: [[1,3],[4,5],[6,9]]     -- the new interval simply slotted in
+</pre>
+  </div>
+
+  <p>Phase 2 absorbing nothing is not an edge case needing special handling &mdash; the loop just
+  runs zero times and the push still happens. That is the sign of a well-shaped algorithm.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function insertExplained(intervals, newInterval) {
+  let [start, end] = newInterval;
+  const out = [];
+  let i = 0;
+  const n = intervals.length;
+
+  console.log('intervals =', JSON.stringify(intervals), '  new =', JSON.stringify(newInterval));
+  console.log('');
+  console.log('PHASE 1 -- copy everything ending before ' + start);
+
+  while (i &lt; n &amp;&amp; intervals[i][1] &lt; start) {
+    console.log('  ' + JSON.stringify(intervals[i]) + '  ends at ' + intervals[i][1] +
+                ' &lt; ' + start + '  -> copy');
+    out.push(intervals[i]);
+    i++;
+  }
+
+  console.log('');
+  console.log('PHASE 2 -- absorb everything starting at or before the growing end');
+
+  while (i &lt; n &amp;&amp; intervals[i][0] &lt;= end) {
+    console.log('  ' + JSON.stringify(intervals[i]) + '  starts at ' + intervals[i][0] +
+                ' &lt;= ' + end + '  -> absorb');
+    start = Math.min(start, intervals[i][0]);
+    end   = Math.max(end,   intervals[i][1]);
+    console.log('        grown to [' + start + ', ' + end + ']');
+    i++;
+  }
+
+  out.push([start, end]);
+  console.log('  push [' + start + ', ' + end + ']');
+
+  console.log('');
+  console.log('PHASE 3 -- copy the rest');
+  while (i &lt; n) {
+    console.log('  ' + JSON.stringify(intervals[i]) + '  -> copy');
+    out.push(intervals[i]);
+    i++;
+  }
+
+  console.log('');
+  return out;
+}
+
+console.log('ANSWER:', JSON.stringify(
+  insertExplained([[1,2],[3,5],[6,7],[8,10],[12,16]], [4,8])));
+console.log('==============================================');
+console.log('ANSWER:', JSON.stringify(insertExplained([[1,3],[6,9]], [4,5])));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; loops, no Math.min or Math.max</span></div>
+<pre><code>function insertManual(intervals, newInterval) {
+  let start = newInterval[0];
+  let end   = newInterval[1];
+
+  const out = [];
+  let written = 0;          // our own push counter
+  let i = 0;
+  const n = intervals.length;
+
+  // PHASE 1: everything that finishes strictly before we begin
+  while (i &lt; n &amp;&amp; intervals[i][1] &lt; start) {
+    out[written] = [intervals[i][0], intervals[i][1]];
+    written++;
+    i++;
+  }
+
+  // PHASE 2: everything that touches us -- swallow it, growing as we go
+  while (i &lt; n &amp;&amp; intervals[i][0] &lt;= end) {
+    if (intervals[i][0] &lt; start) start = intervals[i][0];   // Math.min by hand
+    if (intervals[i][1] &gt; end)   end   = intervals[i][1];   // Math.max by hand
+    i++;
+  }
+
+  out[written] = [start, end];
+  written++;
+
+  // PHASE 3: everything left over starts after we end
+  while (i &lt; n) {
+    out[written] = [intervals[i][0], intervals[i][1]];
+    written++;
+    i++;
+  }
+
+  return out;
+}
+
+console.log(JSON.stringify(insertManual([[1,3],[6,9]], [2,5])));
+// [[1,5],[6,9]]
+console.log(JSON.stringify(insertManual([[1,2],[3,5],[6,7],[8,10],[12,16]], [4,8])));
+// [[1,2],[3,10],[12,16]]
+console.log(JSON.stringify(insertManual([], [5,7])));           // [[5,7]]
+console.log(JSON.stringify(insertManual([[1,5]], [2,3])));      // [[1,5]]
+console.log(JSON.stringify(insertManual([[1,5]], [6,8])));      // [[1,5],[6,8]]
+console.log(JSON.stringify(insertManual([[1,5]], [0,0])));      // [[0,0],[1,5]]
+console.log(JSON.stringify(insertManual([[3,5],[8,9]], [1,2])));// [[1,2],[3,5],[8,9]]</code></pre>
+  </div>
+
+  <p>Look at the empty-list case, <code>insertManual([], [5,7])</code>. Phase 1 runs zero times,
+  phase 2 runs zero times, the push happens, phase 3 runs zero times. Correct with no special case
+  at all. When an algorithm handles its own edge cases like that, it usually means the structure is
+  right.</p>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2a &mdash; the three-phase version, tidied</span></div>
+<pre><code>function insert(intervals, newInterval) {
+  let [start, end] = newInterval;
+  const out = [];
+  let i = 0;
+  const n = intervals.length;
+
+  // 1. before
+  while (i &lt; n &amp;&amp; intervals[i][1] &lt; start) out.push(intervals[i++]);
+
+  // 2. overlapping
+  while (i &lt; n &amp;&amp; intervals[i][0] &lt;= end) {
+    start = Math.min(start, intervals[i][0]);
+    end   = Math.max(end,   intervals[i][1]);
+    i++;
+  }
+  out.push([start, end]);
+
+  // 3. after
+  while (i &lt; n) out.push(intervals[i++]);
+
+  return out;
+}
+
+console.log(JSON.stringify(insert([[1,3],[6,9]], [2,5])));                     // [[1,5],[6,9]]
+console.log(JSON.stringify(insert([[1,2],[3,5],[6,7],[8,10],[12,16]], [4,8])));// [[1,2],[3,10],[12,16]]
+console.log(JSON.stringify(insert([], [5,7])));                               // [[5,7]]
+console.log(JSON.stringify(insert([[1,5]], [2,7])));                          // [[1,7]]
+console.log(JSON.stringify(insert([[1,5]], [0,3])));                          // [[0,5]]</code></pre>
+  </div>
+
+  <p><code>out.push(intervals[i++])</code> does two things in one expression: push the item at
+  <code>i</code>, then advance <code>i</code>. It is idiomatic and compact. If it makes you
+  uncomfortable, split it &mdash; clarity beats brevity every time, and the Version 1 form is
+  perfectly good code.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 2b &mdash; the same thing with filter and reduce</span></div>
+<pre><code>function insertFunctional(intervals, newInterval) {
+  const before = intervals.filter(iv =&gt; iv[1] &lt; newInterval[0]);
+  const after  = intervals.filter(iv =&gt; iv[0] &gt; newInterval[1]);
+
+  // whatever is in neither group must overlap
+  const overlapping = intervals.filter(
+    iv =&gt; iv[1] &gt;= newInterval[0] &amp;&amp; iv[0] &lt;= newInterval[1]
+  );
+
+  const merged = overlapping.reduce(
+    (acc, iv) =&gt; [Math.min(acc[0], iv[0]), Math.max(acc[1], iv[1])],
+    [...newInterval]
+  );
+
+  return [...before, merged, ...after];
+}
+
+console.log(JSON.stringify(insertFunctional([[1,3],[6,9]], [2,5])));
+// [[1,5],[6,9]]
+console.log(JSON.stringify(insertFunctional([[1,2],[3,5],[6,7],[8,10],[12,16]], [4,8])));
+// [[1,2],[3,10],[12,16]]
+
+// Reads beautifully and is three passes instead of one -- still O(n),
+// since sequential passes add. The catch: it does NOT use the fact
+// that the list is sorted, so it also works on unsorted input, and
+// an interviewer may read that as not having noticed the guarantee.
+// Know it; explain the trade if you use it.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Append, sort, merge</td><td class="mono">O(n log n)</td><td class="mono">O(n)</td></tr>
+        <tr><td><strong>Three phases</strong></td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Why O(n) and not O(3n)?</strong> Because the three <code>while</code> loops share one
+  index. Between them, <code>i</code> goes from 0 to n exactly once &mdash; it never resets, never
+  goes backwards. Three loops that <em>continue</em> the same walk are one pass, not three.
+  This is the same reasoning as the sliding window.</p>
+
+  <p>Space is O(n) for the output. There is no way around that: you have to return a new list. If you
+  were allowed to mutate the input array with <code>splice</code>, you could do it in O(1) extra
+  space, but <code>splice</code> shifts elements, which costs O(n) time per call &mdash; a bad trade.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;The list is already sorted and disjoint, so I do not need to sort again. Walking once,
+    the intervals fall into three consecutive blocks: those ending before the new one starts, which I
+    copy; those overlapping it, which I absorb by taking the min start and max end; and the rest,
+    which I copy. One shared index across three loops, so O(n) time and O(n) output space.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Getting phase 1&rsquo;s comparison one notch too generous</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; phase 1 uses &lt;= instead of &lt;</span></div>
+<pre><code>function broken(intervals, newInterval) {
+  let [start, end] = newInterval;
+  const out = [];
+  let i = 0;
+  const n = intervals.length;
+
+  // BUG: an interval that ENDS exactly where we START does overlap us,
+  // so it must not be copied through untouched.
+  while (i &lt; n &amp;&amp; intervals[i][1] &lt;= start) out.push(intervals[i++]);
+
+  while (i &lt; n &amp;&amp; intervals[i][0] &lt;= end) {
+    start = Math.min(start, intervals[i][0]);
+    end   = Math.max(end,   intervals[i][1]);
+    i++;
+  }
+  out.push([start, end]);
+
+  while (i &lt; n) out.push(intervals[i++]);
+  return out;
+}
+
+console.log(JSON.stringify(broken([[1,3],[6,9]], [4,5])));
+// [[1,3],[4,5],[6,9]]   fine -- nothing touches
+
+console.log(JSON.stringify(broken([[1,3],[6,9]], [3,5])));
+// [[1,3],[3,5],[6,9]]   WRONG -- should be [[1,5],[6,9]]
+
+// [1,3] ends exactly where [3,5] begins, so they overlap and must
+// merge. Phase 1 waved it through before phase 2 ever saw it.
+// Phase 1 is "ends STRICTLY before we start":  end &lt; start.</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">A bug that is not a bug &mdash; worth knowing why</span>
+    <p>A natural worry is that phase 2 must compare against the <em>growing</em> end rather than the
+    original one, since absorbing an interval can stretch the reach. That instinct is right in
+    general, and you should write it that way. But for <em>this</em> problem it happens to make no
+    difference: the input is guaranteed non-overlapping, so the next interval always starts after the
+    previous one ends, and it can only be caught by the original end anyway. Write the growing
+    version regardless &mdash; it states the invariant you actually mean, and the guarantee it leans
+    on disappears the moment someone passes you a slightly messy list.</p>
+  </div>
+
+  <h3>2. Using <code>&lt;</code> where you need <code>&lt;=</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; misses touching intervals</span></div>
+<pre><code>function broken(intervals, newInterval) {
+  let [start, end] = newInterval;
+  const out = [];
+  let i = 0;
+  while (i &lt; intervals.length &amp;&amp; intervals[i][1] &lt; start) out.push(intervals[i++]);
+  while (i &lt; intervals.length &amp;&amp; intervals[i][0] &lt; end) {     // should be &lt;=
+    start = Math.min(start, intervals[i][0]);
+    end   = Math.max(end,   intervals[i][1]);
+    i++;
+  }
+  out.push([start, end]);
+  while (i &lt; intervals.length) out.push(intervals[i++]);
+  return out;
+}
+
+console.log(JSON.stringify(broken([[1,3],[6,9]], [2,6])));
+// [[1,6],[6,9]]   WRONG -- should be [[1,9]]
+
+// [6,9] starts exactly where the new interval ends. With &lt; it is
+// treated as a separate interval, leaving two intervals touching at
+// 6 in a list that is supposed to be non-overlapping.</code></pre>
+  </div>
+
+  <h3>3. Forgetting to push the merged interval when nothing overlaps</h3>
+
+  <p>If you write the push <em>inside</em> the phase-2 loop, then a new interval that fits neatly in a
+  gap never gets added at all &mdash; the loop runs zero times. The push belongs
+  <strong>after</strong> the loop, unconditionally.</p>
+
+  <h3>4. Pushing the overlapping intervals as well as the merged one</h3>
+
+  <p>Phase 2 is a consuming loop. The intervals it walks over are being <em>eaten</em>; they must not
+  appear in the output. Only the single grown interval is pushed.</p>
+
+  <h3>5. Sharing array objects with the input</h3>
+
+  <p><code>out.push(intervals[i])</code> puts the caller&rsquo;s inner arrays into your result. Nothing
+  mutates them in this algorithm, so it is safe here &mdash; but if a later caller edits the result
+  they will silently edit the original too. In library code, copy with
+  <code>[...intervals[i]]</code>.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the three phases from memory</strong>, then check your comparison operators:
+    phase 1 uses <code>end &lt; start</code>, phase 2 uses <code>start &lt;= end</code>. Getting either
+    boundary wrong is the whole failure mode of this problem.</li>
+    <li><strong>Remove an interval.</strong> Given a sorted disjoint list and an interval to delete,
+    return what remains. An interval that straddles the deleted range splits into <em>two</em>
+    pieces &mdash; that is the twist.</li>
+    <li><strong>Half-open intervals.</strong> Redo the whole page assuming <code>[1,4)</code> excludes
+    4, so <code>[1,4)</code> and <code>[4,5)</code> do not merge. Which comparisons change?</li>
+    <li><strong>Binary search for phase 1.</strong> Since the list is sorted, you could jump straight
+    to the first interval that might overlap in O(log n). It does not improve the overall complexity
+    &mdash; phases 2 and 3 still copy O(n) items &mdash; but it is a good answer to
+    &ldquo;can you speed up the first phase?&rdquo;</li>
+    <li><strong>Insert many intervals.</strong> If you have m new intervals to insert, is it better to
+    call this m times, or to concatenate and re-merge once? Work out both complexities
+    (<code>O(m &times; n)</code> versus <code>O((n+m) log (n+m))</code>) and say where the crossover is.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Read what you were given.</strong> &ldquo;Already sorted&rdquo;, &ldquo;non-overlapping&rdquo;,
+    &ldquo;all positive&rdquo;, &ldquo;distinct values&rdquo; are never decoration in a problem statement
+    &mdash; each one is a constraint that removes work, and the intended solution almost always uses
+    it. Before you start coding, reread the guarantees and ask what each one lets you skip.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="07-merge-intervals.html">&larr; Merge Intervals</a>
+  <a href="09-move-zeroes.html">Next: Move Zeroes &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

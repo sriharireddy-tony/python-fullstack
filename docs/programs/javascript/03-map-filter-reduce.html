@@ -1,0 +1,980 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>map, filter and reduce from scratch</title>
+<meta name="description" content="Rebuild the three array methods on the prototype — holes, the index argument, and why reduce throws on an empty array.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">JavaScript semantics &middot; Problem 03</p>
+  <h1>Implement map, filter and reduce</h1>
+  <p class="standfirst">A five-line answer gets you halfway. The other half is the details the real
+  implementations have: three callback arguments, a <code>thisArg</code>, sparse arrays, a length
+  cached up front, and the one line of <code>reduce</code> that decides whether it throws.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Write <code>myMap</code>, <code>myFilter</code> and <code>myReduce</code> on
+  <code>Array.prototype</code>, so that <code>[1,2,3].myMap(x =&gt; x * 2)</code> works.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Method</th><th>Returns</th><th>Callback receives</th><th>Length of result</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">map</td><td>a new array</td><td class="mono">(value, index, array)</td><td>always the same as the input</td></tr>
+        <tr><td class="mono">filter</td><td>a new array</td><td class="mono">(value, index, array)</td><td>0 to n</td></tr>
+        <tr><td class="mono">reduce</td><td>a single value</td><td class="mono">(acc, value, index, array)</td><td>not an array at all</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">The relationship worth stating out loud</span>
+    <p><code>reduce</code> is the general one. <code>map</code> and <code>filter</code> are both
+    <code>reduce</code> with a particular accumulator, and being able to show that is a small piece of
+    evidence that you understand it rather than having memorised it.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">map and filter, expressed as reduce</span></div>
+<pre><code>const nums = [1, 2, 3, 4, 5];
+
+const mapped = nums.reduce((acc, x) =&gt; { acc.push(x * 2); return acc; }, []);
+const filtered = nums.reduce((acc, x) =&gt; { if (x % 2) acc.push(x); return acc; }, []);
+const summed = nums.reduce((acc, x) =&gt; acc + x, 0);
+
+console.log('map    :', mapped, ' matches:',
+            JSON.stringify(mapped) === JSON.stringify(nums.map((x) =&gt; x * 2)));
+console.log('filter :', filtered, ' matches:',
+            JSON.stringify(filtered) === JSON.stringify(nums.filter((x) =&gt; x % 2)));
+console.log('sum    :', summed);
+
+// reduce can produce any shape at all -- that is the point
+console.log('');
+console.log('to an object:', nums.reduce((acc, x) =&gt; { acc['n' + x] = x; return acc; }, {}));
+console.log('to a string :', nums.reduce((acc, x) =&gt; acc + x, ''));
+console.log('to a Map    :', nums.reduce((acc, x) =&gt; acc.set(x, x * x), new Map()));
+console.log('the max     :', nums.reduce((a, b) =&gt; (a &gt; b ? a : b)));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the five-line answers</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; correct for ordinary use</span></div>
+<pre><code>Array.prototype.myMap = function (fn) {
+  const out = [];
+  for (let i = 0; i &lt; this.length; i++) out.push(fn(this[i], i, this));
+  return out;
+};
+
+Array.prototype.myFilter = function (fn) {
+  const out = [];
+  for (let i = 0; i &lt; this.length; i++) {
+    if (fn(this[i], i, this)) out.push(this[i]);
+  }
+  return out;
+};
+
+Array.prototype.myReduce = function (fn, initial) {
+  let acc = initial;
+  for (let i = 0; i &lt; this.length; i++) acc = fn(acc, this[i], i, this);
+  return acc;
+};
+
+const nums = [1, 2, 3, 4];
+console.log('myMap   :', nums.myMap((x) =&gt; x * 2));
+console.log('myFilter:', nums.myFilter((x) =&gt; x &gt; 2));
+console.log('myReduce:', nums.myReduce((a, b) =&gt; a + b, 0));
+console.log('index arg works:', nums.myMap((x, i) =&gt; x + '@' + i));</code></pre>
+  </div>
+
+  <p>That is the right first answer, and you should write it quickly and confidently. Now the
+  follow-ups, in the order they usually come.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Where Version 0 diverges from the real thing</span></div>
+<pre><code>Array.prototype.myReduce = function (fn, initial) {
+  let acc = initial;
+  for (let i = 0; i &lt; this.length; i++) acc = fn(acc, this[i], i, this);
+  return acc;
+};
+Array.prototype.myMap = function (fn) {
+  const out = [];
+  for (let i = 0; i &lt; this.length; i++) out.push(fn(this[i], i, this));
+  return out;
+};
+
+// 1. reduce with no initial value
+console.log('1. real reduce, no initial :', [1, 2, 3].reduce((a, b) =&gt; a + b));
+console.log('   mine                    :', [1, 2, 3].myReduce((a, b) =&gt; a + b));
+//   undefined -- it started with acc = undefined
+
+// 2. reduce on an empty array with no initial value MUST throw
+try { [].reduce((a, b) =&gt; a + b); }
+catch (e) { console.log('');
+            console.log('2. real reduce, empty      :', e.constructor.name + ':', e.message); }
+console.log('   mine                    :', [].myReduce((a, b) =&gt; a + b));
+//   undefined -- silently wrong instead of loudly wrong
+
+// 3. sparse arrays -- real map SKIPS the holes
+const sparse = [1, , 3];                       // note the hole at index 1
+console.log('');
+console.log('3. the array               :', sparse, ' length', sparse.length);
+console.log('   real map                :', sparse.map((x) =&gt; 'saw ' + x));
+console.log('   mine                    :', sparse.myMap((x) =&gt; 'saw ' + x));
+//   real:  [ 'saw 1', &lt;1 empty item&gt;, 'saw 3' ]  -- callback never ran on the hole
+//   mine:  [ 'saw 1', 'saw undefined', 'saw 3' ] -- it ran
+
+// 4. a thisArg as the second parameter
+const ctx = { factor: 10 };
+console.log('');
+console.log('4. real map with thisArg   :',
+            [1, 2].map(function (x) { return x * this.factor; }, ctx));
+try {
+  console.log('   mine                    :',
+              [1, 2].myMap(function (x) { return x * this.factor; }, ctx));
+} catch (e) {
+  console.log('   mine                    :', e.constructor.name + ':', e.message);
+}</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why the details matter &mdash; and what they cost</h2>
+
+  <p>These are not academic. Chaining <code>map().filter().reduce()</code> allocates an intermediate
+  array per link, and each built-in method call carries real overhead compared to one loop.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; three passes versus one</span></div>
+<pre><code>const N = 2000000;
+const data = new Array(N);
+for (let i = 0; i &lt; N; i++) data[i] = i;
+
+// three passes, two intermediate arrays
+let t = performance.now();
+const chained = data
+  .map((x) =&gt; x * 2)
+  .filter((x) =&gt; x % 3 === 0)
+  .reduce((a, b) =&gt; a + b, 0);
+const chainMs = performance.now() - t;
+
+// one pass, no intermediates
+t = performance.now();
+let single = 0;
+for (let i = 0; i &lt; N; i++) {
+  const doubled = data[i] * 2;
+  if (doubled % 3 === 0) single += doubled;
+}
+const loopMs = performance.now() - t;
+
+// one pass, still using reduce
+t = performance.now();
+const oneReduce = data.reduce((acc, x) =&gt; {
+  const doubled = x * 2;
+  return doubled % 3 === 0 ? acc + doubled : acc;
+}, 0);
+const reduceMs = performance.now() - t;
+
+console.log('same answer everywhere:', chained === single &amp;&amp; single === oneReduce);
+console.log('');
+console.log('  map().filter().reduce() : ' + chainMs.toFixed(1) + ' ms');
+console.log('  single reduce()         : ' + reduceMs.toFixed(1) + ' ms');
+console.log('  plain for loop          : ' + loopMs.toFixed(1) + ' ms');
+console.log('');
+console.log('The chain allocated two arrays of ' + N.toLocaleString('en-US') +
+            ' and ' + (N / 3 | 0).toLocaleString('en-US') + ' items');
+console.log('that nothing ever read again.');
+console.log('');
+console.log('This is NOT an argument against map and filter -- at any');
+console.log('normal size the chain is clearer and the difference is');
+console.log('invisible. It is an argument for knowing what the chain');
+console.log('costs, so you can answer when someone asks.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; what the spec actually says</h2>
+
+  <p>Each of the three follows the same recipe. Learn the recipe and all three fall out.</p>
+
+  <div class="trace">
+<pre>  1. Reject a non-callable callback with a TypeError.
+
+  2. Cache the length ONCE, before the loop.
+     The callback can push or pop; the real methods do not react
+     to that, and neither should yours.
+
+  3. Loop by index, and check `i in this` before calling.
+     A hole is not the value undefined -- `2 in [1,,3]` is true
+     but `1 in [1,,3]` is false. That check is what makes the
+     callback skip holes.
+
+  4. Call with the right arguments:
+       map/filter   fn.call(thisArg, value, index, array)
+       reduce       fn(acc, value, index, array)   -- no thisArg
+
+  5. Return the right shape:
+       map     an array of the SAME length (holes preserved)
+       filter  a new, dense array
+       reduce  the accumulator
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The rule that decides <code>reduce</code>'s hardest case</span>
+    <p>With an initial value: start at index 0 with <code>acc = initial</code>.</p>
+    <p>Without one: <strong>the first present element becomes the accumulator</strong> and the loop
+    starts after it. If there is no present element at all, throw
+    <code>TypeError: Reduce of empty array with no initial value</code>.</p>
+    <p>Note &ldquo;present&rdquo;, not &ldquo;index 0&rdquo;. <code>[, , 5].reduce((a,b) =&gt; a+b)</code>
+    starts from 5.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">holes are not undefined &mdash; proof</span></div>
+<pre><code>const hole = [1, , 3];
+const undef = [1, undefined, 3];
+
+console.log('they log the same-ish:');
+console.log('  hole :', hole);
+console.log('  undef:', undef);
+console.log('');
+console.log('and read the same:');
+console.log('  hole[1] :', hole[1]);      // undefined
+console.log('  undef[1]:', undef[1]);     // undefined
+console.log('');
+console.log('but they are NOT the same:');
+console.log('  1 in hole  :', 1 in hole);        // false -- no such property
+console.log('  1 in undef :', 1 in undef);       // true
+console.log('  Object.keys(hole) :', Object.keys(hole));
+console.log('  Object.keys(undef):', Object.keys(undef));
+console.log('');
+console.log('and the array methods can tell:');
+let holeCalls = 0, undefCalls = 0;
+hole.forEach(() =&gt; holeCalls++);
+undef.forEach(() =&gt; undefCalls++);
+console.log('  forEach on hole  ran', holeCalls, 'times');
+console.log('  forEach on undef ran', undefCalls, 'times');
+console.log('');
+console.log('  hole.map(x =&gt; 9)  :', hole.map(() =&gt; 9));
+console.log('  undef.map(x =&gt; 9) :', undef.map(() =&gt; 9));
+console.log('');
+console.log('Four ways to end up with a hole  (index present? false = hole)');
+console.log('  [1, , 3]           index 1 present?', 1 in [1, , 3]);
+console.log('  new Array(3)       index 0 present?', 0 in new Array(3));
+console.log('  a = [1]; a[5] = 6  index 2 present?',
+            (() =&gt; { const a = [1]; a[5] = 6; return 2 in a; })());
+console.log('  delete a[1]        index 1 present?',
+            (() =&gt; { const a = [1,2,3]; delete a[1]; return 1 in a; })());
+console.log('');
+console.log('All false -- all four really are holes, not undefined.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; reduce with and without an initial value</h2>
+
+  <div class="trace">
+<pre>  [10, 20, 30].reduce((acc, v) => acc + v, 100)
+
+     acc starts at 100, i starts at 0
+     i=0   fn(100, 10, 0, arr)  ->  110
+     i=1   fn(110, 20, 1, arr)  ->  130
+     i=2   fn(130, 30, 2, arr)  ->  160
+     result 160        3 callback calls
+
+
+  [10, 20, 30].reduce((acc, v) => acc + v)
+
+     no initial: take arr[0] as acc, start the loop at 1
+     acc = 10, i starts at 1
+     i=1   fn(10, 20, 1, arr)   ->  30
+     i=2   fn(30, 30, 2, arr)   ->  60
+     result 60         2 callback calls  <-- one FEWER
+
+
+  [].reduce((acc, v) => acc + v)
+
+     no initial and no elements  ->  TypeError
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>Array.prototype.reduceLoud = function (fn, ...rest) {
+  const hasInitial = rest.length &gt; 0;
+  const len = this.length;
+
+  let acc;
+  let i = 0;
+
+  if (hasInitial) {
+    acc = rest[0];
+    console.log('  initial value given: acc = ' + JSON.stringify(acc) + ', start at i=0');
+  } else {
+    console.log('  no initial value: hunting for the first present element');
+    while (i &lt; len &amp;&amp; !(i in this)) {
+      console.log('    index ' + i + ' is a hole -- skip');
+      i++;
+    }
+    if (i &gt;= len) throw new TypeError('Reduce of empty array with no initial value');
+    acc = this[i];
+    console.log('    acc = ' + JSON.stringify(acc) + ' from index ' + i +
+                ', start the loop at i=' + (i + 1));
+    i++;
+  }
+
+  for (; i &lt; len; i++) {
+    if (!(i in this)) { console.log('    index ' + i + ' is a hole -- skip'); continue; }
+    const next = fn(acc, this[i], i, this);
+    console.log('    fn(' + JSON.stringify(acc) + ', ' + JSON.stringify(this[i]) +
+                ', ' + i + ') -> ' + JSON.stringify(next));
+    acc = next;
+  }
+
+  return acc;
+};
+
+const add = (a, b) =&gt; a + b;
+
+console.log('[10,20,30].reduce(add, 100)');
+console.log('  RESULT', [10, 20, 30].reduceLoud(add, 100));
+
+console.log('');
+console.log('[10,20,30].reduce(add)');
+console.log('  RESULT', [10, 20, 30].reduceLoud(add));
+
+console.log('');
+console.log('[, , 5, 6].reduce(add)');
+console.log('  RESULT', [, , 5, 6].reduceLoud(add));
+
+console.log('');
+console.log('[].reduce(add)');
+try { [].reduceLoud(add); }
+catch (e) { console.log('  ' + e.constructor.name + ':', e.message); }
+
+console.log('');
+console.log('[].reduce(add, 0)');
+console.log('  RESULT', [].reduceLoud(add, 0));   // 0 -- an initial value saves it</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Why <code>rest.length &gt; 0</code> and not <code>initial === undefined</code></span>
+    <p><code>arr.reduce(fn, undefined)</code> passed an initial value &mdash; it just happens to be
+    <code>undefined</code>. Testing the value cannot tell that apart from passing nothing; testing
+    <code>arguments.length</code> can. The spec says the same thing.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; the full implementations</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; map, filter and reduce, spec-shaped</span></div>
+<pre><code>Array.prototype.myMap = function (callback, thisArg) {
+  if (this == null) throw new TypeError('called on null or undefined');
+  if (typeof callback !== 'function') throw new TypeError(callback + ' is not a function');
+
+  const arr = Object(this);
+  const len = arr.length &gt;&gt;&gt; 0;      // ToUint32, as the spec says
+  const out = new Array(len);        // same length, holes included
+
+  for (let i = 0; i &lt; len; i++) {
+    if (i in arr) {                  // skip holes, do not create them
+      out[i] = callback.call(thisArg, arr[i], i, arr);
+    }
+  }
+
+  return out;
+};
+
+Array.prototype.myFilter = function (callback, thisArg) {
+  if (this == null) throw new TypeError('called on null or undefined');
+  if (typeof callback !== 'function') throw new TypeError(callback + ' is not a function');
+
+  const arr = Object(this);
+  const len = arr.length &gt;&gt;&gt; 0;
+  const out = [];                    // filter's result is always dense
+
+  for (let i = 0; i &lt; len; i++) {
+    if (i in arr) {
+      const value = arr[i];
+      if (callback.call(thisArg, value, i, arr)) out.push(value);
+    }
+  }
+
+  return out;
+};
+
+Array.prototype.myReduce = function (callback) {
+  if (this == null) throw new TypeError('called on null or undefined');
+  if (typeof callback !== 'function') throw new TypeError(callback + ' is not a function');
+
+  const arr = Object(this);
+  const len = arr.length &gt;&gt;&gt; 0;
+  const hasInitial = arguments.length &gt; 1;
+
+  let acc;
+  let i = 0;
+
+  if (hasInitial) {
+    acc = arguments[1];
+  } else {
+    while (i &lt; len &amp;&amp; !(i in arr)) i++;
+    if (i &gt;= len) throw new TypeError('Reduce of empty array with no initial value');
+    acc = arr[i];
+    i++;
+  }
+
+  for (; i &lt; len; i++) {
+    if (i in arr) acc = callback(acc, arr[i], i, arr);
+  }
+
+  return acc;
+};
+
+// ---- check every behaviour against the real methods -------------
+const cases = [
+  [1, 2, 3, 4],
+  [],
+  [1, , 3],
+  [, , 5, 6],
+  [undefined, null, 0, ''],
+  new Array(3),
+];
+
+const j = (x) =&gt; JSON.stringify(x);
+let pass = 0, total = 0;
+
+function check(label, a, b) {
+  total++;
+  if (a === b) { pass++; return; }
+  console.log('  MISMATCH ' + label + ': mine ' + a + ' vs real ' + b);
+}
+
+for (const arr of cases) {
+  // map: compare values AND which indexes exist
+  const mine = arr.myMap((x, i) =&gt; [x, i]);
+  const real = arr.map((x, i) =&gt; [x, i]);
+  check('map ' + j(arr), j(mine), j(real));
+  check('map holes ' + j(arr), j(Object.keys(mine)), j(Object.keys(real)));
+
+  check('filter ' + j(arr),
+        j(arr.myFilter((x) =&gt; x !== 3)), j(arr.filter((x) =&gt; x !== 3)));
+
+  // how many times did the callback actually run?
+  let mineCalls = 0, realCalls = 0;
+  arr.myMap(() =&gt; { mineCalls++; });
+  arr.map(() =&gt; { realCalls++; });
+  check('map call count ' + j(arr), mineCalls, realCalls);
+
+  // reduce, with and without an initial value
+  const add = (a, b) =&gt; String(a) + '|' + String(b);
+  check('reduce+init ' + j(arr), j(arr.myReduce(add, 'seed')), j(arr.reduce(add, 'seed')));
+
+  let mineErr = null, realErr = null, mineVal, realVal;
+  try { mineVal = arr.myReduce(add); } catch (e) { mineErr = e.constructor.name; }
+  try { realVal = arr.reduce(add); } catch (e) { realErr = e.constructor.name; }
+  check('reduce ' + j(arr), j([mineErr, mineVal]), j([realErr, realVal]));
+}
+
+// thisArg
+const ctx = { f: 10 };
+check('thisArg',
+      j([1, 2].myMap(function (x) { return x * this.f; }, ctx)),
+      j([1, 2].map(function (x) { return x * this.f; }, ctx)));
+
+// a non-function callback
+let e1 = null, e2 = null;
+try { [1].myMap(42); } catch (e) { e1 = e.constructor.name; }
+try { [1].map(42); } catch (e) { e2 = e.constructor.name; }
+check('non-function callback', e1, e2);
+
+console.log(pass + ' / ' + total + ' behaviours match the built-ins');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the follow-ups</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Building the rest of the family out of the same recipe</span></div>
+<pre><code>Array.prototype.myForEach = function (cb, thisArg) {
+  const arr = Object(this), len = arr.length &gt;&gt;&gt; 0;
+  for (let i = 0; i &lt; len; i++) if (i in arr) cb.call(thisArg, arr[i], i, arr);
+  return undefined;                                    // note: no return value
+};
+
+Array.prototype.mySome = function (cb, thisArg) {
+  const arr = Object(this), len = arr.length &gt;&gt;&gt; 0;
+  for (let i = 0; i &lt; len; i++) {
+    if (i in arr &amp;&amp; cb.call(thisArg, arr[i], i, arr)) return true;   // short-circuit
+  }
+  return false;                                        // vacuously false when empty
+};
+
+Array.prototype.myEvery = function (cb, thisArg) {
+  const arr = Object(this), len = arr.length &gt;&gt;&gt; 0;
+  for (let i = 0; i &lt; len; i++) {
+    if (i in arr &amp;&amp; !cb.call(thisArg, arr[i], i, arr)) return false;
+  }
+  return true;                                         // vacuously TRUE when empty
+};
+
+Array.prototype.myFind = function (cb, thisArg) {
+  const arr = Object(this), len = arr.length &gt;&gt;&gt; 0;
+  // note: find does NOT skip holes -- it visits every index
+  for (let i = 0; i &lt; len; i++) {
+    if (cb.call(thisArg, arr[i], i, arr)) return arr[i];
+  }
+  return undefined;
+};
+
+Array.prototype.myFlat = function (depth = 1) {
+  const out = [];
+  (function walk(list, d) {
+    const len = list.length &gt;&gt;&gt; 0;
+    for (let i = 0; i &lt; len; i++) {
+      if (!(i in list)) continue;                      // flat removes holes
+      const v = list[i];
+      if (Array.isArray(v) &amp;&amp; d &gt; 0) walk(v, d - 1);
+      else out.push(v);
+    }
+  })(this, depth);
+  return out;
+};
+
+Array.prototype.myReduceRight = function (cb) {
+  const arr = Object(this), len = arr.length &gt;&gt;&gt; 0;
+  let i = len - 1, acc;
+  if (arguments.length &gt; 1) acc = arguments[1];
+  else {
+    while (i &gt;= 0 &amp;&amp; !(i in arr)) i--;
+    if (i &lt; 0) throw new TypeError('Reduce of empty array with no initial value');
+    acc = arr[i]; i--;
+  }
+  for (; i &gt;= 0; i--) if (i in arr) acc = cb(acc, arr[i], i, arr);
+  return acc;
+};
+
+const nums = [1, 2, 3, 4, 5];
+const j = (x) =&gt; JSON.stringify(x);
+
+console.log('mySome  >3   :', nums.mySome((x) =&gt; x &gt; 3), '  real:', nums.some((x) =&gt; x &gt; 3));
+console.log('myEvery >0   :', nums.myEvery((x) =&gt; x &gt; 0), '  real:', nums.every((x) =&gt; x &gt; 0));
+console.log('myFind  even :', nums.myFind((x) =&gt; x % 2 === 0), '  real:', nums.find((x) =&gt; x % 2 === 0));
+console.log('myFlat       :', j([1, [2, [3, [4]]]].myFlat(2)),
+            ' real:', j([1, [2, [3, [4]]]].flat(2)));
+console.log('myReduceRight:', ['a','b','c'].myReduceRight((a, b) =&gt; a + b),
+            ' real:', ['a','b','c'].reduceRight((a, b) =&gt; a + b));
+
+console.log('');
+console.log('The empty-array surprise:');
+console.log('  [].some(x => true)  :', [].some(() =&gt; true), ' mine:', [].mySome(() =&gt; true));
+console.log('  [].every(x => false):', [].every(() =&gt; false), ' mine:', [].myEvery(() =&gt; false));
+console.log('  every() on an empty array is TRUE. "All zero of them');
+console.log('  pass" is vacuously true, and it catches people out.');
+
+console.log('');
+console.log('And find does NOT skip holes, unlike map:');
+let findVisits = 0, mapVisits = 0;
+[1, , 3].find(() =&gt; { findVisits++; return false; });
+[1, , 3].map(() =&gt; { mapVisits++; });
+console.log('  find visited', findVisits, 'indexes; map visited', mapVisits);</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the one to be careful about &mdash; a lazy pipeline</span></div>
+<pre><code>// A chain of map/filter builds a whole array at each step. With a
+// generator you can run the same pipeline element by element, which
+// matters when the source is huge or infinite.
+function* lazyMap(iterable, fn) {
+  let i = 0;
+  for (const x of iterable) yield fn(x, i++);
+}
+
+function* lazyFilter(iterable, fn) {
+  let i = 0;
+  for (const x of iterable) if (fn(x, i++)) yield x;
+}
+
+function take(iterable, n) {
+  const out = [];
+  for (const x of iterable) {
+    if (out.length &gt;= n) break;
+    out.push(x);
+  }
+  return out;
+}
+
+function* naturals() {
+  let n = 1;
+  while (true) yield n++;
+}
+
+// first 5 squares divisible by 3, from an INFINITE source
+const result = take(
+  lazyFilter(lazyMap(naturals(), (x) =&gt; x * x), (x) =&gt; x % 3 === 0),
+  5
+);
+console.log('first five squares divisible by 3:', result);
+
+// how much work did each style do?
+let eagerCalls = 0, lazyCalls = 0;
+const source = [];
+for (let i = 1; i &lt;= 100000; i++) source.push(i);
+
+source.map((x) =&gt; { eagerCalls++; return x * x; })
+      .filter((x) =&gt; x % 3 === 0)
+      .slice(0, 5);
+
+take(lazyFilter(lazyMap(source, (x) =&gt; { lazyCalls++; return x * x; }),
+                (x) =&gt; x % 3 === 0), 5);
+
+console.log('');
+console.log('to get 5 results from 100,000 items:');
+console.log('  eager map ran the callback', eagerCalls.toLocaleString('en-US'), 'times');
+console.log('  lazy  map ran the callback', lazyCalls.toLocaleString('en-US'), 'times');
+console.log('');
+console.log('The eager chain cannot know you only wanted five. This is');
+console.log('what libraries mean by "lazy sequences", and the reason');
+console.log('the Iterator Helpers proposal exists.');</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Do not actually do this in production</span>
+    <p>Adding to <code>Array.prototype</code> is fine as an exercise and dangerous in a real codebase:
+    the property is enumerable, so it shows up in <code>for...in</code>, and two libraries defining the
+    same name silently fight. If you must, use
+    <code>Object.defineProperty(Array.prototype, 'myMap', { value: fn, enumerable: false })</code>
+    &mdash; and normally just export a plain function instead.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">why enumerable matters</span></div>
+<pre><code>Array.prototype.badMap = function () { return 'oops'; };
+
+Object.defineProperty(Array.prototype, 'goodMap', {
+  value: function () { return 'fine'; },
+  enumerable: false,
+  writable: true,
+  configurable: true,
+});
+
+const arr = ['a', 'b'];
+
+const keys = [];
+for (const k in arr) keys.push(k);
+
+console.log('for...in over ["a","b"] gave', keys.length, 'keys:');
+console.log(' ', keys.join(', '));
+console.log('');
+console.log('Only "0" and "1" are actual elements. Everything else is');
+console.log('a method someone bolted onto Array.prototype -- including');
+console.log('all the ones the earlier blocks on THIS page added, which');
+console.log('is the point: prototype pollution is global and permanent');
+console.log('for the life of the program.');
+console.log('');
+console.log('goodMap used defineProperty with enumerable:false, so:');
+console.log('  does it show up in for...in?', keys.includes('goodMap'));
+console.log('  is it still callable?       ', arr.goodMap());
+
+// tidy up so the rest of the page is unaffected
+delete Array.prototype.badMap;
+delete Array.prototype.goodMap;</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Method</th><th>Time</th><th>Extra space</th><th>Short-circuits?</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">map</td><td class="mono">O(n)</td><td class="mono">O(n)</td><td>no</td></tr>
+        <tr><td class="mono">filter</td><td class="mono">O(n)</td><td class="mono">O(k) for k kept</td><td>no</td></tr>
+        <tr><td class="mono">reduce</td><td class="mono">O(n)</td><td class="mono">O(1) beyond the accumulator</td><td>no</td></tr>
+        <tr><td class="mono">some / every / find</td><td class="mono">O(n) worst case</td><td class="mono">O(1)</td><td><strong>yes</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>All linear, all one pass. The column that matters is the last one: <code>some</code>,
+  <code>every</code>, <code>find</code> and <code>findIndex</code> stop as soon as they know the
+  answer, and the others do not. <code>arr.filter(p).length &gt; 0</code> scans everything and allocates;
+  <code>arr.some(p)</code> stops at the first match.</p>
+
+  <p>The trap in the space column is <code>reduce</code>. It is O(1) only if your accumulator is a
+  scalar. <code>reduce((acc, x) =&gt; [...acc, x], [])</code> copies the whole accumulator every
+  iteration &mdash; O(n&sup2;) time and O(n&sup2;) allocation. Same for spreading objects.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;All three take a callback receiving value, index and array, cache the length before the
+    loop, and skip holes by checking <code>i in arr</code> rather than testing for undefined &mdash;
+    a hole and an explicit <code>undefined</code> are different. <code>map</code> and
+    <code>filter</code> accept a <code>thisArg</code> and call the callback with <code>.call</code>;
+    <code>reduce</code> does not. <code>reduce</code>'s one hard case is a missing initial value: I
+    check <code>arguments.length</code>, not whether the value is undefined, and if there is no initial
+    value and no present element I throw the same TypeError the spec does.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Spreading the accumulator inside reduce</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct, and quadratic</span></div>
+<pre><code>const N = 20000;
+const data = [];
+for (let i = 0; i &lt; N; i++) data.push(i);
+
+let t = performance.now();
+const spread = data.reduce((acc, x) =&gt; [...acc, x * 2], []);
+const spreadMs = performance.now() - t;
+
+t = performance.now();
+const pushed = data.reduce((acc, x) =&gt; { acc.push(x * 2); return acc; }, []);
+const pushMs = performance.now() - t;
+
+t = performance.now();
+const mapped = data.map((x) =&gt; x * 2);
+const mapMs = performance.now() - t;
+
+console.log('all three agree:',
+            JSON.stringify(spread) === JSON.stringify(pushed) &amp;&amp;
+            JSON.stringify(pushed) === JSON.stringify(mapped));
+console.log('');
+console.log('  [...acc, x] : ' + spreadMs.toFixed(1) + ' ms');
+console.log('  acc.push(x) : ' + pushMs.toFixed(1) + ' ms');
+console.log('  .map(x)     : ' + mapMs.toFixed(1) + ' ms');
+console.log('  ratio       : ' + Math.round(spreadMs / Math.max(pushMs, 0.01)) + 'x');
+console.log('');
+console.log('Spreading copies the WHOLE accumulator every iteration, so');
+console.log('it does 1 + 2 + 3 + ... + n copies -- n^2/2 in total. It');
+console.log('reads as elegant and functional, and it is a performance');
+console.log('bug the moment n stops being tiny.');
+console.log('');
+console.log('The same applies to { ...acc, [k]: v } when grouping.');</code></pre>
+  </div>
+
+  <h3>2. Mutating the array while iterating it</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; elements silently skipped</span></div>
+<pre><code>// removing items during forEach: the classic
+const items = ['a', 'b', 'c', 'd'];
+const visited = [];
+
+items.forEach((item, i) =&gt; {
+  visited.push(item);
+  if (item === 'b') items.splice(i, 1);      // remove while iterating -- bug
+});
+
+console.log('visited:', visited);      // ['a','b','d']  -- 'c' was skipped
+console.log('left   :', items);
+
+// why: removing 'b' at index 1 slides 'c' down into index 1, but
+// the loop counter has already moved on to 2, which now holds 'd'.
+
+console.log('');
+console.log('And the length really is cached -- pushing during a map');
+console.log('does not extend the run:');
+const growing = [1, 2, 3];
+let calls = 0;
+const result = growing.map((x) =&gt; { calls++; growing.push(x); return x; });
+console.log('  callback ran', calls, 'times');
+console.log('  result   :', result);
+console.log('  array is now', growing.length, 'long');
+console.log('');
+console.log('To remove items, filter into a NEW array. To iterate while');
+console.log('removing, loop backwards.');</code></pre>
+  </div>
+
+  <h3>3. Using <code>map</code> when you mean <code>forEach</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">works, and says the wrong thing</span></div>
+<pre><code>const users = [{ name: 'Ada' }, { name: 'Grace' }];
+
+// map builds an array of undefined that nobody uses
+const wasted = users.map((u) =&gt; { console.log('  hello', u.name); });
+console.log('map returned:', wasted);        // [undefined, undefined]
+
+console.log('');
+const fine = users.forEach((u) =&gt; { console.log('  hello', u.name); });
+console.log('forEach returned:', fine);      // undefined
+
+console.log('');
+console.log('Both print. But map SAYS "I am transforming this into a');
+console.log('new array", and a reader who sees map looks for where the');
+console.log('result is used. When it is not used, they have to re-read');
+console.log('the code to work out that nothing was meant by it.');
+console.log('');
+console.log('  transforming    -> map');
+console.log('  side effects    -> forEach, or a plain for...of');
+console.log('  one value out   -> reduce');
+console.log('  stopping early  -> some / find / a for loop');
+console.log('');
+console.log('And you cannot break out of forEach or map at all:');
+let seen = 0;
+try {
+  [1, 2, 3, 4].forEach((x) =&gt; { seen++; if (x === 2) return; });
+} catch (e) { /* no */ }
+console.log('  `return` inside forEach skipped nothing:', seen, 'iterations');</code></pre>
+  </div>
+
+  <h3>4. Forgetting that <code>parseInt</code> takes two arguments</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the most famous map bug in JavaScript</span></div>
+<pre><code>console.log(['1', '2', '3'].map(parseInt));
+// [1, NaN, NaN]  -- not [1, 2, 3]
+
+console.log('');
+console.log('map calls the callback with (value, index, array), and');
+console.log('parseInt(string, radix) takes the second argument as the');
+console.log('base. So it really evaluates:');
+console.log('  parseInt("1", 0) =', parseInt('1', 0), ' (radix 0 means "guess")');
+console.log('  parseInt("2", 1) =', parseInt('2', 1), ' (base 1 does not exist)');
+console.log('  parseInt("3", 2) =', parseInt('3', 2), ' (3 is not a binary digit)');
+
+console.log('');
+console.log('fixes:');
+console.log('  map(s => parseInt(s, 10)) ->', ['1','2','3'].map((s) =&gt; parseInt(s, 10)));
+console.log('  map(Number)               ->', ['1','2','3'].map(Number));
+
+console.log('');
+console.log('The general rule: passing a named function straight to map');
+console.log('is only safe if it ignores its extra arguments.');
+console.log('  ["1","2","3"].map(Number)     ->', ['1','2','3'].map(Number), ' safe');
+console.log('  [1.7, 2.3].map(Math.round)    ->', [1.7, 2.3].map(Math.round), ' safe');
+console.log('  ["a","b"].map(console.log) prints the index too.');</code></pre>
+  </div>
+
+  <h3>5. Reading the length inside the loop condition</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; an infinite loop</span></div>
+<pre><code>Array.prototype.badMap = function (fn) {
+  const out = [];
+  // length read fresh every iteration -- bug
+  for (let i = 0; i &lt; this.length; i++) out.push(fn(this[i], i, this));
+  return out;
+};
+
+Array.prototype.goodMap = function (fn) {
+  const out = [];
+  const len = this.length;             // cached once, as the spec requires
+  for (let i = 0; i &lt; len; i++) out.push(fn(this[i], i, this));
+  return out;
+};
+
+const a = [1, 2, 3];
+let guard = 0;
+try {
+  a.badMap((x) =&gt; {
+    if (++guard &gt; 100000) throw new Error('runaway -- the array kept growing');
+    a.push(x);                          // a callback that appends
+    return x;
+  });
+} catch (e) {
+  console.log('badMap :', e.message);
+}
+
+const b = [1, 2, 3];
+console.log('goodMap:', b.goodMap((x) =&gt; { b.push(x); return x; }),
+            ' and the real map agrees:',
+            JSON.stringify([1,2,3].map(function (x) { return x; })));
+
+console.log('');
+console.log('The real map caches length before the first callback runs,');
+console.log('so appending during a map can never extend the run. Your');
+console.log('version has to do the same, or a callback that grows the');
+console.log('array turns into an infinite loop.');
+
+delete Array.prototype.badMap;
+delete Array.prototype.goodMap;</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write all three from memory</strong> with the full signature &mdash; three callback
+    arguments, <code>thisArg</code> on map and filter, cached length, <code>i in arr</code>.</li>
+    <li><strong>Write <code>reduce</code>'s no-initial-value branch</strong> and explain why the test is
+    <code>arguments.length &gt; 1</code>. Then say what <code>[].reduce(fn)</code> must do.</li>
+    <li><strong>Implement <code>map</code> in terms of <code>reduce</code></strong>, and
+    <code>filter</code> too. Then explain why you would not ship that.</li>
+    <li><strong>Implement <code>flat(depth)</code> and <code>flatMap</code>.</strong>
+    <code>myFlat</code> is in Step 7; <code>flatMap</code> is map followed by one level of flatten,
+    and it is worth knowing it exists.</li>
+    <li><strong>Implement <code>groupBy</code> with reduce</strong> &mdash; the single most common real
+    use of reduce, and its own page later in this section.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>The built-ins have edge cases, and knowing them is what separates a memorised answer
+    from an understood one.</strong> Holes are not <code>undefined</code>. Length is cached.
+    <code>reduce</code> without an initial value starts from the first <em>present</em> element and
+    throws on an empty array. <code>every</code> on an empty array is true. None of these matter often
+    &mdash; and every one of them is a question someone will ask.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="02-deep-clone.html">&larr; Deep Clone</a>
+  <a href="04-call-apply-bind.html">Next: call, apply and bind &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

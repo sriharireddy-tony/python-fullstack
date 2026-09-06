@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Valid Palindrome With Skips</title>
+<meta name="description" content="Two pointers walking inwards, skipping anything that is not a letter or digit — without building a cleaned copy.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Two pointers &middot; Problem 03</p>
+  <h1>Valid Palindrome With Skips</h1>
+  <p class="standfirst">Two pointers walking towards each other &mdash; the simplest two-pointer
+  shape there is. The interesting part is doing it <strong>without building a cleaned copy</strong>
+  of the string, which is what takes it from O(n) space to O(1).</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Is the string a palindrome, ignoring case, and ignoring everything that is not a letter or a
+  digit?</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Answer</th><th>What it reduces to</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">"A man, a plan, a canal: Panama"</td><td class="mono">true</td><td class="mono">"amanaplanacanalpanama"</td></tr>
+        <tr><td class="mono">"race a car"</td><td class="mono">false</td><td class="mono">"raceacar"</td></tr>
+        <tr><td class="mono">" "</td><td class="mono">true</td><td class="mono">"" &mdash; empty is a palindrome</td></tr>
+        <tr><td class="mono">"0P"</td><td class="mono">false</td><td class="mono">"0p" &mdash; digits are kept</td></tr>
+        <tr><td class="mono">".,"</td><td class="mono">true</td><td class="mono">""</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The two rows that catch people</span>
+    <p><code>" "</code> is <strong>true</strong>. After removing the space nothing is left, and an
+    empty string reads the same forwards and backwards.</p>
+    <p><code>"0P"</code> is <strong>false</strong>. Both characters are alphanumeric, so both are
+    kept; lowercased that is <code>"0p"</code>, and <code>0 !== p</code>. A solution that only
+    accepts letters would drop the <code>0</code> and wrongly answer true.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; clean it, then reverse it</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; clean and compare with the reverse</span></div>
+<pre><code>function isPalindromeClean(s) {
+  const cleaned = s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const reversed = [...cleaned].reverse().join('');
+  return cleaned === reversed;
+}
+
+console.log(isPalindromeClean('A man, a plan, a canal: Panama'));   // true
+console.log(isPalindromeClean('race a car'));                       // false
+console.log(isPalindromeClean(' '));                                // true
+console.log(isPalindromeClean('0P'));                               // false
+console.log(isPalindromeClean('.,'));                               // true
+console.log(isPalindromeClean('ab_a'));                             // true</code></pre>
+  </div>
+
+  <p>Three lines, obviously correct, and the one you would write at work. Its cost is
+  <strong>three extra strings</strong>: the lowercased copy, the cleaned copy and the reversed copy.
+  That is O(n) space for a question that can be answered with two integers.</p>
+
+  <div class="note">
+    <span class="t">The regex, read aloud</span>
+    <p><code>/[^a-z0-9]/g</code> &mdash; the <code>[^...]</code> means &ldquo;any character
+    <em>not</em> in this set&rdquo;, and <code>g</code> means &ldquo;every occurrence&rdquo;. So:
+    replace every character that is not a lowercase letter or a digit with nothing. It runs
+    <em>after</em> <code>toLowerCase()</code>, which is why uppercase letters do not need to be in the
+    set.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why building copies costs</h2>
+
+  <p>Both approaches are O(n) time. The difference is memory and allocations &mdash; and, on a long
+  string that fails early, wasted work: the cleaning version processes the entire string before
+  discovering a mismatch at position 1.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// A long string that is NOT a palindrome, and fails at the very
+// first comparison.
+const N = 2000000;
+const s = 'a' + 'x'.repeat(N) + 'b';
+
+function cleanAndReverse(str) {
+  const c = str.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return c === [...c].reverse().join('');
+}
+
+function twoPointers(str) {
+  const ok = ch =&gt; (ch &gt;= 'a' &amp;&amp; ch &lt;= 'z') ||
+                   (ch &gt;= 'A' &amp;&amp; ch &lt;= 'Z') ||
+                   (ch &gt;= '0' &amp;&amp; ch &lt;= '9');
+  let lo = 0, hi = str.length - 1;
+  while (lo &lt; hi) {
+    while (lo &lt; hi &amp;&amp; !ok(str[lo])) lo++;
+    while (lo &lt; hi &amp;&amp; !ok(str[hi])) hi--;
+    if (str[lo].toLowerCase() !== str[hi].toLowerCase()) return false;
+    lo++; hi--;
+  }
+  return true;
+}
+
+let t = performance.now();
+const a = cleanAndReverse(s);
+const cleanMs = performance.now() - t;
+
+t = performance.now();
+const b = twoPointers(s);
+const ptrMs = performance.now() - t;
+
+console.log('clean + reverse :', a, 'in', cleanMs.toFixed(1) + ' ms');
+console.log('two pointers    :', b, 'in', ptrMs.toFixed(3) + ' ms');
+console.log('same answer:', a === b);
+console.log('');
+console.log('The two-pointer version compared ONE pair and stopped.');
+console.log('The cleaning version built three 2,000,002-character');
+console.log('strings first.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; walk inwards, skipping as you go</h2>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Put one pointer at each end. Before comparing, <strong>advance each pointer past anything that
+    is not alphanumeric</strong>. Then compare the two characters, lowercased. If they differ, it is
+    not a palindrome. If they match, step both inwards and repeat.</p>
+    <p>No copies, no allocations, and it stops the instant it finds a mismatch.</p>
+  </div>
+
+  <div class="trace">
+<pre>  "A man, a plan, a canal: Panama"
+   ^                            ^
+   lo                           hi
+
+  'A' vs 'a'  ->  lowercase both  ->  'a' === 'a'   match, step in
+
+  "A man, a plan, a canal: Panama"
+     ^                        ^
+     lo is on a space -> skip
+     hi is on 'm'
+
+  ' ' is not alphanumeric  ->  lo++
+  now lo is on 'm', hi is on 'm'   match, step in
+
+  ...and so on, with the commas and colon skipped silently.
+</pre>
+  </div>
+
+  <h3>The three inner conditions</h3>
+
+  <p>Each skip loop needs <code>lo &lt; hi</code> in its own condition, not just the outer loop:</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the guard that prevents running off the end</span></div>
+<pre><code>while (lo &lt; hi &amp;&amp; !isAlphanumeric(s[lo])) lo++;
+             ^^^
+             without this, a string of pure punctuation walks
+             lo past hi and past the end of the string, and
+             s[lo] becomes undefined</code></pre>
+  </div>
+
+  <p>Try it on <code>".,"</code>: the first skip loop would advance <code>lo</code> forever without
+  the guard. With the guard it stops at <code>lo === hi</code>, the outer loop condition fails, and
+  the function correctly returns true.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>s = "A man, a plan"</code> &mdash; shortened so the trace fits. Cleaned it is
+  <code>"amanaplan"</code>, which is <em>not</em> a palindrome, so we will see it fail.</p>
+
+  <div class="trace">
+<pre>  index: 0123456789...
+  s = "A man, a plan"
+       0 = 'A'   12 = 'n'
+
+lo=0  hi=12    'A' vs 'n'   ->  'a' vs 'n'   MISMATCH  ->  false
+</pre>
+  </div>
+
+  <p>It failed immediately. Now the real one, <code>s = "Aba, a!"</code> &mdash; cleaned:
+  <code>"abaa"</code>, also not a palindrome:</p>
+
+  <div class="trace">
+<pre>  s = "Aba, a!"
+       0123456
+       A b a , ' ' a !
+
+lo=0 hi=6   s[6] = '!'  not alphanumeric  ->  hi=5
+            s[5] = 'a'  ok
+            'A' vs 'a'  ->  'a' === 'a'   match.  lo=1 hi=4
+
+lo=1 hi=4   s[1] = 'b'  ok
+            s[4] = ' '  not alphanumeric ->  hi=3
+            s[3] = ','  not alphanumeric ->  hi=2
+            s[2] = 'a'  ok
+            'b' vs 'a'   MISMATCH  ->  false
+</pre>
+  </div>
+
+  <p>And a true one, <code>s = "ab_a"</code>:</p>
+
+  <div class="trace">
+<pre>lo=0 hi=3   'a' vs 'a'   match   lo=1 hi=2
+lo=1 hi=2   s[1]='b' ok
+            s[2]='_'  not alphanumeric ->  hi=1
+            now lo === hi, the skip loop's guard stops it
+            outer condition lo &lt; hi is false  ->  loop ends
+            return TRUE
+
+Cleaned, "ab_a" is "aba" -- a palindrome with 'b' in the middle.
+The middle character never needs comparing with anything.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function isAlnum(ch) {
+  return (ch &gt;= 'a' &amp;&amp; ch &lt;= 'z') ||
+         (ch &gt;= 'A' &amp;&amp; ch &lt;= 'Z') ||
+         (ch &gt;= '0' &amp;&amp; ch &lt;= '9');
+}
+
+function palindromeExplained(s) {
+  console.log('s = "' + s + '"');
+  let lo = 0, hi = s.length - 1;
+
+  while (lo &lt; hi) {
+    while (lo &lt; hi &amp;&amp; !isAlnum(s[lo])) {
+      console.log("  lo=" + lo + " is '" + s[lo] + "' -- skip");
+      lo++;
+    }
+    while (lo &lt; hi &amp;&amp; !isAlnum(s[hi])) {
+      console.log("  hi=" + hi + " is '" + s[hi] + "' -- skip");
+      hi--;
+    }
+
+    if (lo &gt;= hi) break;
+
+    const a = s[lo].toLowerCase();
+    const b = s[hi].toLowerCase();
+    console.log("  compare lo=" + lo + " '" + s[lo] + "' with hi=" + hi +
+                " '" + s[hi] + "'   ->  '" + a + "' vs '" + b + "'   " +
+                (a === b ? 'match' : 'MISMATCH'));
+
+    if (a !== b) {
+      console.log('  -> FALSE');
+      console.log('');
+      return false;
+    }
+
+    lo++;
+    hi--;
+  }
+
+  console.log('  pointers met -> TRUE');
+  console.log('');
+  return true;
+}
+
+console.log('ANSWER:', palindromeExplained('Aba, a!'));
+console.log('==========================================');
+console.log('ANSWER:', palindromeExplained('ab_a'));
+console.log('==========================================');
+console.log('ANSWER:', palindromeExplained('A man, a plan, a canal: Panama'));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; no regex, no toLowerCase</span></div>
+<pre><code>function isAlphanumeric(code) {
+  return (code &gt;= 48 &amp;&amp; code &lt;= 57) ||     // 0-9
+         (code &gt;= 65 &amp;&amp; code &lt;= 90) ||     // A-Z
+         (code &gt;= 97 &amp;&amp; code &lt;= 122);      // a-z
+}
+
+function toLower(code) {
+  // uppercase letters are exactly 32 below their lowercase twins
+  if (code &gt;= 65 &amp;&amp; code &lt;= 90) return code + 32;
+  return code;
+}
+
+function isPalindromeManual(s) {
+  let lo = 0;
+  let hi = s.length - 1;
+
+  while (lo &lt; hi) {
+    // walk lo forward past anything we ignore
+    while (lo &lt; hi &amp;&amp; !isAlphanumeric(s.charCodeAt(lo))) lo = lo + 1;
+
+    // walk hi backward past anything we ignore
+    while (lo &lt; hi &amp;&amp; !isAlphanumeric(s.charCodeAt(hi))) hi = hi - 1;
+
+    if (lo &gt;= hi) break;
+
+    if (toLower(s.charCodeAt(lo)) !== toLower(s.charCodeAt(hi))) {
+      return false;
+    }
+
+    lo = lo + 1;
+    hi = hi - 1;
+  }
+
+  return true;
+}
+
+console.log(isPalindromeManual('A man, a plan, a canal: Panama'));   // true
+console.log(isPalindromeManual('race a car'));                       // false
+console.log(isPalindromeManual(' '));                                // true
+console.log(isPalindromeManual('0P'));                               // false
+console.log(isPalindromeManual('.,'));                               // true
+console.log(isPalindromeManual(''));                                 // true
+console.log(isPalindromeManual('a'));                                // true
+console.log(isPalindromeManual('ab_a'));                             // true
+console.log(isPalindromeManual('12321'));                            // true
+console.log(isPalindromeManual('Was it a car or a cat I saw?'));      // true</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">The 32 trick, and why to be careful with it</span>
+    <p><code>'A'</code> is 65 and <code>'a'</code> is 97 &mdash; exactly 32 apart, for every letter.
+    So <code>code + 32</code> lowercases, and <code>code | 32</code> does it with one bit operation.
+    It is correct for ASCII letters and <strong>wrong for everything else</strong>: applied to a digit
+    or punctuation it produces a different character entirely. That is why the guard checks the range
+    first. In real code, use <code>toLowerCase()</code>, which also handles accented letters and other
+    scripts.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function isPalindrome(s) {
+  const isAlnum = ch =&gt; /[a-z0-9]/i.test(ch);
+
+  let lo = 0;
+  let hi = s.length - 1;
+
+  while (lo &lt; hi) {
+    while (lo &lt; hi &amp;&amp; !isAlnum(s[lo])) lo++;
+    while (lo &lt; hi &amp;&amp; !isAlnum(s[hi])) hi--;
+
+    if (s[lo].toLowerCase() !== s[hi].toLowerCase()) return false;
+
+    lo++;
+    hi--;
+  }
+
+  return true;
+}
+
+console.log(isPalindrome('A man, a plan, a canal: Panama'));   // true
+console.log(isPalindrome('race a car'));                       // false
+console.log(isPalindrome(' '));                                // true
+console.log(isPalindrome('0P'));                               // false
+console.log(isPalindrome('.,'));                               // true
+console.log(isPalindrome('Madam, I am Adam'));                  // false
+console.log(isPalindrome('Never odd or even'));                 // true</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Why there is no <code>if (lo &gt;= hi) break;</code> here</span>
+    <p>When the skip loops leave <code>lo === hi</code>, the comparison
+    <code>s[lo] !== s[hi]</code> compares a character with itself &mdash; always equal, always
+    harmless. So the check can be omitted safely in <em>this</em> version. The Step&nbsp;6 version
+    keeps it explicit because it is clearer about intent, and because a solution that manipulates
+    indexes further would need it. Either is fine; know which one you wrote and why.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the follow-up: allow one deletion</span></div>
+<pre><code>// "Valid Palindrome II": you may remove at most ONE character.
+// When the pointers disagree, try skipping either side and see if
+// the rest is a palindrome.
+function isPalindromeRange(s, lo, hi) {
+  while (lo &lt; hi) {
+    if (s[lo] !== s[hi]) return false;
+    lo++; hi--;
+  }
+  return true;
+}
+
+function validPalindromeOneDeletion(s) {
+  let lo = 0, hi = s.length - 1;
+
+  while (lo &lt; hi) {
+    if (s[lo] !== s[hi]) {
+      // spend our one deletion on the left OR on the right
+      return isPalindromeRange(s, lo + 1, hi) ||
+             isPalindromeRange(s, lo, hi - 1);
+    }
+    lo++;
+    hi--;
+  }
+
+  return true;
+}
+
+console.log(validPalindromeOneDeletion('aba'));      // true  -- no deletion needed
+console.log(validPalindromeOneDeletion('abca'));     // true  -- delete 'b' or 'c'
+console.log(validPalindromeOneDeletion('abc'));      // false -- one deletion is not enough
+console.log(validPalindromeOneDeletion('deeee'));    // true  -- delete 'd'
+console.log(validPalindromeOneDeletion('eeccccbebaeeabebccceea'));   // false
+
+// Still O(n): the outer walk is one pass, and when it finds the
+// single mismatch it does at most two more linear checks.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">checking the two approaches agree</span></div>
+<pre><code>function clean(s) {
+  const c = s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return c === [...c].reverse().join('');
+}
+
+function pointers(s) {
+  const ok = ch =&gt; /[a-z0-9]/i.test(ch);
+  let lo = 0, hi = s.length - 1;
+  while (lo &lt; hi) {
+    while (lo &lt; hi &amp;&amp; !ok(s[lo])) lo++;
+    while (lo &lt; hi &amp;&amp; !ok(s[hi])) hi--;
+    if (s[lo].toLowerCase() !== s[hi].toLowerCase()) return false;
+    lo++; hi--;
+  }
+  return true;
+}
+
+const alphabet = 'aabbAB01 ,.!_-';
+let agree = 0;
+
+for (let trial = 0; trial &lt; 500; trial++) {
+  const len = Math.floor(Math.random() * 10);
+  let s = '';
+  for (let i = 0; i &lt; len; i++) {
+    s += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  if (clean(s) === pointers(s)) agree++;
+  else console.log('DISAGREE on', JSON.stringify(s));
+}
+
+console.log('500 random strings, both methods agree:', agree + '/500');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Clean + reverse + compare</td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+        <tr><td><strong>Two pointers with skips</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Why the nested <code>while</code> loops are still O(n).</strong> Same argument as every
+  two-pointer solution: <code>lo</code> only increases, <code>hi</code> only decreases, and they meet
+  in the middle. Across the whole run they take at most <code>n</code> steps between them, however
+  those steps are distributed between the skip loops and the outer loop.</p>
+
+  <p>The real win is space: three integers instead of three copies of the string. And on a long
+  string that fails early, the two-pointer version stops at the first mismatch while the cleaning
+  version has already processed everything.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Cleaning the string and comparing it with its reverse is O(n) time but O(n) space.
+    Instead I walk two pointers inwards from the ends, skipping any character that is not
+    alphanumeric before each comparison, and comparing lowercased. O(n) time, O(1) space, and it
+    returns as soon as it finds a mismatch. The skip loops need their own <code>lo &lt; hi</code>
+    guard so a string of pure punctuation does not run off the end.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Omitting <code>lo &lt; hi</code> inside the skip loops</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; runs off the end</span></div>
+<pre><code>function broken(s) {
+  const ok = ch =&gt; /[a-z0-9]/i.test(ch);
+  let lo = 0, hi = s.length - 1;
+  while (lo &lt; hi) {
+    while (!ok(s[lo])) lo++;        // no lo &lt; hi guard -- bug
+    while (!ok(s[hi])) hi--;
+    if (s[lo].toLowerCase() !== s[hi].toLowerCase()) return false;
+    lo++; hi--;
+  }
+  return true;
+}
+
+console.log(broken('abba'));    // true   fine
+try {
+  console.log(broken('.,'));
+} catch (err) {
+  console.log('threw:', err.message);
+}
+
+// On ".," nothing is alphanumeric, so lo runs past the end.
+// s[lo] becomes undefined, ok(undefined) is false, and it keeps
+// going forever -- until it throws on undefined.toLowerCase().</code></pre>
+  </div>
+
+  <h3>2. Forgetting to lowercase</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; case-sensitive</span></div>
+<pre><code>function broken(s) {
+  const ok = ch =&gt; /[a-z0-9]/i.test(ch);
+  let lo = 0, hi = s.length - 1;
+  while (lo &lt; hi) {
+    while (lo &lt; hi &amp;&amp; !ok(s[lo])) lo++;
+    while (lo &lt; hi &amp;&amp; !ok(s[hi])) hi--;
+    if (s[lo] !== s[hi]) return false;        // no toLowerCase -- bug
+    lo++; hi--;
+  }
+  return true;
+}
+
+console.log(broken('aba'));                             // true   fine
+console.log(broken('A man, a plan, a canal: Panama'));  // false  WRONG
+
+// 'A' !== 'a'. The very first comparison fails. Lowercase BOTH
+// characters, not just one.</code></pre>
+  </div>
+
+  <h3>3. Only allowing letters, not digits</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; digits silently dropped</span></div>
+<pre><code>function broken(s) {
+  const ok = ch =&gt; /[a-z]/i.test(ch);        // letters only -- bug
+  let lo = 0, hi = s.length - 1;
+  while (lo &lt; hi) {
+    while (lo &lt; hi &amp;&amp; !ok(s[lo])) lo++;
+    while (lo &lt; hi &amp;&amp; !ok(s[hi])) hi--;
+    if (s[lo].toLowerCase() !== s[hi].toLowerCase()) return false;
+    lo++; hi--;
+  }
+  return true;
+}
+
+console.log(broken('0P'));       // TRUE   WRONG, should be false
+console.log(broken('12321'));    // TRUE   right, but by accident --
+                                 // every digit was skipped, leaving ""
+console.log(broken('1a2'));      // TRUE   WRONG -- only 'a' survived
+
+// "Alphanumeric" includes digits. Read the requirement literally:
+// [a-z0-9], not [a-z].</code></pre>
+  </div>
+
+  <h3>4. Using <code>reverse()</code> on the original string</h3>
+
+  <p><code>s === [...s].reverse().join('')</code> without cleaning first answers a different question
+  &mdash; <em>&ldquo;is the raw string, punctuation and all, a palindrome?&rdquo;</em>. For
+  <code>"A man, a plan, a canal: Panama"</code> that is false. Either clean first, or use pointers
+  and skip.</p>
+
+  <h3>5. Building the cleaned string and then still using two pointers</h3>
+
+  <p>Not wrong, just pointless &mdash; you have already paid the O(n) space, so
+  <code>cleaned === reversed</code> is simpler. Pick one approach and commit to it. Mixing them gets
+  you the cost of both and the benefit of neither.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the pointer version from memory</strong>, then test it on <code>".,"</code> and
+    <code>" "</code>. Those two catch the missing guard.</li>
+    <li><strong>Valid Palindrome II</strong> &mdash; one deletion allowed. It is in Step 7; write it
+    from memory and explain why it is still O(n) despite the two extra checks.</li>
+    <li><strong>Two deletions allowed.</strong> The same idea does not extend cleanly &mdash; work out
+    why, and what it would cost to allow <code>k</code> deletions.</li>
+    <li><strong>Longest palindromic substring, ignoring punctuation.</strong> Combine this page&rsquo;s
+    skipping with the expand-around-centre technique from the strings topic.</li>
+    <li><strong>Palindrome number.</strong> Is <code>121</code> a palindrome without converting it to
+    a string? Peel digits off both ends with <code>% 10</code> and division &mdash; the same two
+    pointers, in arithmetic.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Skip in place instead of building a filtered copy.</strong> Whenever you find yourself
+    writing <code>input.filter(...)</code> and then walking the result, ask whether the walk could
+    just skip the unwanted items itself. It saves the allocation, it preserves the original indexes
+    (often useful), and it lets you exit early instead of processing everything first.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="02-squares-of-sorted-array.html">&larr; Squares of a Sorted Array</a>
+  <a href="04-sort-0s-1s-2s.html">Next: Sort 0s, 1s and 2s &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Container With Most Water</title>
+<meta name="description" content="Two pointers from the outside in, and the greedy argument that proves you can throw half the pairs away.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Arrays &middot; Problem 12</p>
+  <h1>Container With Most Water</h1>
+  <p class="standfirst">Two pointers starting at opposite ends and walking inwards. The code is six
+  lines. The interesting part is the <em>argument</em> for why moving the shorter side is always safe
+  &mdash; that argument is the answer the interviewer is listening for.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>An array of heights. Each number is a vertical line standing on the x-axis. Pick
+  <strong>two</strong> lines so that they, plus the ground between them, hold the most water. Return
+  that amount.</p>
+
+  <div class="trace">
+<pre>heights = [1, 8, 6, 2, 5, 4, 8, 3, 7]
+index      0  1  2  3  4  5  6  7  8
+
+8 |    #                 #
+7 |    #                 #        #
+6 |    #  #              #        #
+5 |    #  #        #     #        #
+4 |    #  #        #  #  #        #
+3 |    #  #        #  #  #  #     #
+2 |    #  #  #     #  #  #  #     #
+1 | #  #  #  #     #  #  #  #     #
+   ---------------------------------
+     0  1  2  3  4  5  6  7  8
+
+best: lines at index 1 (height 8) and index 8 (height 7)
+      width  = 8 - 1 = 7
+      height = min(8, 7) = 7
+      area   = 7 x 7 = 49
+</pre>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Answer</th><th>Using</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[1,8,6,2,5,4,8,3,7]</td><td class="mono">49</td><td>index 1 and 8</td></tr>
+        <tr><td class="mono">[1,1]</td><td class="mono">1</td><td>width 1, height 1</td></tr>
+        <tr><td class="mono">[4,3,2,1,4]</td><td class="mono">16</td><td>the two 4s at the ends</td></tr>
+        <tr><td class="mono">[1,2,1]</td><td class="mono">2</td><td>index 0 and 2</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The area formula is the whole problem in one line:</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the formula</span></div>
+<pre><code>area = (right - left) * Math.min(height[left], height[right])
+        \___________/    \_____________________________________/
+           width          the SHORTER wall -- water spills over it</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Two things the picture might mislead you about</span>
+    <p>The lines have <strong>no thickness</strong>, and the ones <em>between</em> your two chosen
+    lines are ignored completely &mdash; water is not blocked by them. This is not the
+    &ldquo;trapping rain water&rdquo; problem, which is a different question with a different answer.
+    Here you pick exactly two lines and everything else disappears.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <p>Try every pair, compute the area, keep the biggest.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; brute force</span></div>
+<pre><code>function maxAreaBrute(height) {
+  let best = 0;
+
+  for (let left = 0; left &lt; height.length; left++) {
+    for (let right = left + 1; right &lt; height.length; right++) {
+
+      const width = right - left;
+      const shorter = Math.min(height[left], height[right]);
+      const area = width * shorter;
+
+      if (area &gt; best) best = area;
+    }
+  }
+
+  return best;
+}
+
+console.log(maxAreaBrute([1, 8, 6, 2, 5, 4, 8, 3, 7]));   // 49
+console.log(maxAreaBrute([1, 1]));                        // 1
+console.log(maxAreaBrute([4, 3, 2, 1, 4]));               // 16
+console.log(maxAreaBrute([1, 2, 1]));                     // 2</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>Every pair, so <code>n(n-1)/2</code> &mdash; O(n&sup2;). With 100,000 lines that is five billion
+  area calculations.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 20000;
+const height = [];
+for (let i = 0; i &lt; N; i++) height.push(Math.floor(Math.random() * 1000) + 1);
+
+function brute(h) {
+  let best = 0;
+  for (let l = 0; l &lt; h.length; l++)
+    for (let r = l + 1; r &lt; h.length; r++) {
+      const a = (r - l) * Math.min(h[l], h[r]);
+      if (a &gt; best) best = a;
+    }
+  return best;
+}
+
+function twoPointer(h) {
+  let l = 0, r = h.length - 1, best = 0;
+  while (l &lt; r) {
+    const a = (r - l) * Math.min(h[l], h[r]);
+    if (a &gt; best) best = a;
+    if (h[l] &lt; h[r]) l++; else r--;
+  }
+  return best;
+}
+
+let t = performance.now();
+const x = brute(height);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const y = twoPointer(height);
+const fastMs = performance.now() - t;
+
+console.log('every pair  :', x, 'in', bruteMs.toFixed(1) + ' ms');
+console.log('two pointers:', y, 'in', fastMs.toFixed(2) + ' ms');
+console.log('same answer :', x === y);
+console.log('speed-up:', Math.round(bruteMs / Math.max(fastMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; start wide, then commit</h2>
+
+  <p>Begin with the two <strong>outermost</strong> lines. That gives you the widest container
+  possible. Any other pair is narrower, so to beat this one it must be <em>taller</em>.</p>
+
+  <p>Now the key question: which pointer should move?</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Move the pointer at the <strong>shorter</strong> line. Always.</p>
+    <p>Why it is safe: the area is capped by the shorter wall. If you keep the shorter wall and move
+    the taller one inwards, the width definitely shrinks, and the height cannot possibly grow
+    &mdash; it is still limited by that same short wall. So every one of those pairs is
+    <em>worse</em> than the one you already measured. You can discard all of them at once.</p>
+  </div>
+
+  <p>Spell that out with numbers. Suppose <code>height[left] = 3</code> and
+  <code>height[right] = 9</code>, with width 8, so the area is <code>8 &times; 3 = 24</code>.
+  Now consider every pair that keeps the 3 and moves the right pointer inwards:</p>
+
+  <div class="trace">
+<pre>keeping left = 3, pulling right inwards:
+
+  width 7,  height = min(3, whatever) &lt;= 3   ->  area &lt;= 21
+  width 6,  height = min(3, whatever) &lt;= 3   ->  area &lt;= 18
+  width 5,  height = min(3, whatever) &lt;= 3   ->  area &lt;= 15
+  ...
+
+every single one is smaller than the 24 we just measured.
+So we can skip ALL of them by moving `left` instead.
+</pre>
+  </div>
+
+  <p>That is the whole algorithm, and it is why this counts as a <strong>greedy</strong> solution:
+  at each step you make a locally-obvious choice, and you can prove no better answer was thrown
+  away.</p>
+
+  <p>Each step moves one pointer inwards by one, so the two pointers together travel the length of
+  the array once: <strong>O(n)</strong>.</p>
+
+  <div class="note">
+    <span class="t">What if the two lines are equal?</span>
+    <p>It does not matter which one you move &mdash; move either. The argument above applies to both
+    sides simultaneously: keeping <em>either</em> wall fixed caps the height at that same value while
+    the width shrinks. Some solutions move both at once, which is also fine.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>height = [1, 8, 6, 2, 5, 4, 8, 3, 7]</code>.</p>
+
+  <div class="trace">
+<pre>left=0 (h 1)   right=8 (h 7)
+  width 8   height min(1,7)=1   area 8    best=8
+  left is shorter -> left++
+
+left=1 (h 8)   right=8 (h 7)
+  width 7   height min(8,7)=7   area 49   best=49
+  right is shorter -> right--
+
+left=1 (h 8)   right=7 (h 3)
+  width 6   height min(8,3)=3   area 18   best=49
+  right is shorter -> right--
+
+left=1 (h 8)   right=6 (h 8)
+  width 5   height min(8,8)=8   area 40   best=49
+  equal -> move either; say right--
+
+left=1 (h 8)   right=5 (h 4)
+  width 4   height min(8,4)=4   area 16   best=49
+  right shorter -> right--
+
+left=1 (h 8)   right=4 (h 5)
+  width 3   height min(8,5)=5   area 15   best=49
+  right shorter -> right--
+
+left=1 (h 8)   right=3 (h 2)
+  width 2   height min(8,2)=2   area 4    best=49
+  right shorter -> right--
+
+left=1 (h 8)   right=2 (h 6)
+  width 1   height min(8,6)=6   area 6    best=49
+  right shorter -> right--
+
+left=1  right=1   pointers met -> stop
+
+answer: 49
+</pre>
+  </div>
+
+  <p>Eight steps for a nine-element array. The brute force would have done 36. Notice how the very
+  first move &mdash; abandoning the height-1 line at index 0 &mdash; wiped out seven pairs in one
+  step, and the greedy argument guarantees none of them could have won.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function maxAreaExplained(height) {
+  let left = 0;
+  let right = height.length - 1;
+  let best = 0;
+
+  console.log('heights =', height);
+  console.log('');
+
+  while (left &lt; right) {
+    const width = right - left;
+    const shorter = Math.min(height[left], height[right]);
+    const area = width * shorter;
+    if (area &gt; best) best = area;
+
+    const move = height[left] &lt; height[right] ? 'left' : 'right';
+
+    console.log('left=' + left + '(h ' + height[left] + ')  right=' + right + '(h ' + height[right] + ')' +
+                '   width ' + width + ' x height ' + shorter + ' = ' + String(area).padStart(3) +
+                '   best=' + String(best).padStart(3) +
+                '   move ' + move);
+
+    if (height[left] &lt; height[right]) left++;
+    else right--;
+  }
+
+  console.log('');
+  return best;
+}
+
+console.log('ANSWER:', maxAreaExplained([1, 8, 6, 2, 5, 4, 8, 3, 7]));
+console.log('=========================================');
+console.log('ANSWER:', maxAreaExplained([4, 3, 2, 1, 4]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; no Math.min, no Math.max</span></div>
+<pre><code>function maxAreaManual(height) {
+  let left = 0;
+  let right = height.length - 1;
+  let best = 0;
+
+  while (left &lt; right) {
+    const width = right - left;
+
+    // the shorter of the two walls, by hand
+    let shorter;
+    if (height[left] &lt; height[right]) {
+      shorter = height[left];
+    } else {
+      shorter = height[right];
+    }
+
+    const area = width * shorter;
+    if (area &gt; best) {
+      best = area;
+    }
+
+    // move the pointer standing on the shorter wall
+    if (height[left] &lt; height[right]) {
+      left++;
+    } else {
+      right--;
+    }
+  }
+
+  return best;
+}
+
+console.log(maxAreaManual([1, 8, 6, 2, 5, 4, 8, 3, 7]));   // 49
+console.log(maxAreaManual([1, 1]));                        // 1
+console.log(maxAreaManual([4, 3, 2, 1, 4]));               // 16
+console.log(maxAreaManual([1, 2, 1]));                     // 2
+console.log(maxAreaManual([2, 3, 4, 5, 18, 17, 6]));       // 17
+console.log(maxAreaManual([1]));                           // 0  one line holds nothing
+console.log(maxAreaManual([]));                            // 0</code></pre>
+  </div>
+
+  <h3>Reporting which two lines won</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">variation &mdash; return the pair too</span></div>
+<pre><code>function bestContainer(height) {
+  let left = 0, right = height.length - 1;
+  let best = 0, bestLeft = -1, bestRight = -1;
+
+  while (left &lt; right) {
+    const area = (right - left) * Math.min(height[left], height[right]);
+
+    if (area &gt; best) {
+      best = area;
+      bestLeft = left;       // freeze only when a new best is confirmed
+      bestRight = right;
+    }
+
+    if (height[left] &lt; height[right]) left++;
+    else right--;
+  }
+
+  return { area: best, left: bestLeft, right: bestRight,
+           heights: [height[bestLeft], height[bestRight]] };
+}
+
+console.log(bestContainer([1, 8, 6, 2, 5, 4, 8, 3, 7]));
+// { area: 49, left: 1, right: 8, heights: [8, 7] }
+
+console.log(bestContainer([4, 3, 2, 1, 4]));
+// { area: 16, left: 0, right: 4, heights: [4, 4] }</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function maxArea(height) {
+  let left = 0;
+  let right = height.length - 1;
+  let best = 0;
+
+  while (left &lt; right) {
+    best = Math.max(best, (right - left) * Math.min(height[left], height[right]));
+
+    if (height[left] &lt; height[right]) left++;
+    else right--;
+  }
+
+  return best;
+}
+
+console.log(maxArea([1, 8, 6, 2, 5, 4, 8, 3, 7]));   // 49
+console.log(maxArea([1, 1]));                        // 1
+console.log(maxArea([4, 3, 2, 1, 4]));               // 16
+console.log(maxArea([1, 2, 4, 3]));                  // 4</code></pre>
+  </div>
+
+  <p>Six lines, and there is genuinely nothing a built-in can improve here &mdash;
+  <code>Math.min</code> and <code>Math.max</code> are the only ones that fit, and both are doing
+  exactly the comparison you would write by hand. This is a problem where Version 1 and Version 2 are
+  almost the same code, which is itself worth noticing: <strong>not every problem has a clever
+  library shortcut.</strong></p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">a small optimisation worth knowing</span></div>
+<pre><code>// Skip lines that cannot possibly help: after moving inwards, any
+// wall no taller than the one we just abandoned is useless.
+function maxAreaSkipping(height) {
+  let left = 0, right = height.length - 1, best = 0;
+
+  while (left &lt; right) {
+    const h = Math.min(height[left], height[right]);
+    best = Math.max(best, (right - left) * h);
+
+    // walk past every wall that is not taller than the one we just used
+    while (left &lt; right &amp;&amp; height[left] &lt;= h) left++;
+    while (left &lt; right &amp;&amp; height[right] &lt;= h) right--;
+  }
+
+  return best;
+}
+
+console.log(maxAreaSkipping([1, 8, 6, 2, 5, 4, 8, 3, 7]));   // 49
+console.log(maxAreaSkipping([4, 3, 2, 1, 4]));               // 16
+console.log(maxAreaSkipping([1, 1]));                        // 1
+
+// Still O(n) -- the pointers only move forward -- but on inputs with
+// long runs of short walls it does far fewer iterations.
+// Do NOT lead with this in an interview. Write the simple version,
+// then offer this as a refinement.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Every pair</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td></tr>
+        <tr><td><strong>Two pointers</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>O(n) because the two pointers start <code>n - 1</code> apart and each iteration closes the gap
+  by exactly one, so the loop runs at most <code>n - 1</code> times. O(1) space because you hold
+  three numbers.</p>
+
+  <p>The thing that makes this problem <em>interesting</em> rather than routine is that O(n) requires
+  <strong>proving</strong> that discarding pairs is safe. Most O(n&sup2;)-to-O(n) improvements on this
+  list come from remembering something (a hash map). This one comes from an argument. If you cannot
+  give the argument, you have not solved it &mdash; you have recited it.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Start with the widest container, one pointer at each end. The area is limited by the
+    shorter wall, so if I keep the shorter wall and move the taller one inwards, width strictly
+    decreases and height cannot increase &mdash; every such pair is worse than the one I just
+    measured. So the shorter wall can be discarded. Moving one pointer per step gives O(n) time and
+    O(1) space.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Moving the taller pointer</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the greedy choice reversed</span></div>
+<pre><code>function broken(height) {
+  let l = 0, r = height.length - 1, best = 0;
+  while (l &lt; r) {
+    best = Math.max(best, (r - l) * Math.min(height[l], height[r]));
+    if (height[l] &gt; height[r]) l++;    // moving the TALLER one -- bug
+    else r--;
+  }
+  return best;
+}
+
+console.log(broken([1, 8, 6, 2, 5, 4, 8, 3, 7]));   // 8   WRONG, should be 49
+console.log(broken([1, 2, 4, 3]));                  // 3   WRONG, should be 4
+console.log(broken([4, 3, 2, 1, 4]));               // 16  right, by luck
+
+// Keeping the short wall and shrinking the width can only make things
+// worse, so this walks straight past the answer. The direction of that
+// single comparison IS the algorithm.</code></pre>
+  </div>
+
+  <h3>2. Using the average, or the taller wall, as the height</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; wrong height</span></div>
+<pre><code>function broken(height) {
+  let l = 0, r = height.length - 1, best = 0;
+  while (l &lt; r) {
+    best = Math.max(best, (r - l) * Math.max(height[l], height[r]));  // max -- bug
+    if (height[l] &lt; height[r]) l++; else r--;
+  }
+  return best;
+}
+
+console.log(broken([1, 8, 6, 2, 5, 4, 8, 3, 7]));   // 56   too big
+console.log(broken([1, 1]));                        // 1
+
+// Water does not stack above the shorter wall -- it pours out.
+// The height of the container is min, never max.</code></pre>
+  </div>
+
+  <h3>3. Off-by-one in the width</h3>
+
+  <p>The width is <code>right - left</code>, <strong>not</strong> <code>right - left + 1</code>.
+  This is the opposite of the sliding-window rule, and it catches people who have just learned that
+  one. The reason: you are measuring the <em>gap between</em> two lines, not counting how many
+  elements are in a range. Two adjacent lines at indexes 3 and 4 have width 1.</p>
+
+  <h3>4. Writing <code>while (left &lt;= right)</code></h3>
+
+  <p>When the pointers meet, <code>left === right</code>, the width is 0, and the area is 0. Harmless
+  for the answer, but it is one wasted iteration and it signals you have not thought about the
+  termination condition. You need <em>two different</em> lines, so <code>left &lt; right</code>.</p>
+
+  <h3>5. Confusing it with Trapping Rain Water</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">two different problems, same picture</span></div>
+<pre><code>const h = [1, 8, 6, 2, 5, 4, 8, 3, 7];
+
+// Container With Most Water: pick TWO lines, ignore everything between.
+function maxArea(a) {
+  let l = 0, r = a.length - 1, best = 0;
+  while (l &lt; r) {
+    best = Math.max(best, (r - l) * Math.min(a[l], a[r]));
+    if (a[l] &lt; a[r]) l++; else r--;
+  }
+  return best;
+}
+
+// Trapping Rain Water: water sits in EVERY dip, and the bars have
+// width. Completely different answer.
+function trap(a) {
+  let l = 0, r = a.length - 1, leftMax = 0, rightMax = 0, total = 0;
+  while (l &lt; r) {
+    if (a[l] &lt; a[r]) {
+      leftMax = Math.max(leftMax, a[l]);
+      total += leftMax - a[l];
+      l++;
+    } else {
+      rightMax = Math.max(rightMax, a[r]);
+      total += rightMax - a[r];
+      r--;
+    }
+  }
+  return total;
+}
+
+console.log('container :', maxArea(h));   // 49
+console.log('trapped   :', trap(h));      // 19
+
+// Same input, same picture, different question. Read carefully:
+// "choose two lines" vs "how much rain collects".</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Say the greedy argument out loud</strong> without looking. If you can only say
+    &ldquo;move the shorter one&rdquo; and not <em>why</em>, you have memorised it.</li>
+    <li><strong>Return the two indexes</strong> as well as the area, from memory. Watch out for the
+    same trap as Kadane&rsquo;s: only freeze the indexes when a new best is confirmed.</li>
+    <li><strong>Trapping Rain Water.</strong> The version above is the two-pointer solution; there is
+    also a prefix/suffix-max version that reuses Product of Array Except Self&rsquo;s idea. Write
+    both and compare.</li>
+    <li><strong>Largest rectangle with equal-height sides.</strong> Change the rule so the container
+    is only valid if both lines are the same height. Does the greedy argument still hold?
+    (It does not &mdash; work out why, and what that tells you about greedy proofs.)</li>
+    <li><strong>Three lines.</strong> If you could pick three lines and the water is limited by the
+    shortest, does the two-pointer idea extend? Think about it before coding &mdash; the answer is
+    instructive either way.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Two pointers from the outside in.</strong> The pattern applies when you are choosing a
+    <em>pair</em> and you can prove that one candidate is dominated &mdash; that no pair involving it
+    can beat what you have already measured. Two Sum on a sorted array uses the same shape with a
+    different argument (too small, raise the low end). Look for a comparison that lets you throw away
+    a whole row of the pair-table in one move.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="11-majority-element.html">&larr; Majority Element</a>
+  <a href="13-sort-colors.html">Next: Sort Colors &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

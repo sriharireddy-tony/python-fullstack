@@ -1,0 +1,1016 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Event Loop Output Order</title>
+<meta name="description" content="Call stack, microtasks, macrotasks — and how to predict the output of any interleaving question.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">JavaScript semantics &middot; Problem 06</p>
+  <h1>Event Loop Output Order</h1>
+  <p class="standfirst">&ldquo;What does this print?&rdquo; &mdash; asked in almost every JavaScript
+  interview, and answered correctly by almost nobody who has not learned the one algorithm on this
+  page. There is no intuition to develop. There is a procedure, and it always works.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem &mdash; the four places code can live</h2>
+
+  <div class="trace">
+<pre>   +----------------------------------------------------+
+   |                    CALL STACK                      |
+   |   whatever is running RIGHT NOW. One thing only.   |
+   +----------------------------------------------------+
+                          |
+        when the stack empties, the loop looks here:
+                          |
+                          v
+   +----------------------------------------------------+
+   |               MICROTASK QUEUE                      |
+   |   .then / .catch / .finally callbacks              |
+   |   await continuations                              |
+   |   queueMicrotask()                                 |
+   |   MutationObserver callbacks                       |
+   |                                                    |
+   |   DRAINED COMPLETELY, including anything added     |
+   |   while draining.                                  |
+   +----------------------------------------------------+
+                          |
+              only when that is EMPTY:
+                          |
+                          v
+   +----------------------------------------------------+
+   |               MACROTASK QUEUE                      |
+   |   setTimeout, setInterval, setImmediate            |
+   |   I/O callbacks, DOM events, MessageChannel        |
+   |                                                    |
+   |   ONE task is taken. Then back to the microtasks.  |
+   +----------------------------------------------------+
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The four-line algorithm</span>
+    <ol style="margin:8px 0 0 18px">
+      <li>Run all synchronous code to the end.</li>
+      <li>Drain the <strong>entire</strong> microtask queue, including microtasks queued during the
+      drain.</li>
+      <li>Take <strong>one</strong> macrotask.</li>
+      <li>Go to step 2.</li>
+    </ol>
+  </div>
+
+  <p>&ldquo;All the microtasks, then <em>one</em> macrotask&rdquo; is the asymmetry that produces every
+  surprising answer.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the canonical question</span></div>
+<pre><code>console.log('1  script start');
+
+setTimeout(() =&gt; console.log('6  setTimeout'), 0);
+
+Promise.resolve()
+  .then(() =&gt; console.log('4  promise 1'))
+  .then(() =&gt; console.log('5  promise 2'));
+
+console.log('2  script middle');
+
+queueMicrotask(() =&gt; console.log('3.5  queueMicrotask'));
+
+console.log('3  script end');
+
+await new Promise((r) =&gt; setTimeout(r, 30));
+
+console.log('');
+console.log('Work it out with the algorithm:');
+console.log('  1. sync: "script start", "script middle", "script end"');
+console.log('  2. microtasks: promise 1, then queueMicrotask,');
+console.log('     then promise 2 (queued only when promise 1 finished)');
+console.log('  3. one macrotask: setTimeout');
+console.log('');
+console.log('Note that "promise 2" comes AFTER "queueMicrotask" even');
+console.log('though it was written first. The second .then was not');
+console.log('queued until the first one returned.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; what &ldquo;single-threaded&rdquo; really means</h2>
+
+  <p>JavaScript runs one thing at a time. Nothing else can happen while your code is running &mdash; not
+  a timer, not a click, not a network callback. They queue up and wait.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0 &mdash; a timer that cannot fire</span></div>
+<pre><code>const t0 = Date.now();
+let fired = null;
+
+setTimeout(() =&gt; { fired = Date.now() - t0; }, 10);
+
+// block the thread for 200 ms
+let x = 0;
+while (Date.now() - t0 &lt; 200) x++;
+
+console.log('asked for a 10 ms timer, blocked the thread for 200 ms');
+console.log('  right after the block, has it fired?', fired !== null);
+
+await new Promise((r) =&gt; setTimeout(r, 30));
+
+console.log('  it actually fired at ~' + fired + ' ms');
+console.log('');
+console.log('setTimeout(fn, 10) means "not BEFORE 10 ms", never');
+console.log('"at 10 ms". The callback cannot run until the stack is');
+console.log('empty, and you kept it full.');
+console.log('');
+console.log('This is why a slow synchronous loop freezes a page:');
+console.log('clicks, scrolls, animation frames and network callbacks');
+console.log('are all queued behind it.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">and the 4 ms clamp nobody expects</span></div>
+<pre><code>// setTimeout(fn, 0) is not 0. Browsers clamp nested timers to 4 ms
+// after a few levels; Node has its own minimum of 1 ms.
+const samples = [];
+let last = performance.now();
+let depth = 0;
+
+await new Promise((done) =&gt; {
+  function tick() {
+    const now = performance.now();
+    samples.push(+(now - last).toFixed(2));
+    last = now;
+    if (++depth &lt; 12) setTimeout(tick, 0);
+    else done();
+  }
+  setTimeout(tick, 0);
+});
+
+console.log('gaps between 12 nested setTimeout(fn, 0) calls, in ms:');
+console.log(' ', samples.join(', '));
+console.log('');
+console.log('None of them are 0. In a browser the 5th and later are');
+console.log('clamped to at least 4 ms by the HTML specification; here');
+console.log('they land near 16 ms because the timer resolution of the');
+console.log('host platform is coarser than that. The exact number is');
+console.log('not the lesson -- "not zero, and not under your control"');
+console.log('is.');
+console.log('');
+console.log('Microtasks have no such clamp:');
+
+const microSamples = [];
+last = performance.now();
+depth = 0;
+await new Promise((done) =&gt; {
+  function tick() {
+    const now = performance.now();
+    microSamples.push(+(now - last).toFixed(3));
+    last = now;
+    if (++depth &lt; 12) queueMicrotask(tick);
+    else done();
+  }
+  queueMicrotask(tick);
+});
+console.log(' ', microSamples.join(', '));
+console.log('');
+console.log('That is the real difference: a microtask is "as soon as');
+console.log('the stack empties", a timer is "some time later".');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it matters &mdash; microtasks can starve everything</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Demo &mdash; a microtask loop versus a macrotask loop</span></div>
+<pre><code>// Two ways to run 60 chunks of work. Same total work, completely
+// different effect on responsiveness.
+const CHUNKS = 60;
+function chunk() { let x = 0; for (let i = 0; i &lt; 200000; i++) x += i; return x; }
+
+// (a) chained microtasks -- the timer never gets a look in
+let timerRanDuringMicro = false;
+setTimeout(() =&gt; { timerRanDuringMicro = true; }, 0);
+
+let n = 0;
+const microStart = performance.now();
+await new Promise((done) =&gt; {
+  function step() {
+    chunk();
+    if (++n &lt; CHUNKS) queueMicrotask(step);
+    else done();
+  }
+  queueMicrotask(step);
+});
+const microMs = performance.now() - microStart;
+
+console.log('(a) ' + CHUNKS + ' chunks via chained microtasks: ' + microMs.toFixed(0) + ' ms');
+console.log('    did the 0 ms timer get to run in between?',
+            timerRanDuringMicro);
+
+// (b) chained macrotasks -- the loop can breathe between chunks
+let timerRanDuringMacro = false;
+setTimeout(() =&gt; { timerRanDuringMacro = true; }, 0);
+
+n = 0;
+const macroStart = performance.now();
+await new Promise((done) =&gt; {
+  function step() {
+    chunk();
+    if (++n &lt; CHUNKS) setTimeout(step, 0);
+    else done();
+  }
+  setTimeout(step, 0);
+});
+const macroMs = performance.now() - macroStart;
+
+console.log('');
+console.log('(b) ' + CHUNKS + ' chunks via chained setTimeout: ' + macroMs.toFixed(0) + ' ms');
+console.log('    did the 0 ms timer get to run in between?',
+            timerRanDuringMacro);
+
+console.log('');
+console.log('(a) is faster overall and completely blocks everything');
+console.log('else. (b) is slower and stays responsive -- each chunk');
+console.log('returns to the event loop, so clicks, paints and other');
+console.log('timers get their turn.');
+console.log('');
+console.log('That trade is the reason both queues exist. Use');
+console.log('microtasks for "finish this logical operation"; use');
+console.log('macrotasks when you must yield the thread.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; how to answer any such question</h2>
+
+  <p>Do not read the code top to bottom looking for the answer. <strong>Sort every statement into one
+  of three lists first</strong>, then read the lists in order.</p>
+
+  <div class="trace">
+<pre>  Pass 1 -- walk the code once and classify:
+
+     SYNC       anything not inside a callback
+     MICRO      .then / .catch / .finally bodies,
+                queueMicrotask, everything after an `await`
+     MACRO      setTimeout / setInterval bodies, I/O
+
+  Pass 2 -- read the SYNC list. That is your first output block.
+
+  Pass 3 -- read the MICRO list, in the order they were QUEUED.
+            If running one queues another micro, append it.
+
+  Pass 4 -- take ONE item from MACRO, run it as if it were sync,
+            then go back to pass 3.
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The three rules that decide the tricky cases</span>
+    <p><strong>1. A <code>.then</code> is only queued when the promise it is attached to settles</strong>
+    &mdash; not when the line is written. In a chain, link 2 is queued when link 1's handler returns.</p>
+    <p><strong>2. <code>await</code> is <code>.then</code> in disguise.</strong> Everything before the
+    first <code>await</code> in an async function is synchronous; everything after any
+    <code>await</code> is a microtask.</p>
+    <p><strong>3. Returning a promise from a <code>then</code> costs two extra microtask ticks</strong>,
+    not one. This is the detail that separates a good answer from a perfect one, and it is in Step 7.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">rule 2, made concrete</span></div>
+<pre><code>async function example() {
+  console.log('2  inside async, BEFORE the first await -- synchronous');
+  await null;                       // even awaiting a non-promise yields
+  console.log('5  after the await -- this is a microtask');
+}
+
+console.log('1  before the call');
+example();
+console.log('3  after the call -- the async function already paused');
+
+Promise.resolve().then(() =&gt; console.log('4  a then queued after example paused'));
+
+await new Promise((r) =&gt; setTimeout(r, 30));
+
+console.log('');
+console.log('An async function runs SYNCHRONOUSLY until its first');
+console.log('await. That is why "2" comes before "3".');
+console.log('');
+console.log('The rewrite that makes it obvious:');
+console.log('  async function f() {          function f() {');
+console.log('    A;                            A;');
+console.log('    await x;             ==>      return Promise.resolve(x)');
+console.log('    B;                              .then(() => { B; });');
+console.log('  }                             }');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; the classic interview snippet</h2>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">predict this before you scroll</span></div>
+<pre><code>async function async1() {
+  console.log('async1 start');
+  await async2();
+  console.log('async1 end');
+}
+async function async2() {
+  console.log('async2');
+}
+
+console.log('script start');
+
+setTimeout(function () {
+  console.log('setTimeout');
+}, 0);
+
+async1();
+
+new Promise(function (resolve) {
+  console.log('promise1');
+  resolve();
+}).then(function () {
+  console.log('promise2');
+});
+
+console.log('script end');</code></pre>
+  </div>
+
+  <div class="trace">
+<pre>  PASS 1 -- classify
+
+    SYNC   'script start'
+           'async1 start'   (before the await)
+           'async2'         (async2 has no await -- runs fully)
+           'promise1'       (executor is synchronous)
+           'script end'
+
+    MICRO  'async1 end'     (queued when async2's promise settles)
+           'promise2'       (queued when resolve() ran)
+
+    MACRO  'setTimeout'
+
+  PASS 2 -- the sync list, in source order:
+
+      script start
+      async1 start
+      async2
+      promise1
+      script end
+
+  PASS 3 -- microtasks, in queue order.
+      async1's continuation was queued first: async1() ran before
+      the `new Promise` line.
+
+      async1 end
+      promise2
+
+  PASS 4 -- one macrotask:
+
+      setTimeout
+
+  FINAL:
+      script start / async1 start / async2 / promise1 /
+      script end / async1 end / promise2 / setTimeout
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">now run it and check</span></div>
+<pre><code>const order = [];
+const log = (s) =&gt; { order.push(s); console.log(order.length + '. ' + s); };
+
+async function async1() {
+  log('async1 start');
+  await async2();
+  log('async1 end');
+}
+async function async2() {
+  log('async2');
+}
+
+log('script start');
+setTimeout(function () { log('setTimeout'); }, 0);
+async1();
+new Promise(function (resolve) {
+  log('promise1');
+  resolve();
+}).then(function () {
+  log('promise2');
+});
+log('script end');
+
+await new Promise((r) =&gt; setTimeout(r, 30));
+
+const expected = ['script start', 'async1 start', 'async2', 'promise1',
+                  'script end', 'async1 end', 'promise2', 'setTimeout'];
+console.log('');
+console.log('matches the hand trace:',
+            JSON.stringify(order) === JSON.stringify(expected));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Build the loop yourself</h2>
+
+  <p>The clearest way to be sure you understand it is to write one. Twenty lines, and every rule from
+  Step 1 becomes a line of code.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">A working toy event loop</span></div>
+<pre><code>function makeLoop() {
+  const macro = [];
+  const micro = [];
+  const output = [];
+
+  const api = {
+    log: (s) =&gt; output.push(s),
+    setTimeout: (fn) =&gt; macro.push(fn),
+    queueMicrotask: (fn) =&gt; micro.push(fn),
+  };
+
+  function drainMicrotasks() {
+    // note: `micro.length` is re-read every iteration, ON PURPOSE.
+    // A microtask that queues another must extend this drain.
+    while (micro.length &gt; 0) {
+      const task = micro.shift();
+      task();
+    }
+  }
+
+  function run(script) {
+    script(api);            // 1. all synchronous code
+    drainMicrotasks();      // 2. the whole microtask queue
+
+    while (macro.length &gt; 0) {
+      const task = macro.shift();
+      task();               // 3. exactly ONE macrotask
+      drainMicrotasks();    // 4. and back to the microtasks
+    }
+
+    return output;
+  }
+
+  return run;
+}
+
+const run = makeLoop();
+
+const result = run(({ log, setTimeout, queueMicrotask }) =&gt; {
+  log('script start');
+
+  setTimeout(() =&gt; {
+    log('timer 1');
+    queueMicrotask(() =&gt; log('  micro queued inside timer 1'));
+  });
+
+  setTimeout(() =&gt; log('timer 2'));
+
+  queueMicrotask(() =&gt; {
+    log('micro A');
+    queueMicrotask(() =&gt; log('micro C -- queued by A, still drained now'));
+  });
+
+  queueMicrotask(() =&gt; log('micro B'));
+
+  log('script end');
+});
+
+result.forEach((line, i) =&gt; console.log((i + 1) + '. ' + line));
+
+console.log('');
+console.log('Two things to notice:');
+console.log('  micro C ran in the SAME drain as A and B, because the');
+console.log('  while loop re-checks the length each time.');
+console.log('  The microtask queued inside timer 1 ran before timer 2,');
+console.log('  because the drain happens after EVERY macrotask.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">The same loop with one bug: drain only once</span></div>
+<pre><code>function brokenLoop(script) {
+  const macro = [], micro = [], output = [];
+  const api = {
+    log: (s) =&gt; output.push(s),
+    setTimeout: (fn) =&gt; macro.push(fn),
+    queueMicrotask: (fn) =&gt; micro.push(fn),
+  };
+
+  script(api);
+
+  // BUG: length captured once, so microtasks queued during the
+  // drain are not run in this pass
+  const count = micro.length;
+  for (let i = 0; i &lt; count; i++) micro.shift()();
+
+  while (macro.length) { macro.shift()(); }
+  return output;
+}
+
+const out = brokenLoop(({ log, setTimeout, queueMicrotask }) =&gt; {
+  log('sync');
+  setTimeout(() =&gt; log('timer'));
+  queueMicrotask(() =&gt; {
+    log('micro A');
+    queueMicrotask(() =&gt; log('micro B -- queued by A'));
+  });
+});
+
+console.log(out);
+console.log('');
+console.log('"micro B" never ran, and "timer" ran while a microtask');
+console.log('was still pending. The whole guarantee -- microtasks');
+console.log('finish before the next macrotask -- is gone.');
+console.log('');
+console.log('The fix is one character: `while (micro.length)` instead');
+console.log('of a cached count.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>The cases that separate a good answer from a perfect one</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">1. Returning a promise from then costs two extra ticks</span></div>
+<pre><code>const order = [];
+const log = (s) =&gt; order.push(s);
+
+Promise.resolve()
+  .then(() =&gt; log('A1'))
+  .then(() =&gt; log('A2'))
+  .then(() =&gt; log('A3'))
+  .then(() =&gt; log('A4'));
+
+Promise.resolve()
+  .then(() =&gt; { log('B1'); return Promise.resolve('x'); })   // returns a PROMISE
+  .then(() =&gt; log('B2'));
+
+await new Promise((r) =&gt; setTimeout(r, 30));
+
+console.log(order.join(' '));
+console.log('');
+console.log('B2 lands after A4, not after A2. Returning a promise from');
+console.log('a then handler costs THREE ticks instead of one:');
+console.log('  tick 1: the handler runs and returns a thenable');
+console.log('  tick 2: the spec calls .then on it (a microtask)');
+console.log('  tick 3: that .then resolves the outer promise');
+console.log('');
+console.log('Compare returning a plain value:');
+
+const order2 = [];
+const log2 = (s) =&gt; order2.push(s);
+Promise.resolve().then(() =&gt; log2('A1')).then(() =&gt; log2('A2'))
+  .then(() =&gt; log2('A3')).then(() =&gt; log2('A4'));
+Promise.resolve()
+  .then(() =&gt; { log2('B1'); return 'x'; })       // a PLAIN value
+  .then(() =&gt; log2('B2'));
+
+await new Promise((r) =&gt; setTimeout(r, 30));
+console.log(order2.join(' '));
+console.log('');
+console.log('Now the B chain keeps pace with the A chain, one tick');
+console.log('per link, instead of falling three behind.');
+console.log('');
+console.log('And `await promise` in modern engines costs only ONE tick,');
+console.log('because the spec was optimised in 2018 to skip the extra');
+console.log('wrapping. So await and .then are no longer identical:');
+
+const order3 = [];
+const log3 = (s) =&gt; order3.push(s);
+(async () =&gt; { log3('B1'); await Promise.resolve(); log3('B2'); })();
+Promise.resolve().then(() =&gt; log3('A1')).then(() =&gt; log3('A2'))
+  .then(() =&gt; log3('A3'));
+await new Promise((r) =&gt; setTimeout(r, 30));
+console.log(order3.join(' '));</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">2. Multiple timers with the same delay</span></div>
+<pre><code>const order = [];
+
+setTimeout(() =&gt; order.push('t1 (0ms, registered 1st)'), 0);
+setTimeout(() =&gt; order.push('t2 (0ms, registered 2nd)'), 0);
+setTimeout(() =&gt; order.push('t3 (1ms)'), 1);
+setTimeout(() =&gt; order.push('t0 (0ms, registered 4th)'), 0);
+
+await new Promise((r) =&gt; setTimeout(r, 40));
+
+order.forEach((o, i) =&gt; console.log((i + 1) + '. ' + o));
+console.log('');
+console.log('Equal delays fire in REGISTRATION order -- the timer queue');
+console.log('is FIFO within a millisecond bucket.');
+console.log('');
+console.log('Look at the actual order above: t1, t2, t3, t0. Node');
+console.log('clamps a 0 ms delay to 1 ms, so ALL FOUR ended up in the');
+console.log('same bucket, and they fired strictly in the order they');
+console.log('were registered -- t0 last, despite asking for 0.');
+console.log('');
+console.log('But 0 and 1 are not reliably distinguishable: Node clamps');
+console.log('0 to 1, and the ordering between a "0 ms" and a "1 ms"');
+console.log('timer depends on where in the millisecond the loop was.');
+console.log('Never write code that depends on it.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">3. A microtask queued inside a macrotask</span></div>
+<pre><code>const order = [];
+const log = (s) =&gt; order.push(s);
+
+log('sync');
+
+setTimeout(() =&gt; {
+  log('timer 1');
+  Promise.resolve().then(() =&gt; log('  micro inside timer 1'));
+}, 0);
+
+setTimeout(() =&gt; {
+  log('timer 2');
+  Promise.resolve().then(() =&gt; log('  micro inside timer 2'));
+}, 0);
+
+Promise.resolve().then(() =&gt; log('micro at top level'));
+
+await new Promise((r) =&gt; setTimeout(r, 40));
+
+order.forEach((o, i) =&gt; console.log((i + 1) + '. ' + o));
+console.log('');
+console.log('The microtask inside timer 1 runs BEFORE timer 2, because');
+console.log('the queue is drained after every single macrotask -- not');
+console.log('after the whole batch of them.');
+console.log('');
+console.log('This is the one people get wrong most often. They expect');
+console.log('timer 1, timer 2, then both microtasks.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">4. Node-only: process.nextTick and setImmediate</span></div>
+<pre><code>const isNode = typeof process !== 'undefined' &amp;&amp; !!process.versions?.node;
+console.log('running in Node?', isNode);
+
+if (!isNode) {
+  console.log('Skipping -- these two exist only in Node.');
+} else {
+  const order = [];
+  const log = (s) =&gt; order.push(s);
+
+  log('sync');
+
+  setTimeout(() =&gt; log('setTimeout (timers phase)'), 0);
+  setImmediate(() =&gt; log('setImmediate (check phase)'));
+
+  Promise.resolve().then(() =&gt; log('promise microtask'));
+  process.nextTick(() =&gt; log('process.nextTick'));
+
+  await new Promise((r) =&gt; setTimeout(r, 40));
+
+  order.forEach((o, i) =&gt; console.log('  ' + (i + 1) + '. ' + o));
+
+  console.log('');
+  console.log('Node has an extra queue: process.nextTick. And its');
+  console.log('position relative to promises DEPENDS ON WHERE YOU ARE.');
+  console.log('');
+  console.log('  At the top level of a script:');
+  console.log('     sync -> nextTick queue -> promise microtasks -> phases');
+  console.log('');
+  console.log('  Inside a promise continuation (which is where this');
+  console.log('  snippet runs -- the block is wrapped in an async');
+  console.log('  function), the promise queue is already draining, so');
+  console.log('  the pending .then goes first and nextTick follows.');
+  console.log('');
+  console.log('That is exactly what the numbered list above shows.');
+  console.log('The honest takeaway is not an ordering to memorise: it');
+  console.log('is that nextTick and promises are two SEPARATE queues');
+  console.log('whose interleaving depends on context. Never write code');
+  console.log('that depends on which of them wins.');
+  console.log('');
+  console.log('setImmediate versus setTimeout(0) at top level is');
+  console.log('genuinely non-deterministic too -- it depends on how');
+  console.log('long the process took to start. Inside an I/O callback,');
+  console.log('setImmediate always wins.');
+}</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">5. A rejection joins the same queue</span></div>
+<pre><code>const order = [];
+const log = (s) =&gt; order.push(s);
+
+log('sync');
+
+Promise.reject(new Error('boom'))
+  .catch(() =&gt; log('catch -- a microtask like any other'))
+  .then(() =&gt; log('then after catch -- back on the success track'));
+
+Promise.resolve()
+  .then(() =&gt; { throw new Error('thrown'); })
+  .then(() =&gt; log('SKIPPED -- the chain is rejected here'))
+  .catch((e) =&gt; log('caught "' + e.message + '" three links later'))
+  .finally(() =&gt; log('finally always runs'));
+
+await new Promise((r) =&gt; setTimeout(r, 30));
+
+order.forEach((o, i) =&gt; console.log((i + 1) + '. ' + o));
+console.log('');
+console.log('A rejected chain still costs one microtask per skipped');
+console.log('link -- rejection travels forward tick by tick, it does');
+console.log('not jump straight to the catch.');
+console.log('');
+console.log('And finally passes the value through:');
+console.log('  Promise.resolve(1).finally(() => 99) ->',
+            await Promise.resolve(1).finally(() =&gt; 99));
+console.log('  (99 is discarded -- finally cannot change the value)');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>The reference card</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>API</th><th>Queue</th><th>Runs</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">process.nextTick</td><td>nextTick (Node only)</td><td>before all microtasks</td></tr>
+        <tr><td class="mono">.then / .catch / .finally</td><td>microtask</td><td>when the stack empties</td></tr>
+        <tr><td class="mono">await (the continuation)</td><td>microtask</td><td>same</td></tr>
+        <tr><td class="mono">queueMicrotask</td><td>microtask</td><td>same</td></tr>
+        <tr><td class="mono">MutationObserver</td><td>microtask</td><td>same (browser)</td></tr>
+        <tr><td class="mono">setTimeout / setInterval</td><td>macrotask</td><td>one per loop turn, after the delay</td></tr>
+        <tr><td class="mono">setImmediate</td><td>macrotask, check phase</td><td>Node only</td></tr>
+        <tr><td class="mono">I/O and DOM events</td><td>macrotask</td><td>one per loop turn</td></tr>
+        <tr><td class="mono">requestAnimationFrame</td><td>before the next paint</td><td>browser only, ~60/sec</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;The stack runs to empty first. Then the entire microtask queue drains &mdash; including
+    microtasks queued while draining. Then exactly one macrotask runs, and we drain the microtasks
+    again. So to predict output I classify every statement as sync, microtask or macrotask, read the
+    sync ones in source order, then the microtasks in the order they were queued, then one timer at a
+    time. The two details people miss: an async function runs synchronously up to its first
+    <code>await</code>, and a <code>.then</code> is only queued when the promise it is attached to
+    settles &mdash; so chains interleave rather than running as a block.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Assuming a chain runs as one block</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">two chains interleave, one tick at a time</span></div>
+<pre><code>const order = [];
+
+Promise.resolve()
+  .then(() =&gt; order.push('A1'))
+  .then(() =&gt; order.push('A2'))
+  .then(() =&gt; order.push('A3'));
+
+Promise.resolve()
+  .then(() =&gt; order.push('B1'))
+  .then(() =&gt; order.push('B2'))
+  .then(() =&gt; order.push('B3'));
+
+await new Promise((r) =&gt; setTimeout(r, 30));
+
+console.log(order.join(' '));
+console.log('');
+console.log('A1 B1 A2 B2 A3 B3 -- not A1 A2 A3 B1 B2 B3.');
+console.log('');
+console.log('Only A1 and B1 are queued at the start. A2 is queued when');
+console.log('A1 returns, by which time B1 is already in the queue');
+console.log('ahead of it. The chains take turns, one tick each.');</code></pre>
+  </div>
+
+  <h3>2. Thinking <code>setTimeout(fn, 0)</code> is immediate</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; reading state that has not been set yet</span></div>
+<pre><code>function loadData() {
+  let data = null;
+  setTimeout(() =&gt; { data = 'the real data'; }, 0);
+  return data;                          // returns null, always
+}
+
+console.log('loadData() ->', loadData());
+console.log('');
+console.log('The return runs before the timer, unconditionally. There');
+console.log('is no delay short enough to change that.');
+
+// the same bug wearing a promise
+function loadData2() {
+  let data = null;
+  Promise.resolve().then(() =&gt; { data = 'the real data'; });
+  return data;                          // still null
+}
+console.log('loadData2() ->', loadData2());
+
+// and the same bug in a class
+class Widget {
+  constructor() {
+    this.ready = false;
+    Promise.resolve().then(() =&gt; { this.ready = true; });
+  }
+}
+const w = new Widget();
+console.log('');
+console.log('right after new Widget(), ready is', w.ready);
+await Promise.resolve();
+console.log('one microtask later, ready is  ', w.ready);
+
+console.log('');
+console.log('The fix is never a shorter delay. It is to RETURN the');
+console.log('promise and let the caller await it.');</code></pre>
+  </div>
+
+  <h3>3. Expecting <code>await</code> in a <code>forEach</code> to work</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the loop finishes before any await resolves</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const ids = [1, 2, 3];
+
+const collected = [];
+ids.forEach(async (id) =&gt; {
+  await sleep(10);
+  collected.push(id);
+});
+console.log('right after forEach:', collected);   // []
+
+// for...of DOES wait
+const collected2 = [];
+for (const id of ids) {
+  await sleep(10);
+  collected2.push(id);
+}
+console.log('after for...of     :', collected2);
+
+// and map + Promise.all waits, concurrently
+const collected3 = await Promise.all(ids.map(async (id) =&gt; {
+  await sleep(10);
+  return id;
+}));
+console.log('after Promise.all  :', collected3);
+
+await sleep(50);
+console.log('');
+console.log('forEach eventually filled up too:', collected);
+console.log('It just did it long after the function that needed it');
+console.log('had already returned.');
+console.log('');
+console.log('forEach ignores the promise its callback returns. There');
+console.log('is nothing to await, so it does not.');</code></pre>
+  </div>
+
+  <h3>4. Blocking the loop and blaming the framework</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">how to chunk work so the loop can breathe</span></div>
+<pre><code>const ITEMS = 4000000;
+const data = new Array(ITEMS);
+for (let i = 0; i &lt; ITEMS; i++) data[i] = i;
+
+function expensive(x) { return Math.sqrt(x) * Math.sin(x); }
+
+// blocking: one long synchronous pass
+let blockedTimerLatency = null;
+let t0 = performance.now();
+setTimeout(() =&gt; { blockedTimerLatency = performance.now() - t0; }, 0);
+let sum = 0;
+for (let i = 0; i &lt; ITEMS; i++) sum += expensive(data[i]);
+const blockingMs = performance.now() - t0;
+await new Promise((r) =&gt; setTimeout(r, 20));
+
+console.log('one long pass      : ' + blockingMs.toFixed(0) + ' ms of work');
+console.log('  the 0 ms timer waited ' + blockedTimerLatency.toFixed(0) + ' ms');
+
+// chunked: yield to the loop every 20,000 items
+let chunkedTimerLatency = null;
+t0 = performance.now();
+setTimeout(() =&gt; { chunkedTimerLatency = performance.now() - t0; }, 0);
+
+const yieldToLoop = () =&gt; new Promise((r) =&gt; setTimeout(r, 0));
+let sum2 = 0;
+for (let i = 0; i &lt; ITEMS; i++) {
+  sum2 += expensive(data[i]);
+  if (i % 200000 === 199999) await yieldToLoop();
+}
+const chunkedMs = performance.now() - t0;
+
+console.log('');
+console.log('chunked            : ' + chunkedMs.toFixed(0) + ' ms wall clock');
+console.log('  the 0 ms timer waited ' + chunkedTimerLatency.toFixed(0) + ' ms');
+console.log('  same answer:', Math.abs(sum - sum2) &lt; 1e-6);
+console.log('');
+console.log('Chunking takes LONGER in total and keeps the page alive.');
+console.log('For genuinely heavy work the better answer is a Web');
+console.log('Worker (or a worker_thread in Node) -- a second thread,');
+console.log('so the main loop never sees the work at all.');</code></pre>
+  </div>
+
+  <h3>5. Believing an <code>async</code> function is on another thread</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; async does not mean parallel</span></div>
+<pre><code>async function heavy(label) {
+  console.log('  ' + label + ' starting');
+  let x = 0;
+  for (let i = 0; i &lt; 30000000; i++) x += i;   // synchronous, despite `async`
+  console.log('  ' + label + ' done');
+  return x;
+}
+
+const t0 = performance.now();
+console.log('calling two "async" functions:');
+const [a, b] = await Promise.all([heavy('A'), heavy('B')]);
+console.log('total: ' + (performance.now() - t0).toFixed(0) + ' ms');
+
+console.log('');
+console.log('A finished completely before B started. Promise.all did');
+console.log('not make them parallel -- there is only one thread, and');
+console.log('neither function ever yielded it.');
+console.log('');
+console.log('`async` only means "this returns a promise, and may use');
+console.log('await". It creates no thread and no concurrency. What');
+console.log('CAN overlap is work done outside JavaScript: timers,');
+console.log('network, disk. Those genuinely run elsewhere and their');
+console.log('callbacks queue up.');
+console.log('');
+console.log('For CPU work in parallel you need a real worker thread.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Recite the four-step algorithm.</strong> Sync, drain all microtasks, one macrotask,
+    repeat. Then apply it to Step 5's snippet without looking at the trace.</li>
+    <li><strong>Write the toy event loop from memory.</strong> Step 6 &mdash; and note where the
+    <code>while</code> goes, because that one line is the whole microtask guarantee.</li>
+    <li><strong>Predict the interleaving of two promise chains</strong> of different lengths.
+    Step 9's first block is the two-equal-chains case; try lengths 2 and 4.</li>
+    <li><strong>Explain why returning a promise from <code>then</code> costs extra ticks</strong> and
+    why <code>await</code> no longer does. Step 7.</li>
+    <li><strong>Take any snippet you find online and classify it in three lists</strong> before
+    running it. Do that five times and these questions stop being hard.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>There is no concurrency here, only interleaving.</strong> One thread, one thing at a
+    time, and a strict order for what runs next. Every output-order question is answered by the same
+    four steps &mdash; and the two facts that catch people out are that an async function runs
+    synchronously until its first <code>await</code>, and that microtasks queued during a drain join
+    that same drain.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="05-custom-promise.html">&larr; Custom Promise</a>
+  <a href="07-closures-counter.html">Next: Closures &amp; the Counter Factory &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

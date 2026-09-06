@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Longest Common Prefix</title>
+<meta name="description" content="Vertical scanning: compare one column at a time across all the words, and stop at the first disagreement.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Strings &middot; Problem 07</p>
+  <h1>Longest Common Prefix</h1>
+  <p class="standfirst">An easy problem with a nice reframe. Instead of comparing words to each other
+  <em>horizontally</em>, line them up and read <strong>down each column</strong>. The first column
+  where anything disagrees is where the answer ends.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Find the longest string that every word in the list starts with. If there is none, return the
+  empty string.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Answer</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">["flower","flow","flight"]</td><td class="mono">"fl"</td><td>all three start "fl", then they differ</td></tr>
+        <tr><td class="mono">["dog","racecar","car"]</td><td class="mono">""</td><td>nothing in common</td></tr>
+        <tr><td class="mono">["interspecies","interstellar","interstate"]</td><td class="mono">"inters"</td><td></td></tr>
+        <tr><td class="mono">["abc"]</td><td class="mono">"abc"</td><td>one word is its own prefix</td></tr>
+        <tr><td class="mono">["abc",""]</td><td class="mono">""</td><td>an empty word kills everything</td></tr>
+        <tr><td class="mono">[]</td><td class="mono">""</td><td>no words at all</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="t">Two facts that bound the answer before you start</span>
+    <p>The answer can never be longer than the <strong>shortest word</strong> &mdash; a prefix of a
+    4-letter word is at most 4 characters. And it can never be longer than the common prefix of the
+    <strong>first two</strong> words. Either observation gives you a cheap early exit.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; horizontal scanning</h2>
+
+  <p>Take the first word as a candidate prefix. Compare it with the second word and trim it down to
+  whatever they share. Compare that with the third. Keep shrinking.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; shrink the candidate</span></div>
+<pre><code>function longestCommonPrefixHorizontal(words) {
+  if (words.length === 0) return '';
+
+  let prefix = words[0];
+
+  for (let i = 1; i &lt; words.length; i++) {
+    // trim the prefix until words[i] actually starts with it
+    while (words[i].indexOf(prefix) !== 0) {
+      prefix = prefix.slice(0, prefix.length - 1);
+      if (prefix === '') return '';        // nothing left in common
+    }
+  }
+
+  return prefix;
+}
+
+console.log(longestCommonPrefixHorizontal(["flower","flow","flight"]));   // 'fl'
+console.log(longestCommonPrefixHorizontal(["dog","racecar","car"]));      // ''
+console.log(longestCommonPrefixHorizontal(["abc"]));                      // 'abc'
+console.log(longestCommonPrefixHorizontal(["abc",""]));                   // ''
+console.log(longestCommonPrefixHorizontal([]));                           // ''</code></pre>
+  </div>
+
+  <p>Correct, and it is the answer most people give. The <code>indexOf(prefix) !== 0</code> test asks
+  &ldquo;does this word begin with the prefix?&rdquo;, which <code>startsWith</code> now says more
+  clearly. Both scan the prefix each time.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it does more work than needed</h2>
+
+  <p>Both approaches are O(total characters) in the worst case, so this is not a complexity story
+  &mdash; it is a <em>wasted work</em> story.</p>
+
+  <p>Horizontal scanning starts with the whole of the first word as the candidate. If the first word
+  is long and the answer is short, it repeatedly re-checks and trims a candidate that was never
+  plausible:</p>
+
+  <div class="trace">
+<pre>words = ["aaaaaaaaaaaaaaaaaaaa", "b"]
+
+prefix starts as the 20-character word.
+Compare with "b": no match. Trim to 19. No match. Trim to 18. ...
+Twenty trims, twenty comparisons, to discover the answer is "".
+
+Vertical scanning compares column 0 -- 'a' vs 'b' -- and stops.
+One comparison.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// 2,000 long words that share nothing after the first character
+const words = [];
+for (let i = 0; i &lt; 2000; i++) {
+  words.push(String.fromCharCode(97 + (i % 26)) + 'x'.repeat(3000));
+}
+
+function horizontal(list) {
+  if (!list.length) return '';
+  let prefix = list[0];
+  for (let i = 1; i &lt; list.length; i++) {
+    while (list[i].indexOf(prefix) !== 0) {
+      prefix = prefix.slice(0, -1);
+      if (!prefix) return '';
+    }
+  }
+  return prefix;
+}
+
+function vertical(list) {
+  if (!list.length) return '';
+  for (let col = 0; col &lt; list[0].length; col++) {
+    const ch = list[0][col];
+    for (let w = 1; w &lt; list.length; w++) {
+      if (col === list[w].length || list[w][col] !== ch) {
+        return list[0].slice(0, col);
+      }
+    }
+  }
+  return list[0];
+}
+
+let t = performance.now();
+const a = horizontal(words);
+const hMs = performance.now() - t;
+
+t = performance.now();
+const b = vertical(words);
+const vMs = performance.now() - t;
+
+console.log('horizontal : "' + a + '" in ' + hMs.toFixed(1) + ' ms');
+console.log('vertical   : "' + b + '" in ' + vMs.toFixed(2) + ' ms');
+console.log('same answer:', a === b);
+console.log('speed-up:', Math.round(hMs / Math.max(vMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; read down the columns</h2>
+
+  <p>Write the words one under the other and read <strong>vertically</strong>:</p>
+
+  <div class="trace">
+<pre>        col:  0  1  2  3  4  5
+
+  flower       f  l  o  w  e  r
+  flow         f  l  o  w
+  flight       f  l  i  g  h  t
+               -  -  ^
+               |  |  |
+             all all  'o' vs 'o' vs 'i'  ->  DISAGREEMENT
+              f   l
+
+  answer: columns 0 and 1  ->  "fl"
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Walk column by column. At column <code>c</code>, take the character from the first word and
+    check every other word has the same one. The moment any word disagrees &mdash;
+    <strong>or runs out of characters</strong> &mdash; the answer is everything before this column.</p>
+  </div>
+
+  <p>Why this is better: it stops <strong>as soon as possible</strong>. It never looks past the answer,
+  never builds a candidate it will discard, and it reads at most
+  <code>(length of answer + 1) &times; number of words</code> characters.</p>
+
+  <div class="note warn">
+    <span class="t">The check people forget</span>
+    <p><code>col === words[w].length</code> &mdash; the word has <em>ended</em>. Reading
+    <code>words[w][col]</code> past the end gives <code>undefined</code>, which never equals a real
+    character, so in JavaScript it happens to behave correctly by accident. Write the check
+    explicitly anyway: it states the intent, and in most other languages the same code would crash.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>["flower","flow","flight"]</code>.</p>
+
+  <div class="trace">
+<pre>col=0   reference character is 'f' (from "flower")
+        "flow"   [0] = 'f'   match
+        "flight" [0] = 'f'   match
+        column agrees -> keep going
+
+col=1   reference 'l'
+        "flow"   [1] = 'l'   match
+        "flight" [1] = 'l'   match
+        column agrees -> keep going
+
+col=2   reference 'o'
+        "flow"   [2] = 'o'   match
+        "flight" [2] = 'i'   MISMATCH
+        -> answer is "flower".slice(0, 2) = "fl"
+</pre>
+  </div>
+
+  <p>Now the case where a word runs out, <code>["flow","flower","flo"]</code>:</p>
+
+  <div class="trace">
+<pre>col=0   'f'   all match
+col=1   'l'   all match
+col=2   'o'   all match
+col=3   reference 'w' (from "flow")
+        "flower" [3] = 'w'   match
+        "flo"    length is 3, and col is 3  ->  the word has ENDED
+        -> answer is "flow".slice(0, 3) = "flo"
+
+Without the length check, "flo"[3] is undefined, which is not 'w',
+so it would still stop in the right place -- but only because
+JavaScript is forgiving. Say what you mean.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function prefixExplained(words) {
+  if (words.length === 0) { console.log('no words -> ""'); return ''; }
+
+  console.log('words =', words);
+  console.log('');
+
+  const first = words[0];
+
+  for (let col = 0; col &lt; first.length; col++) {
+    const ch = first[col];
+    console.log('col=' + col + '   reference character "' + ch + '" from "' + first + '"');
+
+    for (let w = 1; w &lt; words.length; w++) {
+      if (col === words[w].length) {
+        console.log('        "' + words[w] + '" has ENDED at length ' + words[w].length);
+        console.log('   -> answer "' + first.slice(0, col) + '"');
+        console.log('');
+        return first.slice(0, col);
+      }
+      if (words[w][col] !== ch) {
+        console.log('        "' + words[w] + '"[' + col + '] = "' + words[w][col] +
+                    '"  MISMATCH');
+        console.log('   -> answer "' + first.slice(0, col) + '"');
+        console.log('');
+        return first.slice(0, col);
+      }
+      console.log('        "' + words[w] + '"[' + col + '] = "' + words[w][col] + '"  match');
+    }
+  }
+
+  console.log('   ran out of columns -> the whole first word is the prefix');
+  console.log('');
+  return first;
+}
+
+console.log('ANSWER:', JSON.stringify(prefixExplained(["flower","flow","flight"])));
+console.log('==========================================');
+console.log('ANSWER:', JSON.stringify(prefixExplained(["flow","flower","flo"])));
+console.log('==========================================');
+console.log('ANSWER:', JSON.stringify(prefixExplained(["dog","racecar","car"])));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; vertical scan, loops only</span></div>
+<pre><code>function longestCommonPrefixManual(words) {
+  if (words.length === 0) return '';
+
+  const first = words[0];
+  let matched = 0;          // how many columns have agreed so far
+
+  // walk the columns of the first word
+  for (let col = 0; col &lt; first.length; col++) {
+    const ch = first[col];
+
+    // does every other word have this character at this column?
+    let allAgree = true;
+
+    for (let w = 1; w &lt; words.length; w++) {
+      if (col &gt;= words[w].length || words[w][col] !== ch) {
+        allAgree = false;
+        break;
+      }
+    }
+
+    if (!allAgree) break;
+    matched = matched + 1;
+  }
+
+  // build the prefix without slice
+  let prefix = '';
+  for (let k = 0; k &lt; matched; k++) {
+    prefix = prefix + first[k];
+  }
+  return prefix;
+}
+
+console.log(longestCommonPrefixManual(["flower","flow","flight"]));   // 'fl'
+console.log(longestCommonPrefixManual(["dog","racecar","car"]));      // ''
+console.log(longestCommonPrefixManual(["interspecies","interstellar","interstate"]));  // 'inters'
+console.log(longestCommonPrefixManual(["abc"]));                      // 'abc'
+console.log(longestCommonPrefixManual(["abc",""]));                   // ''
+console.log(longestCommonPrefixManual([]));                           // ''
+console.log(longestCommonPrefixManual(["a","a","a"]));                // 'a'
+console.log(longestCommonPrefixManual(["flow","flower","flo"]));      // 'flo'
+console.log(longestCommonPrefixManual(["ab","abc","abcd"]));          // 'ab'</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">Why the first word is a safe reference</span>
+    <p>Any common prefix must be a prefix of <em>every</em> word, including the first one. So comparing
+    everything against <code>words[0]</code> loses nothing. You could use the shortest word as the
+    reference instead &mdash; it caps the loop sooner &mdash; but finding it costs a pass, and the
+    length check inside the loop already handles running out.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2a &mdash; vertical, the interview answer</span></div>
+<pre><code>function longestCommonPrefix(words) {
+  if (words.length === 0) return '';
+
+  const first = words[0];
+
+  for (let col = 0; col &lt; first.length; col++) {
+    const ch = first[col];
+
+    for (let w = 1; w &lt; words.length; w++) {
+      if (col === words[w].length || words[w][col] !== ch) {
+        return first.slice(0, col);
+      }
+    }
+  }
+
+  return first;
+}
+
+console.log(longestCommonPrefix(["flower","flow","flight"]));   // 'fl'
+console.log(longestCommonPrefix(["dog","racecar","car"]));      // ''
+console.log(longestCommonPrefix(["interspecies","interstellar","interstate"]));
+console.log(longestCommonPrefix([]));                           // ''
+console.log(longestCommonPrefix(["abc",""]));                   // ''</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2b &mdash; horizontal with reduce</span></div>
+<pre><code>function longestCommonPrefixReduce(words) {
+  if (words.length === 0) return '';
+
+  return words.reduce((prefix, word) =&gt; {
+    let i = 0;
+    while (i &lt; prefix.length &amp;&amp; i &lt; word.length &amp;&amp; prefix[i] === word[i]) i++;
+    return prefix.slice(0, i);
+  });
+}
+
+console.log(longestCommonPrefixReduce(["flower","flow","flight"]));   // 'fl'
+console.log(longestCommonPrefixReduce(["dog","racecar","car"]));      // ''
+console.log(longestCommonPrefixReduce(["abc"]));                      // 'abc'
+
+// reduce with NO initial value uses the first element as the seed,
+// which is exactly what we want here. Note it throws on an empty
+// array -- hence the guard.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 2c &mdash; the sorting trick</span></div>
+<pre><code>// Sort the words. The common prefix of the WHOLE list is then just
+// the common prefix of the first and last -- because sorting puts
+// the two most dissimilar words at the ends.
+function longestCommonPrefixSorted(words) {
+  if (words.length === 0) return '';
+
+  const sorted = [...words].sort();
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+
+  let i = 0;
+  while (i &lt; first.length &amp;&amp; first[i] === last[i]) i++;
+
+  return first.slice(0, i);
+}
+
+console.log(longestCommonPrefixSorted(["flower","flow","flight"]));   // 'fl'
+console.log(longestCommonPrefixSorted(["dog","racecar","car"]));      // ''
+console.log(longestCommonPrefixSorted(["interspecies","interstellar","interstate"]));
+
+// O(n*k log n) because of the sort -- worse than vertical scanning.
+// But it is a genuinely clever observation and a good thing to
+// mention: in sorted order, every word between the first and the
+// last shares at least whatever those two share.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the divide-and-conquer version</span></div>
+<pre><code>// Split the list in half, solve each half, then combine the two
+// answers with the same pairwise prefix. Useful when the work can be
+// parallelised, and a nice recursion warm-up.
+function commonOfTwo(a, b) {
+  let i = 0;
+  while (i &lt; a.length &amp;&amp; i &lt; b.length &amp;&amp; a[i] === b[i]) i++;
+  return a.slice(0, i);
+}
+
+function longestCommonPrefixDivide(words, lo = 0, hi = words.length - 1) {
+  if (words.length === 0) return '';
+  if (lo === hi) return words[lo];
+
+  const mid = Math.floor((lo + hi) / 2);
+  const left = longestCommonPrefixDivide(words, lo, mid);
+  const right = longestCommonPrefixDivide(words, mid + 1, hi);
+
+  return commonOfTwo(left, right);
+}
+
+console.log(longestCommonPrefixDivide(["flower","flow","flight"]));   // 'fl'
+console.log(longestCommonPrefixDivide(["dog","racecar","car"]));      // ''
+console.log(longestCommonPrefixDivide(["a"]));                        // 'a'
+console.log(longestCommonPrefixDivide(["ab","abc","abcd","abcde"]));  // 'ab'</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Horizontal shrinking</td><td class="mono">O(n &middot; k)</td><td class="mono">O(k)</td></tr>
+        <tr><td><strong>Vertical scanning</strong></td><td class="mono">O(n &middot; k)</td><td class="mono">O(1)</td></tr>
+        <tr><td>Sort then compare ends</td><td class="mono">O(n &middot; k log n)</td><td class="mono">O(n &middot; k)</td></tr>
+        <tr><td>Divide and conquer</td><td class="mono">O(n &middot; k)</td><td class="mono">O(k log n)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>where <code>n</code> is the number of words and <code>k</code> the length of the shortest one.</p>
+
+  <p>Vertical and horizontal share the same worst case &mdash; when all the words are identical, both
+  read everything. They differ in the <em>best</em> case: vertical stops at the first disagreeing
+  column, which is why it wins so dramatically in the Step 3 demo. Big-O hides that difference
+  entirely, which is a useful reminder that it is an upper bound, not a description of typical
+  behaviour.</p>
+
+  <p>Vertical scanning is O(1) space because it never builds an intermediate string &mdash; it tracks
+  a column index and slices once at the end.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;I scan vertically: for each column index, take the character from the first word and
+    check every other word matches it, stopping as soon as one differs or runs out. The answer is the
+    first word sliced to that column. O(n&middot;k) worst case, but it exits at the first
+    disagreement rather than trimming a candidate down, and it uses O(1) extra space. Sorting and
+    comparing the first and last word also works and is a nice observation, but the sort makes it
+    slower.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Not handling the empty list</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; crashes on []</span></div>
+<pre><code>function broken(words) {
+  const first = words[0];               // undefined for []
+  for (let col = 0; col &lt; first.length; col++) {
+    for (let w = 1; w &lt; words.length; w++) {
+      if (words[w][col] !== first[col]) return first.slice(0, col);
+    }
+  }
+  return first;
+}
+
+console.log(broken(["flower","flow"]));   // 'flow'
+
+try {
+  console.log(broken([]));
+} catch (err) {
+  console.log('threw:', err.message);
+}
+
+// One guard line at the top. Every list-of-things problem needs it.</code></pre>
+  </div>
+
+  <h3>2. Comparing only the first two words</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; ignores the rest</span></div>
+<pre><code>function broken(words) {
+  if (words.length === 0) return '';
+  if (words.length === 1) return words[0];
+  const a = words[0], b = words[1];
+  let i = 0;
+  while (i &lt; a.length &amp;&amp; i &lt; b.length &amp;&amp; a[i] === b[i]) i++;
+  return a.slice(0, i);                 // stops after two words -- bug
+}
+
+console.log(broken(["flower","flow","flight"]));   // 'flow'  WRONG, should be 'fl'
+console.log(broken(["abc","abd","x"]));            // 'ab'    WRONG, should be ''
+
+// The common prefix of the first two is an upper BOUND, not the
+// answer. Every remaining word can only shorten it further.</code></pre>
+  </div>
+
+  <h3>3. Forgetting the shorter word runs out</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">why it accidentally works in JavaScript</span></div>
+<pre><code>const word = 'flo';
+console.log(word[3]);              // undefined -- no crash
+console.log(word[3] === 'w');      // false -- so a mismatch is reported
+console.log(word.charAt(3));       // '' -- also not a crash
+
+// So a solution WITHOUT the length check gives the right answer here:
+function noLengthCheck(words) {
+  const first = words[0];
+  for (let col = 0; col &lt; first.length; col++)
+    for (let w = 1; w &lt; words.length; w++)
+      if (words[w][col] !== first[col]) return first.slice(0, col);
+  return first;
+}
+console.log(noLengthCheck(["flow","flower","flo"]));   // 'flo'  correct
+
+// It is right by accident. Write `col === words[w].length ||` anyway:
+// it documents the case, and the same code in Java or C++ would be
+// an out-of-bounds error rather than a convenient undefined.</code></pre>
+  </div>
+
+  <h3>4. Using the first word as the reference when a later word is shorter</h3>
+
+  <p>This is fine &mdash; as long as the loop checks lengths. What is <em>not</em> fine is looping
+  <code>col</code> to the length of the longest word, or assuming <code>words[0]</code> is shortest.
+  The outer loop must be bounded by the reference word, and every inner comparison must handle a word
+  that has ended.</p>
+
+  <h3>5. Returning <code>null</code> or <code>undefined</code> instead of <code>""</code></h3>
+
+  <p>&ldquo;No common prefix&rdquo; is the empty string, not a missing value. A caller doing
+  <code>result.length</code> crashes on <code>null</code> and works on <code>""</code>. Return the
+  same type on every path.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the vertical scan from memory</strong>, including both parts of the inner test
+    &mdash; ran out, or disagreed.</li>
+    <li><strong>Longest common suffix.</strong> Same algorithm, walking the columns from the end.
+    Watch the index arithmetic: the last character of <code>word</code> is
+    <code>word[word.length - 1 - col]</code>.</li>
+    <li><strong>Longest common prefix of just two strings.</strong> Extract it as a helper, then build
+    the divide-and-conquer version on top of it. It is in Step 7.</li>
+    <li><strong>Group words by shared prefix length.</strong> Which pairs share at least three
+    characters? A natural lead-in to tries.</li>
+    <li><strong>Build a trie.</strong> Insert every word into a prefix tree; the common prefix is the
+    path from the root down to the first node with more than one child. Enormous overkill here, and
+    exactly right when you need to answer many prefix questions about the same word list.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Change the direction you iterate.</strong> The data was a list of words; reading it as
+    a grid of columns made the stopping condition obvious and the early exit free. When a nested loop
+    feels awkward, try swapping which dimension is on the outside &mdash; it costs nothing to
+    consider and occasionally turns the problem inside out.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="06-string-compression.html">&larr; String Compression</a>
+  <a href="08-string-rotations.html">Next: Check if Strings Are Rotations &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

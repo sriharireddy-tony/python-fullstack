@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Find the Duplicate Number</title>
+<meta name="description" content="From the hash set to Floyd's cycle detection: how an array of numbers becomes a linked list you can walk.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Arrays &middot; Problem 10</p>
+  <h1>Find the Duplicate Number</h1>
+  <p class="standfirst">Finding the duplicate is easy. The problem is famous because of its
+  <em>constraints</em>: no extra memory, no modifying the array. Those two rules force one of the
+  most surprising tricks in the whole subject &mdash; treating the array as a linked list and
+  looking for a loop.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>You have <code>n + 1</code> numbers, and every number is somewhere between <code>1</code> and
+  <code>n</code>. So by the pigeonhole principle at least one number must repeat. Find it.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>n</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[1, 3, 4, 2, 2]</td><td class="mono">4</td><td class="mono">2</td></tr>
+        <tr><td class="mono">[3, 1, 3, 4, 2]</td><td class="mono">4</td><td class="mono">3</td></tr>
+        <tr><td class="mono">[2, 2, 2, 2, 2]</td><td class="mono">4</td><td class="mono">2</td></tr>
+        <tr><td class="mono">[1, 1]</td><td class="mono">1</td><td class="mono">1</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The three rules that make it interesting:</p>
+
+  <ul>
+    <li>You may <strong>not modify the array</strong>. So no sorting, no marking visited slots.</li>
+    <li>You may use only <strong>O(1) extra space</strong>. So no Set, no counting array.</li>
+    <li>There is <strong>exactly one repeated value</strong>, but it may appear many times &mdash; see
+    row three.</li>
+  </ul>
+
+  <div class="note">
+    <span class="t">Pigeonhole, in one sentence</span>
+    <p>Five slots, four possible values &mdash; at least two slots must hold the same value. That is
+    why the problem can promise a duplicate exists without telling you anything else. It is also the
+    key to the binary-search solution later on.</p>
+  </div>
+
+  <p>Be honest about which constraints you are given. In a real codebase you would use a Set and move
+  on. The version below builds up from that, and only pays the price of cleverness once the
+  constraints demand it.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answers</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0a &mdash; compare everything to everything</span></div>
+<pre><code>function findDuplicateBrute(nums) {
+  for (let i = 0; i &lt; nums.length; i++) {
+    for (let j = i + 1; j &lt; nums.length; j++) {
+      if (nums[i] === nums[j]) return nums[i];
+    }
+  }
+  return -1;
+}
+
+console.log(findDuplicateBrute([1, 3, 4, 2, 2]));   // 2
+console.log(findDuplicateBrute([3, 1, 3, 4, 2]));   // 3
+
+// O(n^2) time, O(1) space, does not modify the array.
+// It satisfies the constraints! It is just slow.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0b &mdash; a Set</span></div>
+<pre><code>function findDuplicateSet(nums) {
+  const seen = new Set();
+  for (const n of nums) {
+    if (seen.has(n)) return n;    // the first value we meet twice
+    seen.add(n);
+  }
+  return -1;
+}
+
+console.log(findDuplicateSet([1, 3, 4, 2, 2]));   // 2
+console.log(findDuplicateSet([3, 1, 3, 4, 2]));   // 3
+console.log(findDuplicateSet([2, 2, 2, 2, 2]));   // 2
+
+// O(n) time -- but O(n) space. This is the version you write at
+// work, and the version the constraints are designed to forbid.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0c &mdash; sort first</span></div>
+<pre><code>function findDuplicateSort(nums) {
+  const s = [...nums].sort((a, b) =&gt; a - b);
+  for (let i = 1; i &lt; s.length; i++) {
+    if (s[i] === s[i - 1]) return s[i];   // duplicates become neighbours
+  }
+  return -1;
+}
+
+console.log(findDuplicateSort([3, 1, 3, 4, 2]));   // 3
+
+// O(n log n) time. Sorting a COPY keeps the original intact, but
+// the copy costs O(n) space. Sorting in place would be O(1) space
+// but breaks the "do not modify" rule. Either way, one rule loses.</code></pre>
+  </div>
+
+  <p>Say all three of these out loud in an interview before reaching for the clever answer. Naming
+  the trade each one makes &mdash; time, space, or mutation &mdash; is most of the mark.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why they are not good enough</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>Modifies?</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td>Nested loops</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td><td>no</td><td>too slow</td></tr>
+        <tr><td>Set</td><td class="mono">O(n)</td><td class="mono">O(n)</td><td>no</td><td>too much memory</td></tr>
+        <tr><td>Sort a copy</td><td class="mono">O(n log n)</td><td class="mono">O(n)</td><td>no</td><td>too much memory</td></tr>
+        <tr><td>Sort in place</td><td class="mono">O(n log n)</td><td class="mono">O(1)</td><td><strong>yes</strong></td><td>breaks a rule</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 20000;
+const nums = [];
+for (let i = 1; i &lt;= N; i++) nums.push(i);
+nums.push(N);                         // the duplicate, right at the end
+
+function brute(a) {
+  for (let i = 0; i &lt; a.length; i++)
+    for (let j = i + 1; j &lt; a.length; j++)
+      if (a[i] === a[j]) return a[i];
+  return -1;
+}
+
+function floyd(a) {
+  let slow = a[0], fast = a[0];
+  do { slow = a[slow]; fast = a[a[fast]]; } while (slow !== fast);
+  slow = a[0];
+  while (slow !== fast) { slow = a[slow]; fast = a[fast]; }
+  return slow;
+}
+
+let t = performance.now();
+const x = brute(nums);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const y = floyd(nums);
+const fastMs = performance.now() - t;
+
+console.log('nested loops    :', x, 'in', bruteMs.toFixed(1) + ' ms');
+console.log('cycle detection :', y, 'in', fastMs.toFixed(2) + ' ms');
+console.log('speed-up:', Math.round(bruteMs / Math.max(fastMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; the array is secretly a linked list</h2>
+
+  <p>Here is the leap. Stop reading the array as a list of values. Read it as a set of
+  <strong>arrows</strong>: from index <code>i</code>, jump to index <code>nums[i]</code>.</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Every value is between 1 and n, and every index is between 0 and n. So
+    <code>nums[i]</code> is always a <em>valid index</em>. That means you can follow arrows forever
+    without ever falling off the array &mdash; you are walking a linked list where
+    <code>nums[i]</code> is the <code>next</code> pointer.</p>
+  </div>
+
+  <p>Take <code>[1, 3, 4, 2, 2]</code> and follow the arrows from index 0:</p>
+
+  <div class="trace">
+<pre>index:  0   1   2   3   4
+value:  1   3   4   2   2
+
+start at index 0
+  index 0 holds 1  ->  go to index 1
+  index 1 holds 3  ->  go to index 3
+  index 3 holds 2  ->  go to index 2
+  index 2 holds 4  ->  go to index 4
+  index 4 holds 2  ->  go to index 2      <-- been here before!
+  index 2 holds 4  ->  go to index 4
+  index 4 holds 2  ->  go to index 2      round and round
+
+path:   0 -> 1 -> 3 -> 2 -> 4 -> 2 -> 4 -> 2 -> ...
+                          \____________/
+                           the loop
+</pre>
+  </div>
+
+  <p>The walk enters a loop. Why must there be one? Because you can never stop &mdash; every step
+  lands on a valid index &mdash; and there are only finitely many indexes, so eventually you revisit
+  one. That is a loop, guaranteed.</p>
+
+  <p>Now the important part. <strong>Where does the loop begin?</strong> A loop entrance is an index
+  that two different arrows point at. Two arrows pointing at index <code>d</code> means two
+  positions in the array both hold the value <code>d</code> &mdash; which is precisely what
+  &ldquo;<code>d</code> is the duplicate&rdquo; means.</p>
+
+  <div class="note key">
+    <span class="t">The whole reduction</span>
+    <p><strong>The duplicate value = the index where the cycle starts.</strong></p>
+  </div>
+
+  <p>In the trace above the cycle starts at index 2, and 2 is indeed the duplicate. Starting at
+  index 0 is safe, by the way, because no value can ever be 0 &mdash; values are 1 to n &mdash; so
+  no arrow points back to index 0, and index 0 can never be part of the loop.</p>
+
+  <h3>Floyd&rsquo;s tortoise and hare</h3>
+
+  <p>Finding a cycle&rsquo;s start with no extra memory is a solved problem. Two walkers:</p>
+
+  <ol>
+    <li><strong>Phase 1 &mdash; meet.</strong> <code>slow</code> takes one step at a time,
+    <code>fast</code> takes two. If there is a loop, the fast one laps the slow one and they land on
+    the same index. (They meet <em>somewhere</em> in the loop &mdash; not necessarily at its start.)</li>
+    <li><strong>Phase 2 &mdash; find the entrance.</strong> Put one walker back at the beginning and
+    leave the other at the meeting point. Now move <strong>both one step at a time</strong>. Where
+    they meet is the start of the loop.</li>
+  </ol>
+
+  <p>Phase 2 looks like magic. It is arithmetic. Call the distance from the start to the loop
+  entrance <code>a</code>, the distance from the entrance to the meeting point <code>b</code>, and
+  the remaining loop length <code>c</code>. When they meet, slow has walked <code>a + b</code> and
+  fast has walked exactly twice that. Fast has also gone round the loop some whole number of times,
+  so:</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">why phase 2 works</span></div>
+<pre><code>2(a + b) = a + b + k(b + c)        k = laps fast made
+     a + b = k(b + c)
+         a = k(b + c) - b
+         a = (k-1)(b + c) + c
+
+read that last line as:
+  "walking a steps from the START" lands in the same place as
+  "walking c steps from the MEETING POINT, after some whole laps"
+
+which is exactly the loop entrance.</code></pre>
+  </div>
+
+  <p>You do not have to reproduce that derivation under pressure. You do have to be able to say
+  <em>&ldquo;the distance from the head to the entrance equals the distance from the meeting point to
+  the entrance, so two one-step walkers converge there&rdquo;</em>.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>nums = [1, 3, 4, 2, 2]</code>. Both walkers start at index 0.</p>
+
+  <div class="trace">
+<pre>PHASE 1 -- one step vs two steps, until they collide
+
+           slow                 fast
+start        0                    0
+
+step 1   nums[0] = 1          nums[nums[0]] = nums[1] = 3
+           slow = 1             fast = 3
+step 2   nums[1] = 3          nums[nums[3]] = nums[2] = 4
+           slow = 3             fast = 4
+step 3   nums[3] = 2          nums[nums[4]] = nums[2] = 4
+           slow = 2             fast = 4
+step 4   nums[2] = 4          nums[nums[4]] = nums[2] = 4
+           slow = 4             fast = 4      MET at index 4
+
+PHASE 2 -- slow back to the start, both move one step
+
+           slow                 fast
+             0                    4
+step 1   nums[0] = 1          nums[4] = 2
+           slow = 1             fast = 2
+step 2   nums[1] = 3          nums[2] = 4
+           slow = 3             fast = 4
+step 3   nums[3] = 2          nums[4] = 2
+           slow = 2             fast = 2      MET at index 2
+
+answer: 2
+</pre>
+  </div>
+
+  <p>Note that phase 1 met at index 4, which is <em>not</em> the answer. That is the whole reason
+  phase 2 exists &mdash; the meeting point is somewhere in the loop, and phase 2 walks it back to the
+  entrance.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function findDuplicateExplained(nums) {
+  console.log('nums =', nums);
+  console.log('arrows: index i -> index nums[i]');
+  console.log('');
+  console.log('PHASE 1 -- slow moves 1, fast moves 2');
+
+  let slow = 0;
+  let fast = 0;
+  let step = 0;
+  console.log('  start    slow=' + slow + '   fast=' + fast);
+
+  do {
+    slow = nums[slow];
+    fast = nums[nums[fast]];
+    step++;
+    console.log('  step ' + step + '   slow=' + slow + '   fast=' + fast);
+  } while (slow !== fast);
+
+  console.log('  they met at index ' + slow + ' (not the answer yet)');
+  console.log('');
+  console.log('PHASE 2 -- slow restarts, both move 1');
+
+  slow = 0;
+  console.log('  slow=' + slow + '   fast=' + fast);
+
+  while (slow !== fast) {
+    slow = nums[slow];
+    fast = nums[fast];
+    console.log('  slow=' + slow + '   fast=' + fast);
+  }
+
+  console.log('  cycle starts at index ' + slow);
+  console.log('');
+  return slow;
+}
+
+console.log('ANSWER:', findDuplicateExplained([1, 3, 4, 2, 2]));
+console.log('=========================================');
+console.log('ANSWER:', findDuplicateExplained([3, 1, 3, 4, 2]));
+console.log('=========================================');
+console.log('ANSWER:', findDuplicateExplained([2, 2, 2, 2, 2]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; Floyd&rsquo;s cycle detection</span></div>
+<pre><code>function findDuplicateManual(nums) {
+  // Index 0 is the head of the list. Both walkers start there.
+  let slow = 0;
+  let fast = 0;
+
+  // PHASE 1: take a step BEFORE testing (do/while), otherwise the
+  // test slow !== fast is false immediately and the loop never runs.
+  do {
+    slow = nums[slow];          // one step
+    fast = nums[nums[fast]];    // two steps
+  } while (slow !== fast);
+
+  // PHASE 2: one walker back to the head, both now move ONE step.
+  // Where they meet is the entrance of the cycle.
+  slow = 0;
+
+  while (slow !== fast) {
+    slow = nums[slow];
+    fast = nums[fast];
+  }
+
+  return slow;
+}
+
+console.log(findDuplicateManual([1, 3, 4, 2, 2]));      // 2
+console.log(findDuplicateManual([3, 1, 3, 4, 2]));      // 3
+console.log(findDuplicateManual([2, 2, 2, 2, 2]));      // 2
+console.log(findDuplicateManual([1, 1]));               // 1
+console.log(findDuplicateManual([1, 4, 6, 6, 6, 2, 3]));// 6
+
+// The array is never touched, and we hold exactly two numbers.
+// O(n) time, O(1) space, no mutation -- all three rules satisfied.</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Why the loop starts <em>after</em> one step</span>
+    <p>Both walkers start at index 0, which means they are already equal &mdash; so a plain
+    <code>while (slow !== fast)</code> would never run even once. That is why phase 1 is a
+    <code>do ... while</code>: it takes a step <em>before</em> testing. The alternative is to
+    pre-advance them by hand, but then you must advance them by exactly one and two steps
+    respectively, keeping fast at precisely double slow&rsquo;s distance from the head. Get that
+    wrong and phase 2 never converges &mdash; it spins forever. The <code>do ... while</code> is
+    safer because it makes the two speeds impossible to desynchronise.</p>
+  </div>
+
+  <h3>The binary-search alternative</h3>
+
+  <p>There is a second solution that satisfies the same constraints and is much easier to justify on
+  the spot. It binary-searches over the <em>value range</em>, not the array.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; binary search on the answer</span></div>
+<pre><code>function findDuplicateBinary(nums) {
+  let low = 1;
+  let high = nums.length - 1;      // values run 1..n
+
+  while (low &lt; high) {
+    const mid = Math.floor((low + high) / 2);
+
+    // how many values are &lt;= mid?
+    let count = 0;
+    for (let i = 0; i &lt; nums.length; i++) {
+      if (nums[i] &lt;= mid) count++;
+    }
+
+    // If there are more than `mid` values in the range 1..mid,
+    // pigeonhole says the duplicate is in 1..mid.
+    if (count &gt; mid) {
+      high = mid;
+    } else {
+      low = mid + 1;
+    }
+  }
+
+  return low;
+}
+
+console.log(findDuplicateBinary([1, 3, 4, 2, 2]));       // 2
+console.log(findDuplicateBinary([3, 1, 3, 4, 2]));       // 3
+console.log(findDuplicateBinary([2, 2, 2, 2, 2]));       // 2
+console.log(findDuplicateBinary([1, 4, 6, 6, 6, 2, 3])); // 6
+
+// O(n log n) time, O(1) space, no mutation.
+// Slower than Floyd's, but you can EXPLAIN it in one sentence:
+// "count how many values fall in the lower half; if that count
+//  exceeds the size of the half, the duplicate is in there."</code></pre>
+  </div>
+
+  <p>If you can only remember one, remember this one. It is a genuinely good answer, and being able
+  to derive it beats half-remembering Floyd&rsquo;s and getting phase 2 wrong.</p>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; when the constraints are lifted</span></div>
+<pre><code>// The honest production answer, if nobody forbids extra memory.
+function findDuplicate(nums) {
+  const seen = new Set();
+  for (const n of nums) {
+    if (seen.has(n)) return n;
+    seen.add(n);
+  }
+  return -1;
+}
+
+console.log(findDuplicate([1, 3, 4, 2, 2]));   // 2
+
+// Find EVERY duplicate, not just one:
+function allDuplicates(nums) {
+  const counts = new Map();
+  for (const n of nums) counts.set(n, (counts.get(n) || 0) + 1);
+  return [...counts].filter(([, c]) =&gt; c &gt; 1).map(([v]) =&gt; v);
+}
+
+console.log(allDuplicates([1, 2, 2, 3, 3, 3, 4]));   // [2, 3]
+
+// The shortest possible check for "does this array have duplicates?"
+function hasDuplicates(nums) {
+  return new Set(nums).size !== nums.length;
+}
+
+console.log(hasDuplicates([1, 2, 3]));      // false
+console.log(hasDuplicates([1, 2, 2]));      // true</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">Do not skip the easy answer to look clever</span>
+    <p>If an interviewer does not state the O(1)-space rule, write the Set version, say
+    <em>&ldquo;O(n) time, O(n) space&rdquo;</em>, and then offer: <em>&ldquo;if you want constant space
+    without modifying the array, I can do binary search on the value range, or Floyd&rsquo;s cycle
+    detection&rdquo;</em>. Leading with the clever version and fumbling it is a much worse outcome than
+    leading with the simple one.</p>
+  </div>
+
+  <h3>The solution that breaks the rules &mdash; and is fine when it does not</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">index marking &mdash; O(1) space, but mutates</span></div>
+<pre><code>// If you ARE allowed to modify the array, this is the neatest trick:
+// use the sign of nums[v] as a "have I seen value v?" flag.
+function findDuplicateMarking(nums) {
+  for (let i = 0; i &lt; nums.length; i++) {
+    const value = Math.abs(nums[i]);
+
+    if (nums[value] &lt; 0) {
+      return value;            // already flagged -> we have seen it before
+    }
+
+    nums[value] = -nums[value];  // flag it by flipping the sign
+  }
+  return -1;
+}
+
+const arr = [1, 3, 4, 2, 2];
+console.log(findDuplicateMarking(arr));   // 2
+console.log('array afterwards:', arr);    // signs flipped -- destroyed
+
+// O(n) time, O(1) space -- but the input is wrecked. You can restore
+// it with a second pass of Math.abs, which is a good thing to offer.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>Modifies?</th></tr></thead>
+      <tbody>
+        <tr><td>Nested loops</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td><td>no</td></tr>
+        <tr><td>Set</td><td class="mono">O(n)</td><td class="mono">O(n)</td><td>no</td></tr>
+        <tr><td>Binary search on value</td><td class="mono">O(n log n)</td><td class="mono">O(1)</td><td>no</td></tr>
+        <tr><td>Sign marking</td><td class="mono">O(n)</td><td class="mono">O(1)</td><td><strong>yes</strong></td></tr>
+        <tr><td><strong>Floyd&rsquo;s cycle</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td><td>no</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Only the last row hits all three targets at once, which is why it is the &ldquo;official&rdquo;
+  answer. But look at the table honestly: binary search is O(n log n) with the same guarantees and is
+  far easier to derive on the spot. On any realistic input size the difference is invisible.</p>
+
+  <p>Floyd&rsquo;s is O(n) because each phase walks at most a constant multiple of the list length,
+  and the two phases run one after the other &mdash; sequential passes add.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Since every value is a valid index, I can read the array as a linked list where
+    <code>nums[i]</code> points to index <code>nums[i]</code>. A duplicate value means two indexes
+    point at the same place, so the list has a cycle, and the cycle&rsquo;s entrance is the duplicate.
+    Floyd&rsquo;s algorithm finds it: move a slow and a fast pointer until they meet, then restart one
+    from the head and advance both by one until they meet again. O(n) time, O(1) space, and the array
+    is untouched.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Returning the meeting point from phase 1</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; stops halfway</span></div>
+<pre><code>function broken(nums) {
+  let slow = 0, fast = 0;
+  do {
+    slow = nums[slow];
+    fast = nums[nums[fast]];
+  } while (slow !== fast);
+  return slow;          // phase 2 missing -- bug
+}
+
+console.log(broken([1, 3, 4, 2, 2]));   // 4   WRONG, should be 2
+console.log(broken([3, 1, 3, 4, 2]));   // 2   WRONG, should be 3
+
+// Phase 1 only proves a cycle EXISTS and finds SOME point inside it.
+// The entrance -- the duplicate -- needs phase 2.</code></pre>
+  </div>
+
+  <h3>2. Starting both pointers at the same place with a plain <code>while</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the loop never runs</span></div>
+<pre><code>function broken(nums) {
+  let slow = 0, fast = 0;
+  while (slow !== fast) {        // 0 !== 0 is false -- never entered
+    slow = nums[slow];
+    fast = nums[nums[fast]];
+  }
+  slow = 0;
+  while (slow !== fast) { slow = nums[slow]; fast = nums[fast]; }
+  return slow;
+}
+
+console.log(broken([1, 3, 4, 2, 2]));   // 0   WRONG
+
+// Fix it either by taking one step before the test:
+function fixed(nums) {
+  let slow = 0, fast = 0;
+  do { slow = nums[slow]; fast = nums[nums[fast]]; } while (slow !== fast);
+  slow = 0;
+  while (slow !== fast) { slow = nums[slow]; fast = nums[fast]; }
+  return slow;
+}
+console.log(fixed([1, 3, 4, 2, 2]));    // 2</code></pre>
+  </div>
+
+  <h3>3. Moving both pointers at two steps in phase 2</h3>
+
+  <p>Phase 2 requires <strong>both walkers to move one step</strong>. The whole arithmetic in Step 4
+  depends on equal speeds. Keeping <code>fast = nums[nums[fast]]</code> in phase 2 is a copy-paste
+  slip that produces a wrong answer on most inputs.</p>
+
+  <h3>4. Confusing indexes with values</h3>
+
+  <p>In this problem the two are deliberately blurred, which is exactly what makes it confusing.
+  Say it slowly: <code>slow</code> holds an <strong>index</strong>; the step
+  <code>slow = nums[slow]</code> reads the value there and uses it as the <strong>next index</strong>;
+  and the final answer is an index that happens to equal the duplicate value. Writing
+  <code>nums[slow]</code> at the end instead of <code>slow</code> gives a plausible wrong number.</p>
+
+  <h3>5. Assuming the duplicate appears exactly twice</h3>
+
+  <p><code>[2,2,2,2,2]</code> is legal. Solutions that count occurrences and look for exactly 2 fail
+  here. All the solutions on this page handle it, but check any solution you write against this
+  input.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the binary-search version from memory.</strong> It is the one you are most
+    likely to be able to reconstruct under pressure, and it is a complete answer.</li>
+    <li><strong>Find the missing number.</strong> An array of n distinct numbers from 0 to n with one
+    missing. Sum 0..n and subtract the actual sum &mdash; O(n) time, O(1) space, one line.
+    Then do it again with XOR and explain why that avoids overflow.</li>
+    <li><strong>Find both the duplicate and the missing number.</strong> Numbers 1..n where one value
+    replaced another. Two equations, two unknowns &mdash; or the sign-marking trick.</li>
+    <li><strong>Set Mismatch and First Missing Positive.</strong> Both use index marking, and
+    First Missing Positive is the hardest of this family: put each value at its own index by swapping,
+    then scan for the first index that is wrong.</li>
+    <li><strong>Linked List Cycle II.</strong> Floyd&rsquo;s on an actual linked list. Once you have
+    seen it there, this page&rsquo;s trick looks obvious, because it <em>is</em> that problem in
+    disguise.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p>Two ideas. First, <strong>an array of valid indexes is a graph</strong> &mdash; when values
+    happen to be in the range of the indexes, following them is a legal walk, and graph tools like
+    cycle detection become available. Second, <strong>you can binary-search the answer</strong>,
+    not just the array: if you can cheaply test &ldquo;is the answer at most X?&rdquo;, you can halve the
+    range of possible answers. That trick shows up in a lot of hard problems.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="09-move-zeroes.html">&larr; Move Zeroes</a>
+  <a href="11-majority-element.html">Next: Majority Element &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

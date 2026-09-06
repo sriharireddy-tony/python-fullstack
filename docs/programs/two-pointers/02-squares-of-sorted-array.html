@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Squares of a Sorted Array</title>
+<meta name="description" content="The biggest square is always at one of the ends — so fill the answer backwards from both ends inwards.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Two pointers &middot; Problem 02</p>
+  <h1>Squares of a Sorted Array</h1>
+  <p class="standfirst">Squaring a sorted array un-sorts it, because negatives flip to the front.
+  Re-sorting costs O(n log n). The O(n) fix is to notice that the <strong>largest</strong> square is
+  always at one end or the other &mdash; so build the answer <em>backwards</em>.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Given a sorted array of integers (which may include negatives), return an array of their squares,
+  also sorted.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Squares, in order</th><th>Sorted answer</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[-4,-1,0,3,10]</td><td class="mono">[16,1,0,9,100]</td><td class="mono">[0,1,9,16,100]</td></tr>
+        <tr><td class="mono">[-7,-3,2,3,11]</td><td class="mono">[49,9,4,9,121]</td><td class="mono">[4,9,9,49,121]</td></tr>
+        <tr><td class="mono">[1,2,3]</td><td class="mono">[1,4,9]</td><td class="mono">[1,4,9]</td></tr>
+        <tr><td class="mono">[-3,-2,-1]</td><td class="mono">[9,4,1]</td><td class="mono">[1,4,9]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why the order breaks</span>
+    <p>Sorting orders by <em>value</em>; squaring orders by <em>distance from zero</em>. For all
+    positives those agree, so nothing changes. For all negatives they are exactly reversed. For a
+    mixed array you get a V shape &mdash; the squares fall to a minimum near zero and rise again.</p>
+  </div>
+
+  <div class="trace">
+<pre>  input:    -4   -1    0    3   10
+  squares:  16    1    0    9  100
+
+             \          /
+              \        /            a V: descending, then ascending
+               \      /
+                \    /
+                 \  /
+                  \/
+                  0
+</pre>
+  </div>
+
+  <p>That V is the whole structure of the problem. The two <em>ends</em> hold the biggest squares;
+  the middle holds the smallest.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; square then sort</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; map and sort</span></div>
+<pre><code>function sortedSquaresSimple(nums) {
+  return nums.map(n =&gt; n * n).sort((a, b) =&gt; a - b);
+}
+
+console.log(sortedSquaresSimple([-4,-1,0,3,10]));   // [0,1,9,16,100]
+console.log(sortedSquaresSimple([-7,-3,2,3,11]));   // [4,9,9,49,121]
+console.log(sortedSquaresSimple([1,2,3]));          // [1,4,9]
+console.log(sortedSquaresSimple([-3,-2,-1]));       // [1,4,9]
+console.log(sortedSquaresSimple([]));               // []
+
+// One line, obviously correct, O(n log n). Say it out loud, then
+// offer the linear version.</code></pre>
+  </div>
+
+  <p>Do not skip past this. It is a genuinely good answer, and in a real codebase it is the one to
+  ship unless profiling says otherwise. The interview question is whether you can do better
+  <em>given that the input is already sorted</em>.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why sorting is more than you need</h2>
+
+  <p>The input arrives sorted. Sorting again throws that away and rediscovers an order you were
+  handed most of.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 2000000;
+const nums = [];
+for (let i = -N / 2; i &lt; N / 2; i++) nums.push(i);   // sorted, half negative
+
+function mapSort(a) {
+  return a.map(n =&gt; n * n).sort((x, y) =&gt; x - y);
+}
+
+function twoPointer(a) {
+  const out = new Array(a.length);
+  let left = 0, right = a.length - 1;
+  for (let pos = a.length - 1; pos &gt;= 0; pos--) {
+    const l = a[left] * a[left];
+    const r = a[right] * a[right];
+    if (l &gt; r) { out[pos] = l; left++; }
+    else { out[pos] = r; right--; }
+  }
+  return out;
+}
+
+let t = performance.now();
+const a = mapSort(nums);
+const sortMs = performance.now() - t;
+
+t = performance.now();
+const b = twoPointer(nums);
+const ptrMs = performance.now() - t;
+
+console.log('map + sort   : ' + sortMs.toFixed(1) + ' ms');
+console.log('two pointers : ' + ptrMs.toFixed(1) + ' ms');
+console.log('same answer  :', a[0] === b[0] &amp;&amp; a[N - 1] === b[N - 1] &amp;&amp;
+                              a[N &gt;&gt; 1] === b[N &gt;&gt; 1]);
+console.log('speed-up:', Math.round(sortMs / Math.max(ptrMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; fill backwards from both ends</h2>
+
+  <p>Look at the V again. The <strong>smallest</strong> square is somewhere in the middle, and you do
+  not know where without searching. But the <strong>largest</strong> square is trivially easy: it is
+  at one of the two ends, because the ends are the values furthest from zero.</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Put a pointer at each end. Compare the two squares; the bigger one is the largest square left.
+    Write it into the <strong>last unfilled slot</strong> of the output and move that pointer inwards.
+    Repeat, filling the output right to left.</p>
+  </div>
+
+  <p>Why is the maximum always at an end? Because the array is sorted, so <code>nums[left]</code> is
+  the most negative value remaining and <code>nums[right]</code> the most positive. Everything between
+  them is closer to zero, so every square between them is smaller than the larger of those two.
+  Nothing in the middle can win.</p>
+
+  <div class="trace">
+<pre>  nums = [-4, -1, 0, 3, 10]
+          L                R
+
+  squares at the ends: 16 and 100.  100 wins.
+     -> out[4] = 100,  right moves in
+
+  nums = [-4, -1, 0, 3]
+          L           R
+  squares: 16 and 9.  16 wins.
+     -> out[3] = 16,  left moves in
+
+  nums = [-1, 0, 3]
+          L      R
+  squares: 1 and 9.  9 wins.
+     -> out[2] = 9,   right moves in
+
+  nums = [-1, 0]
+          L   R
+  squares: 1 and 0.  1 wins.
+     -> out[1] = 1,   left moves in
+
+  nums = [0]
+          LR
+  squares: 0 and 0.  either.
+     -> out[0] = 0
+
+  out = [0, 1, 9, 16, 100]
+</pre>
+  </div>
+
+  <p>Filling <strong>backwards</strong> is the key detail. Going forwards you would need the smallest
+  square first, which requires finding the V&rsquo;s bottom. Going backwards, the answer is always
+  sitting at one of two places you are already looking at.</p>
+
+  <div class="note">
+    <span class="t">The general lesson</span>
+    <p>When the easy thing to find is the <em>maximum</em> rather than the minimum, build the output
+    from the end. The same instinct solves Merge Sorted Array in place &mdash; merging backwards
+    avoids overwriting data you still need.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>nums = [-7,-3,2,3,11]</code>.</p>
+
+  <div class="trace">
+<pre>out = [_, _, _, _, _]    left=0  right=4  pos=4
+
+pos=4  nums[0]=-7 -> 49    nums[4]=11 -> 121
+       121 wins   out[4] = 121   right=3
+       out = [_,_,_,_,121]
+
+pos=3  nums[0]=-7 -> 49    nums[3]=3 -> 9
+       49 wins    out[3] = 49    left=1
+       out = [_,_,_,49,121]
+
+pos=2  nums[1]=-3 -> 9     nums[3]=3 -> 9
+       tie -- take the right one   out[2] = 9    right=2
+       out = [_,_,9,49,121]
+
+pos=1  nums[1]=-3 -> 9     nums[2]=2 -> 4
+       9 wins     out[1] = 9     left=2
+       out = [_,9,9,49,121]
+
+pos=0  nums[2]=2 -> 4      nums[2]=2 -> 4
+       left === right, one element left   out[0] = 4
+       out = [4,9,9,49,121]
+</pre>
+  </div>
+
+  <p>Note the tie at <code>pos=2</code>. When the two squares are equal it does not matter which you
+  take &mdash; both are correct, and both eventually get written. Using <code>if (l &gt; r)</code>
+  versus <code>if (l &gt;= r)</code> changes which pointer moves first and nothing else.</p>
+
+  <p>And note the last step: <code>left === right</code>, both pointers on the same element. The loop
+  still runs because there is still one slot to fill. That is why the loop is driven by
+  <code>pos</code>, not by <code>left &lt; right</code>.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function squaresExplained(nums) {
+  const n = nums.length;
+  const out = new Array(n).fill(null);
+  let left = 0, right = n - 1;
+
+  console.log('nums =', nums);
+  console.log('');
+
+  for (let pos = n - 1; pos &gt;= 0; pos--) {
+    const l = nums[left] * nums[left];
+    const r = nums[right] * nums[right];
+
+    if (l &gt; r) {
+      out[pos] = l;
+      console.log('pos=' + pos + '   left ' + nums[left] + '^2=' + l +
+                  '  vs  right ' + nums[right] + '^2=' + r +
+                  '   -> take LEFT ' + l + '   left becomes ' + (left + 1));
+      left++;
+    } else {
+      out[pos] = r;
+      console.log('pos=' + pos + '   left ' + nums[left] + '^2=' + l +
+                  '  vs  right ' + nums[right] + '^2=' + r +
+                  '   -> take RIGHT ' + r + '   right becomes ' + (right - 1));
+      right--;
+    }
+
+    console.log('          out = [' + out.map(v =&gt; v === null ? '_' : v).join(', ') + ']');
+  }
+
+  console.log('');
+  return out;
+}
+
+console.log('ANSWER:', squaresExplained([-7,-3,2,3,11]));
+console.log('==========================================');
+console.log('ANSWER:', squaresExplained([-4,-1,0,3,10]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; two pointers, loops only</span></div>
+<pre><code>function sortedSquaresManual(nums) {
+  const n = nums.length;
+  const out = [];
+
+  let left = 0;
+  let right = n - 1;
+
+  // fill the output from the LAST slot backwards
+  for (let pos = n - 1; pos &gt;= 0; pos--) {
+    const leftSquare = nums[left] * nums[left];
+    const rightSquare = nums[right] * nums[right];
+
+    if (leftSquare &gt; rightSquare) {
+      out[pos] = leftSquare;
+      left = left + 1;
+    } else {
+      out[pos] = rightSquare;
+      right = right - 1;
+    }
+  }
+
+  return out;
+}
+
+console.log(sortedSquaresManual([-4,-1,0,3,10]));    // [0,1,9,16,100]
+console.log(sortedSquaresManual([-7,-3,2,3,11]));    // [4,9,9,49,121]
+console.log(sortedSquaresManual([1,2,3]));           // [1,4,9]
+console.log(sortedSquaresManual([-3,-2,-1]));        // [1,4,9]
+console.log(sortedSquaresManual([0]));               // [0]
+console.log(sortedSquaresManual([]));                // []
+console.log(sortedSquaresManual([-5, 5]));           // [25,25]
+console.log(sortedSquaresManual([-1, 0, 1]));        // [0,1,1]</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Why the loop is driven by <code>pos</code></span>
+    <p>Writing <code>while (left &lt;= right)</code> also works, but then you need a separate
+    <code>pos</code> counter and two places to keep in sync. Driving the loop by the output position
+    guarantees exactly <code>n</code> iterations and exactly <code>n</code> writes &mdash; every slot
+    filled once. Fewer moving parts, fewer off-by-ones.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the alternative: find the pivot, then merge</span></div>
+<pre><code>// A different linear solution: find where the sign changes, then
+// merge the two halves outwards from that point.
+function squaresByMerge(nums) {
+  const n = nums.length;
+  if (n === 0) return [];
+
+  // find the first non-negative index
+  let split = 0;
+  while (split &lt; n &amp;&amp; nums[split] &lt; 0) split++;
+
+  let neg = split - 1;    // walks leftwards through the negatives
+  let pos = split;        // walks rightwards through the non-negatives
+  const out = [];
+
+  // merge, taking the smaller square each time -- forwards this time
+  while (neg &gt;= 0 &amp;&amp; pos &lt; n) {
+    const a = nums[neg] * nums[neg];
+    const b = nums[pos] * nums[pos];
+    if (a &lt; b) { out.push(a); neg--; }
+    else { out.push(b); pos++; }
+  }
+  while (neg &gt;= 0) { out.push(nums[neg] * nums[neg]); neg--; }
+  while (pos &lt; n)  { out.push(nums[pos] * nums[pos]); pos++; }
+
+  return out;
+}
+
+console.log(squaresByMerge([-4,-1,0,3,10]));   // [0,1,9,16,100]
+console.log(squaresByMerge([-7,-3,2,3,11]));   // [4,9,9,49,121]
+console.log(squaresByMerge([1,2,3]));          // [1,4,9]
+console.log(squaresByMerge([-3,-2,-1]));       // [1,4,9]
+console.log(squaresByMerge([]));               // []
+
+// Also O(n), and it makes the structure explicit: the array is two
+// sorted sequences glued together, so this is the merge step of
+// merge sort. More code, more edge cases -- the backwards fill is
+// the one to write.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function sortedSquares(nums) {
+  const n = nums.length;
+  const out = new Array(n);
+
+  let left = 0;
+  let right = n - 1;
+
+  for (let pos = n - 1; pos &gt;= 0; pos--) {
+    const l = nums[left] ** 2;
+    const r = nums[right] ** 2;
+
+    if (l &gt; r) { out[pos] = l; left++; }
+    else       { out[pos] = r; right--; }
+  }
+
+  return out;
+}
+
+console.log(sortedSquares([-4,-1,0,3,10]));   // [0,1,9,16,100]
+console.log(sortedSquares([-7,-3,2,3,11]));   // [4,9,9,49,121]
+console.log(sortedSquares([-5]));             // [25]
+console.log(sortedSquares([]));               // []</code></pre>
+  </div>
+
+  <p><code>**</code> is the exponent operator, so <code>x ** 2</code> is <code>x * x</code>. For
+  squaring specifically, <code>x * x</code> is marginally faster and reads just as well &mdash; use
+  whichever your codebase prefers. <code>Math.abs</code> would also work for the comparison, since
+  comparing absolute values gives the same ordering as comparing squares.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">comparing by absolute value instead</span></div>
+<pre><code>function sortedSquaresAbs(nums) {
+  const n = nums.length;
+  const out = new Array(n);
+  let left = 0, right = n - 1;
+
+  for (let pos = n - 1; pos &gt;= 0; pos--) {
+    // |a| > |b|  is equivalent to  a^2 > b^2, and avoids the multiply
+    if (Math.abs(nums[left]) &gt; Math.abs(nums[right])) {
+      out[pos] = nums[left] * nums[left];
+      left++;
+    } else {
+      out[pos] = nums[right] * nums[right];
+      right--;
+    }
+  }
+
+  return out;
+}
+
+console.log(sortedSquaresAbs([-4,-1,0,3,10]));   // [0,1,9,16,100]
+console.log(sortedSquaresAbs([-7,-3,2,3,11]));   // [4,9,9,49,121]
+
+// Worth knowing for a different reason: with very large numbers,
+// squaring can overflow into imprecise floating point, while
+// comparing magnitudes cannot. In JavaScript, integers above
+// 2^53 lose precision:
+console.log(Number.MAX_SAFE_INTEGER);              // 9007199254740991
+console.log(3037000500 ** 2 === 3037000499 ** 2);  // false, still fine
+console.log((2 ** 53) === (2 ** 53) + 1);          // true -- precision lost</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">a non-mutating check that both agree</span></div>
+<pre><code>function mapSort(nums) {
+  return nums.map(n =&gt; n * n).sort((a, b) =&gt; a - b);
+}
+
+function twoPointer(nums) {
+  const out = new Array(nums.length);
+  let l = 0, r = nums.length - 1;
+  for (let p = nums.length - 1; p &gt;= 0; p--) {
+    const a = nums[l] * nums[l], b = nums[r] * nums[r];
+    if (a &gt; b) { out[p] = a; l++; } else { out[p] = b; r--; }
+  }
+  return out;
+}
+
+// random sorted arrays, both methods, 300 trials
+let ok = 0;
+for (let trial = 0; trial &lt; 300; trial++) {
+  const len = Math.floor(Math.random() * 12);
+  const arr = [];
+  for (let i = 0; i &lt; len; i++) arr.push(Math.floor(Math.random() * 21) - 10);
+  arr.sort((a, b) =&gt; a - b);
+
+  if (JSON.stringify(mapSort(arr)) === JSON.stringify(twoPointer(arr))) ok++;
+}
+
+console.log('300 random sorted arrays, both methods agree:', ok + '/300');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Map then sort</td><td class="mono">O(n log n)</td><td class="mono">O(n)</td></tr>
+        <tr><td><strong>Two pointers, backwards</strong></td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Exactly <code>n</code> iterations, each doing two multiplications, one comparison and one write.
+  O(n) &mdash; and O(n) is optimal, since the output alone has n entries.</p>
+
+  <p>Space is O(n) for the output, which does not count against you by convention. The
+  <em>scratch</em> space is three integers. If you were allowed to overwrite the input you could not
+  do better anyway &mdash; there is nowhere to put the answer without either an output array or
+  destroying values you still need.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Squaring reverses the order of the negatives, so the squares form a V &mdash; the
+    largest values are at the two ends. I put a pointer at each end and fill the output array from
+    the back: at each step the larger of the two end squares is the largest remaining, so it goes in
+    the last empty slot and that pointer moves inwards. Exactly n steps, O(n) time and O(n) output
+    space, and it uses the fact that the input is already sorted rather than re-sorting.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Filling the output forwards</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; takes the max but writes it first</span></div>
+<pre><code>function broken(nums) {
+  const out = [];
+  let left = 0, right = nums.length - 1;
+  while (left &lt;= right) {
+    const l = nums[left] * nums[left];
+    const r = nums[right] * nums[right];
+    if (l &gt; r) { out.push(l); left++; }      // push = forwards -- bug
+    else { out.push(r); right--; }
+  }
+  return out;
+}
+
+console.log(broken([-4,-1,0,3,10]));   // [100,16,9,1,0]  -- reversed
+console.log(broken([1,2,3]));          // [9,4,1]         -- reversed
+
+// The values are right and the order is exactly backwards, because
+// we are producing them largest-first and appending. Either fill
+// backwards by index, or push and then reverse at the end.
+console.log(broken([-4,-1,0,3,10]).reverse());   // [0,1,9,16,100]</code></pre>
+  </div>
+
+  <h3>2. Trying to take the minimum from the ends</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the minimum is not at an end</span></div>
+<pre><code>function broken(nums) {
+  const out = [];
+  let left = 0, right = nums.length - 1;
+  while (left &lt;= right) {
+    const l = nums[left] * nums[left];
+    const r = nums[right] * nums[right];
+    if (l &lt; r) { out.push(l); left++; }      // taking the SMALLER -- bug
+    else { out.push(r); right--; }
+  }
+  return out;
+}
+
+console.log(broken([-4,-1,0,3,10]));   // [1,0,9,16,100]  WRONG
+console.log(broken([-7,-3,2,3,11]));   // [9,4,9,49,121]  WRONG
+
+// The smallest square is somewhere in the MIDDLE of the V, not at
+// an end. Comparing the two ends and taking the smaller does not
+// find it. The maximum is the one guaranteed to be at an end.</code></pre>
+  </div>
+
+  <h3>3. Assuming the array has no negatives</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; just squares in place</span></div>
+<pre><code>const broken = nums =&gt; nums.map(n =&gt; n * n);
+
+console.log(broken([1,2,3]));          // [1,4,9]      correct
+console.log(broken([-4,-1,0,3,10]));   // [16,1,0,9,100]  NOT sorted
+
+// If the input were guaranteed non-negative there would be no
+// problem to solve. The negatives are the entire question -- which
+// is why the first thing to check is whether any exist.</code></pre>
+  </div>
+
+  <h3>4. Off-by-one in the starting position</h3>
+
+  <p><code>pos</code> starts at <code>n - 1</code>, the <em>last index</em>, not at <code>n</code>.
+  Writing <code>out[n]</code> grows the array to length <code>n + 1</code> with an undefined at the
+  front. And <code>right</code> starts at <code>n - 1</code> for the same reason.</p>
+
+  <h3>5. Forgetting the empty array</h3>
+
+  <p>With <code>n === 0</code>, the loop <code>for (pos = -1; pos &gt;= 0; ...)</code> never runs and
+  <code>new Array(0)</code> is <code>[]</code> &mdash; so the two-pointer version handles it for free.
+  Confirm that rather than assuming it; a version that reads <code>nums[left]</code> before the loop
+  would throw.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the seven-line version from memory</strong>, then say why the maximum is
+    guaranteed to be at an end and the minimum is not.</li>
+    <li><strong>Merge Sorted Array in place.</strong> <code>nums1</code> has spare room at the end;
+    merge <code>nums2</code> into it. Fill backwards for exactly the same reason &mdash; it avoids
+    overwriting values you have not read yet. It is in the searching topic here.</li>
+    <li><strong>Absolute values, sorted.</strong> Same problem without the squaring. Confirm your
+    solution does not depend on squares specifically.</li>
+    <li><strong>Cubes of a sorted array.</strong> A trick question: cubes preserve sign, so the array
+    is <em>already</em> sorted after cubing. Work out why, and notice that the V does not form.</li>
+    <li><strong>Find the closest value to zero.</strong> The bottom of the V. Binary search finds it
+    in O(log n) &mdash; a good warm-up for the searching topic.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>If the maximum is easy to find but the minimum is not, build the answer from the
+    back.</strong> Filling an output in reverse is a small habit that solves this problem, in-place
+    merging, and several array-shifting problems. The general question to ask is: <em>which end of my
+    answer can I determine right now with certainty?</em> Start there, whichever end it is.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="01-remove-duplicates-sorted.html">&larr; Remove Duplicates from Sorted Array</a>
+  <a href="03-valid-palindrome.html">Next: Valid Palindrome &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

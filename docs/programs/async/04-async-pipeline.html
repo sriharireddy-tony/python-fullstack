@@ -1,0 +1,1025 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Async Pipeline and Compose</title>
+<meta name="description" content="reduce over promises — pipe, compose, middleware, and where the error handling goes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Async patterns &middot; Problem 04</p>
+  <h1>Async Pipeline / Compose</h1>
+  <p class="standfirst">One line: <code>reduce</code> over a list of functions, threading a promise
+  through. That is the whole answer &mdash; and then the useful parts are the variations: middleware
+  that wraps rather than chains, a pipeline that can short-circuit, and where the error handling
+  lives.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Take a value and pass it through a series of steps, some of which are async. Each step's output is
+  the next step's input.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; the one-liner</span></div>
+<pre><code>const pipeAsync = (...fns) =&gt; (input) =&gt;
+  fns.reduce((promise, fn) =&gt; promise.then(fn), Promise.resolve(input));
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+const trim = (s) =&gt; s.trim();
+const fetchUser = async (name) =&gt; { await sleep(20); return { name, id: 7 }; };
+const addRole = async (user) =&gt; { await sleep(20); return { ...user, role: 'admin' }; };
+const format = (user) =&gt; user.name + ' (' + user.role + ', #' + user.id + ')';
+
+const process = pipeAsync(trim, fetchUser, addRole, format);
+
+console.log(await process('  Ada  '));
+console.log('');
+console.log('Four steps, two of them async, one value in and one out.');
+console.log('The mix does not matter -- .then() promotes a plain return');
+console.log('value into a resolved promise, so sync and async steps are');
+console.log('interchangeable.');
+
+// the same thing written with a loop, which is often clearer
+async function pipeLoop(fns, input) {
+  let value = input;
+  for (const fn of fns) value = await fn(value);
+  return value;
+}
+console.log('');
+console.log('with a loop:', await pipeLoop([trim, fetchUser, addRole, format], '  Ada  '));</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t"><code>pipe</code> versus <code>compose</code></span>
+    <p><strong><code>pipe(f, g, h)</code></strong> applies left to right: <code>h(g(f(x)))</code>. Reads
+    in the order things happen, which is what you want for a data pipeline.</p>
+    <p><strong><code>compose(f, g, h)</code></strong> applies right to left: <code>f(g(h(x)))</code>.
+    Matches the mathematical notation <code>f &compfn; g</code>, and is what
+    <code>reduceRight</code> gives you.</p>
+    <p>They are the same function with the list reversed. Say which one you mean.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">both directions, and both are just reduce</span></div>
+<pre><code>const pipe = (...fns) =&gt; (x) =&gt;
+  fns.reduce((p, fn) =&gt; p.then(fn), Promise.resolve(x));
+
+const compose = (...fns) =&gt; (x) =&gt;
+  fns.reduceRight((p, fn) =&gt; p.then(fn), Promise.resolve(x));
+
+const double = (n) =&gt; n * 2;
+const inc = (n) =&gt; n + 1;
+const square = (n) =&gt; n * n;
+
+console.log('start with 3');
+console.log('  pipe(double, inc, square)   ->', await pipe(double, inc, square)(3));
+console.log('    3 -> 6 -> 7 -> 49');
+console.log('  compose(double, inc, square)->', await compose(double, inc, square)(3));
+console.log('    3 -> 9 -> 10 -> 20');
+console.log('');
+console.log('Same functions, different order, different answer. The');
+console.log('only difference in the implementation is reduce versus');
+console.log('reduceRight.');
+console.log('');
+console.log('And they are exact mirrors:');
+console.log('  pipe(a,b,c)(x) === compose(c,b,a)(x) :',
+            await pipe(double, inc, square)(3) ===
+            await compose(square, inc, double)(3));
+
+// edge cases
+console.log('');
+console.log('no functions at all -> the identity:', await pipe()(42));
+console.log('one function        ->', await pipe(double)(42));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; what this replaces</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the same job, four ways</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const validate = async (s) =&gt; { await sleep(5); if (!s) throw new Error('empty'); return s.trim(); };
+const enrich = async (s) =&gt; { await sleep(5); return { name: s, id: s.length }; };
+const save = async (o) =&gt; { await sleep(5); return { ...o, saved: true }; };
+
+// 1. nested calls -- unreadable past three levels
+const nested = async (input) =&gt; save(await enrich(await validate(input)));
+console.log('1. nested       :', JSON.stringify(await nested(' Ada ')));
+
+// 2. a chain of thens -- fine, and hard to build dynamically
+const chained = (input) =&gt;
+  Promise.resolve(input).then(validate).then(enrich).then(save);
+console.log('2. then chain   :', JSON.stringify(await chained(' Ada ')));
+
+// 3. sequential awaits -- the most readable for a FIXED pipeline
+const awaited = async (input) =&gt; {
+  const clean = await validate(input);
+  const rich = await enrich(clean);
+  return save(rich);
+};
+console.log('3. awaits       :', JSON.stringify(await awaited(' Ada ')));
+
+// 4. a pipeline -- the steps are DATA
+const pipe = (...fns) =&gt; (x) =&gt; fns.reduce((p, f) =&gt; p.then(f), Promise.resolve(x));
+const piped = pipe(validate, enrich, save);
+console.log('4. pipeline     :', JSON.stringify(await piped(' Ada ')));
+
+console.log('');
+console.log('For a fixed sequence, number 3 is the best code. Do not');
+console.log('reach for a pipeline just to look functional.');
+console.log('');
+console.log('The pipeline earns its place when the STEPS ARE DATA:');
+
+// steps chosen at runtime
+const buildPipeline = (opts) =&gt; {
+  const steps = [validate];
+  if (opts.enrich) steps.push(enrich);
+  if (opts.save) steps.push(save);
+  return pipe(...steps);
+};
+
+console.log('  validate only        :',
+            JSON.stringify(await buildPipeline({})(' Ada ')));
+console.log('  validate + enrich    :',
+            JSON.stringify(await buildPipeline({ enrich: true })(' Ada ')));
+console.log('  all three            :',
+            JSON.stringify(await buildPipeline({ enrich: true, save: true })(' Ada ')));
+
+console.log('');
+console.log('You cannot write that with three fixed awaits without an');
+console.log('if-statement per step. That is the trade the pipeline');
+console.log('buys: composability, at the cost of a stack trace that no');
+console.log('longer names your steps.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it costs a microtask per step</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; reduce-over-then versus a loop</span></div>
+<pre><code>const steps = Array.from({ length: 50 }, () =&gt; (n) =&gt; n + 1);
+const N = 20000;
+
+const pipeThen = (...fns) =&gt; (x) =&gt;
+  fns.reduce((p, f) =&gt; p.then(f), Promise.resolve(x));
+
+const pipeLoop = (...fns) =&gt; async (x) =&gt; {
+  let v = x;
+  for (const f of fns) v = await f(v);
+  return v;
+};
+
+// a fully synchronous pipeline: no awaits needed at all
+const pipeSync = (...fns) =&gt; (x) =&gt; fns.reduce((v, f) =&gt; f(v), x);
+
+const withThen = pipeThen(...steps);
+const withLoop = pipeLoop(...steps);
+const withSync = pipeSync(...steps);
+
+let t = performance.now();
+for (let i = 0; i &lt; N; i++) await withThen(0);
+const thenMs = performance.now() - t;
+
+t = performance.now();
+for (let i = 0; i &lt; N; i++) await withLoop(0);
+const loopMs = performance.now() - t;
+
+t = performance.now();
+for (let i = 0; i &lt; N; i++) withSync(0);
+const syncMs = performance.now() - t;
+
+console.log(N.toLocaleString('en-US') + ' runs of a 50-step pipeline');
+console.log('  reduce over .then : ' + thenMs.toFixed(0) + ' ms');
+console.log('  await in a loop   : ' + loopMs.toFixed(0) + ' ms');
+console.log('  no promises at all: ' + syncMs.toFixed(0) + ' ms');
+console.log('  all three agree   :', withSync(0) === await withThen(0));
+
+console.log('');
+console.log('Each .then and each await is a microtask -- a trip through');
+console.log('the event loop. 50 steps is 50 hops, whether or not any');
+console.log('step is actually asynchronous.');
+console.log('');
+console.log('So if every step is synchronous, do not build an async');
+console.log('pipeline. And if only two of fifty are async, consider');
+console.log('a pipeline that only awaits when the value is thenable:');
+
+const pipeSmart = (...fns) =&gt; (x) =&gt; {
+  let v = x;
+  for (const f of fns) {
+    v = f(v);
+    if (v &amp;&amp; typeof v.then === 'function') {
+      // from here on we are async, so hand off to the async version
+      return fns.slice(fns.indexOf(f) + 1)
+        .reduce((p, g) =&gt; p.then(g), Promise.resolve(v));
+    }
+  }
+  return v;                            // never went async: a plain value
+};
+
+const mixed = [...steps];
+const smart = pipeSmart(...mixed);
+const value = smart(0);
+console.log('  pipeSmart on all-sync steps returns', typeof value === 'object'
+  ? 'a promise' : 'the plain value ' + value);
+console.log('  (no promise created, no microtasks spent)');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; the accumulator is a promise</h2>
+
+  <div class="trace">
+<pre>  pipe(f, g, h)(x)
+
+      reduce starts with   Promise.resolve(x)
+
+      step 1:  acc = Promise.resolve(x).then(f)
+      step 2:  acc = acc.then(g)
+      step 3:  acc = acc.then(h)
+
+      return acc
+
+
+  Nothing has run yet when reduce finishes. It built a CHAIN:
+
+      Promise.resolve(x) --then f--> P1 --then g--> P2 --then h--> P3
+
+  and P3 is what you return. The chain then executes itself over
+  the next few microtasks.
+
+
+  Two properties fall out for free:
+
+    1. `.then(f)` promotes a plain return value into a resolved
+       promise, so a synchronous step needs no special handling.
+
+    2. A throw anywhere rejects the rest of the chain, so one
+       .catch at the end covers every step.
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The mistake to avoid in the reduce</span>
+    <p><code>fns.reduce((p, fn) =&gt; p.then(fn), Promise.resolve(x))</code> is right.</p>
+    <p><code>fns.reduce(async (p, fn) =&gt; fn(await p), Promise.resolve(x))</code> also works, and
+    <code>fns.reduce((p, fn) =&gt; p.then(fn(x)), ...)</code> does not &mdash; it calls
+    <code>fn</code> immediately and passes its <em>result</em> to <code>then</code>, which is not a
+    function. Pass the function, do not call it.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">the three ways to write the reduce, two of them wrong</span></div>
+<pre><code>const double = (n) =&gt; n * 2;
+const inc = (n) =&gt; n + 1;
+
+// correct: pass the function
+const good = (...fns) =&gt; (x) =&gt;
+  fns.reduce((p, fn) =&gt; p.then(fn), Promise.resolve(x));
+
+// wrong 1: calling fn immediately
+const bad1 = (...fns) =&gt; (x) =&gt;
+  fns.reduce((p, fn) =&gt; p.then(fn(x)), Promise.resolve(x));
+
+// wrong 2: forgetting to return the accumulator
+const bad2 = (...fns) =&gt; (x) =&gt;
+  fns.reduce((p, fn) =&gt; { p.then(fn); }, Promise.resolve(x));
+
+console.log('good :', await good(double, inc)(3));       // 7
+
+console.log('bad1 :', await bad1(double, inc)(3));
+console.log('  -- fn(x) evaluated with the ORIGINAL x every time, and');
+console.log('     then(6) with a non-function argument is ignored, so');
+console.log('     the chain resolves with the untouched input.');
+
+try {
+  console.log('bad2 :', await bad2(double, inc)(3));
+} catch (e) {
+  console.log('bad2 :', e.constructor.name + ':', e.message);
+}
+console.log('  -- the arrow has braces and no return, so the');
+console.log('     accumulator becomes undefined after the first step.');
+
+console.log('');
+console.log('Both bugs are the classic reduce mistakes, not async ones.');
+console.log('If a pipeline "does nothing", check the reduce first.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; watch the chain build, then run</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the pipeline, narrating itself</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const t0 = Date.now();
+const at = () =&gt; String(Date.now() - t0).padStart(4) + ' ms  ';
+
+function pipeLoud(...fns) {
+  return function (input) {
+    console.log(at() + 'building the chain for ' + fns.length + ' steps');
+
+    const result = fns.reduce((promise, fn, i) =&gt; {
+      console.log(at() + '  wiring step ' + (i + 1) + ': ' + fn.name);
+      return promise.then((value) =&gt; {
+        console.log(at() + 'RUN step ' + (i + 1) + ' (' + fn.name +
+                    ') with ' + JSON.stringify(value));
+        return fn(value);
+      });
+    }, Promise.resolve(input));
+
+    console.log(at() + 'chain built. Nothing has run yet.');
+    return result;
+  };
+}
+
+const trim = (s) =&gt; s.trim();
+async function lookup(s) { await sleep(30); return { name: s }; }
+const stamp = (o) =&gt; ({ ...o, at: 'now' });
+
+const run = pipeLoud(trim, lookup, stamp);
+const promise = run('  Ada  ');
+
+console.log(at() + 'the synchronous part is finished');
+console.log(at() + 'awaiting...');
+console.log('');
+console.log('RESULT', JSON.stringify(await promise));
+
+console.log('');
+console.log('Note the ordering: all the "wiring" lines came first, and');
+console.log('every "RUN" line came after "the synchronous part is');
+console.log('finished". reduce builds the chain; the microtask queue');
+console.log('runs it.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; error handling and short-circuiting</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">one catch covers every step</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const pipe = (...fns) =&gt; (x) =&gt; fns.reduce((p, f) =&gt; p.then(f), Promise.resolve(x));
+
+const ran = [];
+const validate = (s) =&gt; { ran.push('validate'); if (!s.trim()) throw new Error('empty input'); return s.trim(); };
+const enrich = async (s) =&gt; { ran.push('enrich'); await sleep(5); return { name: s }; };
+const save = async (o) =&gt; { ran.push('save'); await sleep(5); return { ...o, saved: true }; };
+
+const process = pipe(validate, enrich, save);
+
+ran.length = 0;
+console.log('happy path :', JSON.stringify(await process(' Ada ')));
+console.log('  steps run:', ran.join(' -> '));
+
+ran.length = 0;
+try {
+  await process('   ');
+} catch (e) {
+  console.log('');
+  console.log('failure    :', e.message);
+  console.log('  steps run:', ran.join(' -> '), '-- enrich and save were skipped');
+}
+
+// a throw in the MIDDLE also skips everything after it
+ran.length = 0;
+const failingEnrich = async (s) =&gt; { ran.push('enrich'); throw new Error('lookup failed'); };
+try {
+  await pipe(validate, failingEnrich, save)(' Ada ');
+} catch (e) {
+  console.log('');
+  console.log('mid-pipeline failure:', e.message);
+  console.log('  steps run:', ran.join(' -> '));
+}
+
+console.log('');
+console.log('A rejection propagates down the chain, skipping every');
+console.log('remaining then. One catch at the end is enough -- you do');
+console.log('not need a try around each step.');
+console.log('');
+console.log('The price: the error tells you WHAT failed but not WHERE.');
+console.log('The stack trace is full of anonymous then callbacks.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">labelling the steps, so failures say where</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// wrap each step so a failure reports which one it was
+function pipeNamed(steps) {
+  return async function (input) {
+    let value = input;
+    for (const [name, fn] of steps) {
+      try {
+        value = await fn(value);
+      } catch (cause) {
+        const err = new Error('step "' + name + '" failed: ' + cause.message);
+        err.step = name;
+        err.cause = cause;
+        err.input = value;
+        throw err;
+      }
+    }
+    return value;
+  };
+}
+
+const steps = [
+  ['validate', (s) =&gt; { if (!s.trim()) throw new Error('empty'); return s.trim(); }],
+  ['lookup', async (s) =&gt; { await sleep(5); throw new Error('404 not found'); }],
+  ['save', async (o) =&gt; ({ ...o, saved: true })],
+];
+
+try {
+  await pipeNamed(steps)(' Ada ');
+} catch (e) {
+  console.log('message :', e.message);
+  console.log('step    :', e.step);
+  console.log('cause   :', e.cause.message);
+  console.log('input at the time:', JSON.stringify(e.input));
+}
+
+console.log('');
+console.log('Four lines of wrapping, and now a production failure tells');
+console.log('you which step broke and what it was given. Worth it for');
+console.log('any pipeline that runs unattended.');
+console.log('');
+console.log('`cause` is a standard Error option since ES2022:');
+const wrapped = new Error('outer', { cause: new Error('inner') });
+console.log('  new Error(msg, { cause }) ->', wrapped.cause.message);</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">short-circuiting without throwing</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// Sometimes a step decides the pipeline is DONE -- not failed.
+// A cache hit, an early validation pass, a 304 Not Modified.
+const STOP = Symbol('stop');
+const stop = (value) =&gt; ({ [STOP]: true, value });
+
+async function pipeStoppable(fns, input) {
+  let value = input;
+  for (const fn of fns) {
+    const result = await fn(value);
+    if (result &amp;&amp; result[STOP]) return result.value;    // done, early
+    value = result;
+  }
+  return value;
+}
+
+const ran = [];
+const cache = new Map([['ada', { name: 'ada', cached: true }]]);
+
+const steps = [
+  (s) =&gt; { ran.push('normalise'); return s.trim().toLowerCase(); },
+  (s) =&gt; {
+    ran.push('checkCache');
+    return cache.has(s) ? stop(cache.get(s)) : s;
+  },
+  async (s) =&gt; { ran.push('fetch'); await sleep(20); return { name: s, cached: false }; },
+  async (o) =&gt; { ran.push('store'); cache.set(o.name, o); return o; },
+];
+
+ran.length = 0;
+console.log('cache HIT  :', JSON.stringify(await pipeStoppable(steps, '  ADA  ')));
+console.log('  steps run:', ran.join(' -> '));
+
+ran.length = 0;
+console.log('');
+console.log('cache MISS :', JSON.stringify(await pipeStoppable(steps, '  Grace  ')));
+console.log('  steps run:', ran.join(' -> '));
+
+ran.length = 0;
+console.log('');
+console.log('again      :', JSON.stringify(await pipeStoppable(steps, 'grace')));
+console.log('  steps run:', ran.join(' -> '), '-- now cached');
+
+console.log('');
+console.log('Using a throw for "we are finished successfully" is the');
+console.log('common mistake here: the caller then cannot tell a cache');
+console.log('hit from a real failure. An explicit sentinel keeps the');
+console.log('two apart.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; middleware, which is a different shape</h2>
+
+  <div class="note key">
+    <span class="t">Pipeline versus middleware</span>
+    <p>A <strong>pipeline</strong> is a chain: each step transforms a value and hands it on. Control
+    only moves forward.</p>
+    <p><strong>Middleware</strong> is nested: each layer gets a <code>next</code> function and can run
+    code <em>before and after</em> calling it. Control comes back &mdash; which is what makes timing,
+    logging, error boundaries and transactions possible.</p>
+    <p>Express, Koa, Redux and most HTTP clients use the second shape. It is worth being able to write
+    it.</p>
+  </div>
+
+  <div class="trace">
+<pre>  PIPELINE -- forward only
+
+      f --> g --> h --> result
+
+
+  MIDDLEWARE -- an onion
+
+      +------------ A ------------+
+      |   before                  |
+      |   +-------- B --------+   |
+      |   |   before          |   |
+      |   |   +---- C ----+   |   |
+      |   |   |  handler  |   |   |
+      |   |   +-----------+   |   |
+      |   |   after           |   |
+      |   +-------------------+   |
+      |   after                   |
+      +---------------------------+
+
+      A-before, B-before, C, B-after, A-after
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">middleware in twelve lines</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+function compose(middleware) {
+  return function (context) {
+    let index = -1;
+
+    function dispatch(i) {
+      if (i &lt;= index) return Promise.reject(new Error('next() called twice'));
+      index = i;
+
+      const fn = middleware[i];
+      if (!fn) return Promise.resolve();          // ran off the end
+
+      return Promise.resolve(fn(context, () =&gt; dispatch(i + 1)));
+    }
+
+    return dispatch(0);
+  };
+}
+
+const log = [];
+
+const timing = async (ctx, next) =&gt; {
+  const t = Date.now();
+  log.push('timing: start');
+  await next();                                   // everything inside runs here
+  log.push('timing: took ~' + (Date.now() - t) + ' ms');
+};
+
+const auth = async (ctx, next) =&gt; {
+  log.push('auth: checking');
+  if (!ctx.token) { ctx.status = 401; return; }    // NOT calling next() stops here
+  ctx.user = { name: 'Ada' };
+  await next();
+  log.push('auth: done');
+};
+
+const handler = async (ctx, next) =&gt; {
+  log.push('handler: working');
+  await sleep(20);
+  ctx.body = 'hello ' + ctx.user.name;
+  await next();
+};
+
+const app = compose([timing, auth, handler]);
+
+log.length = 0;
+const ctx1 = { token: 'abc' };
+await app(ctx1);
+console.log('with a token:');
+log.forEach((l) =&gt; console.log('  ' + l));
+console.log('  ctx:', JSON.stringify(ctx1));
+
+log.length = 0;
+const ctx2 = {};
+await app(ctx2);
+console.log('');
+console.log('without a token:');
+log.forEach((l) =&gt; console.log('  ' + l));
+console.log('  ctx:', JSON.stringify(ctx2));
+console.log('  -- auth never called next(), so handler never ran, but');
+console.log('     timing still got its "after" half. That is the whole');
+console.log('     point of the onion.');
+
+// the guard earns its keep
+log.length = 0;
+const buggy = async (ctx, next) =&gt; { await next(); await next(); };
+try {
+  await compose([buggy, handler])({ token: 'x', user: { name: 'x' } });
+} catch (e) {
+  console.log('');
+  console.log('calling next() twice ->', e.message);
+}</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">error handling as middleware</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+function compose(middleware) {
+  return (context) =&gt; {
+    let index = -1;
+    function dispatch(i) {
+      if (i &lt;= index) return Promise.reject(new Error('next() called twice'));
+      index = i;
+      const fn = middleware[i];
+      if (!fn) return Promise.resolve();
+      return Promise.resolve(fn(context, () =&gt; dispatch(i + 1)));
+    }
+    return dispatch(0);
+  };
+}
+
+const log = [];
+
+// The outermost middleware wraps EVERYTHING inside it in one
+// try/catch. This is why the onion shape matters.
+const errorBoundary = async (ctx, next) =&gt; {
+  try {
+    await next();
+  } catch (err) {
+    log.push('boundary caught: ' + err.message);
+    ctx.status = 500;
+    ctx.body = 'something went wrong';
+  }
+};
+
+const addRequestId = async (ctx, next) =&gt; {
+  ctx.id = 'req-1';
+  log.push('id assigned');
+  await next();
+  log.push('id ' + ctx.id + ' finished with status ' + ctx.status);
+};
+
+const failing = async (ctx) =&gt; {
+  log.push('handler running');
+  await sleep(5);
+  throw new Error('database is on fire');
+};
+
+const app = compose([errorBoundary, addRequestId, failing]);
+
+log.length = 0;
+const ctx = {};
+await app(ctx);                 // does NOT reject -- the boundary handled it
+
+log.forEach((l) =&gt; console.log('  ' + l));
+console.log('  final ctx:', JSON.stringify(ctx));
+
+console.log('');
+console.log('Notice: `await app(ctx)` did not throw. The boundary is');
+console.log('inside the composition, so it caught the failure from');
+console.log('three layers down and turned it into a 500.');
+console.log('');
+console.log('A pipeline cannot do this. `pipe(a, b, c)` has no way for');
+console.log('`a` to wrap `b` and `c` -- control never comes back.');
+console.log('');
+console.log('Rule of thumb: if a step needs to do something AFTER the');
+console.log('rest of the work, you need middleware, not a pipeline.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">a transform pipeline over a stream of values</span></div>
+<pre><code>// A pipeline over one value is a reduce. A pipeline over a STREAM
+// of values is a chain of async generators -- each stage pulls from
+// the one before it, so nothing is buffered.
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+async function* source(n) {
+  for (let i = 1; i &lt;= n; i++) {
+    await sleep(2);
+    yield i;
+  }
+}
+
+const mapStage = (fn) =&gt; async function* (input) {
+  for await (const x of input) yield await fn(x);
+};
+
+const filterStage = (fn) =&gt; async function* (input) {
+  for await (const x of input) if (await fn(x)) yield x;
+};
+
+const takeStage = (n) =&gt; async function* (input) {
+  let taken = 0;
+  for await (const x of input) {
+    yield x;
+    if (++taken &gt;= n) return;          // stops the whole upstream
+  }
+};
+
+const pipeStream = (...stages) =&gt; (input) =&gt;
+  stages.reduce((stream, stage) =&gt; stage(stream), input);
+
+let produced = 0;
+async function* countedSource(n) {
+  for (let i = 1; i &lt;= n; i++) { produced++; await sleep(2); yield i; }
+}
+
+const stream = pipeStream(
+  mapStage((x) =&gt; x * x),
+  filterStage((x) =&gt; x % 2 === 1),
+  takeStage(4),
+)(countedSource(1000));
+
+const out = [];
+for await (const value of stream) out.push(value);
+
+console.log('first four odd squares:', JSON.stringify(out));
+console.log('values the source produced:', produced, 'of 1000');
+console.log('');
+console.log('The take(4) stage stopped, which stopped the filter, which');
+console.log('stopped the map, which stopped the source. Back-pressure,');
+console.log('for free, because each stage PULLS.');
+console.log('');
+console.log('Compare an array pipeline: it would have produced all 1000');
+console.log('values, squared all 1000, filtered all 1000, and then');
+console.log('taken 4.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Shape</th><th>Cost for n steps</th><th>Can a step see the result?</th></tr></thead>
+      <tbody>
+        <tr><td>Synchronous <code>pipe</code></td><td class="mono">n calls, 0 microtasks</td><td>no</td></tr>
+        <tr><td>Async <code>pipe</code></td><td class="mono">n calls, n microtasks</td><td>no</td></tr>
+        <tr><td>Middleware</td><td class="mono">n calls, n microtasks, n stack frames</td><td><strong>yes</strong></td></tr>
+        <tr><td>Generator stages</td><td class="mono">n microtasks per VALUE</td><td>pull-based</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>None of it is algorithmically interesting; the cost is one microtask hop per step, which is
+  negligible unless the pipeline is inside a hot loop &mdash; and Step 3 shows what that looks like at
+  a million steps a second.</p>
+
+  <p>The row that matters is the last column. A pipeline is cheaper and simpler; middleware costs a
+  live stack frame per layer for the whole request, in exchange for letting a layer act after the ones
+  inside it. Choose on that, not on performance.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;<code>pipe</code> is a reduce whose accumulator is a promise: start from
+    <code>Promise.resolve(input)</code> and <code>.then</code> each function onto it. Because
+    <code>then</code> promotes a plain return value, synchronous and async steps mix freely, and one
+    <code>catch</code> at the end covers every step because a rejection skips the rest of the chain.
+    <code>compose</code> is the same thing with <code>reduceRight</code>. If a step needs to run code
+    <em>after</em> the remaining steps &mdash; timing, an error boundary, a transaction &mdash; a
+    pipeline cannot express that and you want the middleware shape instead: each layer receives a
+    <code>next</code> function and awaits it.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Calling the function instead of passing it</h3>
+
+  <p>Step 4's <code>bad1</code>. It fails silently &mdash; the chain resolves with the untouched input
+  and nobody throws.</p>
+
+  <h3>2. Forgetting to return from the reducer</h3>
+
+  <p>Step 4's <code>bad2</code>. An arrow with braces and no <code>return</code>, which is the most
+  common reduce bug in any context.</p>
+
+  <h3>3. Using <code>reduce</code> when the steps do not depend on each other</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct, and needlessly sequential</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+const fetchProfile = async (id) =&gt; { await sleep(30); return { profile: id }; };
+const fetchSettings = async (id) =&gt; { await sleep(30); return { settings: id }; };
+const fetchFriends = async (id) =&gt; { await sleep(30); return { friends: id }; };
+
+// a pipeline where each step MERGES into an accumulator -- looks
+// like composition, but the three fetches are independent
+const pipe = (...fns) =&gt; (x) =&gt; fns.reduce((p, f) =&gt; p.then(f), Promise.resolve(x));
+
+let t = Date.now();
+const sequential = await pipe(
+  async (acc) =&gt; ({ ...acc, ...await fetchProfile(acc.id) }),
+  async (acc) =&gt; ({ ...acc, ...await fetchSettings(acc.id) }),
+  async (acc) =&gt; ({ ...acc, ...await fetchFriends(acc.id) }),
+)({ id: 7 });
+console.log('pipeline    : ~' + (Date.now() - t) + ' ms', JSON.stringify(sequential));
+
+// they only need `id`, which was available at the start
+t = Date.now();
+const [a, b, c] = await Promise.all([
+  fetchProfile(7), fetchSettings(7), fetchFriends(7),
+]);
+const parallel = { id: 7, ...a, ...b, ...c };
+console.log('Promise.all : ~' + (Date.now() - t) + ' ms', JSON.stringify(parallel));
+
+console.log('');
+console.log('same result:', JSON.stringify(sequential) === JSON.stringify(parallel));
+console.log('');
+console.log('A pipeline SERIALISES by construction -- that is what it');
+console.log('is for. Reaching for it when the steps are independent');
+console.log('buys you nothing and costs you the concurrency.');
+console.log('');
+console.log('Ask the same question as on the previous page: does step');
+console.log('n+1 actually need step n? Here it needed only `id`.');</code></pre>
+  </div>
+
+  <h3>4. Losing the stack trace, and not compensating</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; an error with no location</span></div>
+<pre><code>const pipe = (...fns) =&gt; (x) =&gt; fns.reduce((p, f) =&gt; p.then(f), Promise.resolve(x));
+
+const stepA = (n) =&gt; n + 1;
+const stepB = (n) =&gt; { throw new Error('something is wrong with ' + n); };
+const stepC = (n) =&gt; n * 2;
+
+try {
+  await pipe(stepA, stepB, stepC)(1);
+} catch (e) {
+  console.log('message:', e.message);
+  const frames = (e.stack || '').split('\n').slice(1, 5)
+    .map((l) =&gt; l.trim());
+  console.log('top frames:');
+  frames.forEach((f) =&gt; console.log('  ' + f));
+  console.log('');
+  console.log('The name "stepB" may or may not appear, depending on the');
+  console.log('engine and on whether the step was inlined. What is');
+  console.log('certainly missing is WHICH POSITION in the pipeline it');
+  console.log('was, and what the value was at that point.');
+}
+
+// wrap the steps so the pipeline reports position and input
+const pipeTraced = (...fns) =&gt; async (x) =&gt; {
+  let value = x;
+  for (let i = 0; i &lt; fns.length; i++) {
+    try {
+      value = await fns[i](value);
+    } catch (cause) {
+      throw Object.assign(
+        new Error('pipeline step ' + (i + 1) + '/' + fns.length +
+                  ' (' + (fns[i].name || 'anonymous') + ') failed: ' + cause.message),
+        { step: i + 1, stepName: fns[i].name, input: value, cause }
+      );
+    }
+  }
+  return value;
+};
+
+console.log('');
+try {
+  await pipeTraced(stepA, stepB, stepC)(1);
+} catch (e) {
+  console.log('traced :', e.message);
+  console.log('  step :', e.step, 'of 3 -', e.stepName);
+  console.log('  input:', JSON.stringify(e.input));
+}
+
+console.log('');
+console.log('Named function declarations rather than anonymous arrows');
+console.log('are worth it here for exactly this reason -- fn.name is');
+console.log('the only handle the wrapper has.');</code></pre>
+  </div>
+
+  <h3>5. Building the pipeline inside the request handler</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct, and re-wired on every call</span></div>
+<pre><code>const pipe = (...fns) =&gt; (x) =&gt; fns.reduce((p, f) =&gt; p.then(f), Promise.resolve(x));
+
+let composeCalls = 0;
+function makePipeline() {
+  composeCalls++;
+  return pipe((n) =&gt; n + 1, (n) =&gt; n * 2, (n) =&gt; n - 3);
+}
+
+// built per call
+composeCalls = 0;
+let t = performance.now();
+for (let i = 0; i &lt; 200000; i++) await makePipeline()(i);
+const perCallMs = performance.now() - t;
+console.log('built inside the loop : ' + perCallMs.toFixed(0) + ' ms, ' +
+            composeCalls.toLocaleString('en-US') + ' compositions');
+
+// built once
+composeCalls = 0;
+const once = makePipeline();
+t = performance.now();
+for (let i = 0; i &lt; 200000; i++) await once(i);
+const onceMs = performance.now() - t;
+console.log('built once            : ' + onceMs.toFixed(0) + ' ms, ' +
+            composeCalls + ' composition');
+
+console.log('');
+console.log('The difference is modest -- composition is cheap. The');
+console.log('reason to hoist it is not speed:');
+console.log('  a pipeline built once is a VALUE you can test, log and');
+console.log('    reason about;');
+console.log('  a pipeline built per request can silently differ');
+console.log('    between requests;');
+console.log('  and if any step holds state -- a cache, a counter, a');
+console.log('    limiter -- rebuilding it throws that state away every');
+console.log('    time.');
+
+// the state case, which is the real bug
+const makeCounting = () =&gt; {
+  let seen = 0;
+  return pipe((n) =&gt; { seen++; return n; }, (n) =&gt; ({ n, seen }));
+};
+
+console.log('');
+console.log('rebuilt each time :',
+            JSON.stringify(await makeCounting()(1)),
+            JSON.stringify(await makeCounting()(2)));
+const shared = makeCounting();
+console.log('built once        :',
+            JSON.stringify(await shared(1)),
+            JSON.stringify(await shared(2)));
+console.log('  -- the second one actually counts.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write <code>pipeAsync</code> from memory</strong> &mdash; one line &mdash; then write
+    <code>composeAsync</code> and say which is which.</li>
+    <li><strong>Write the loop version</strong> and say when you would prefer it (readability, per-step
+    error labelling, short-circuiting).</li>
+    <li><strong>Write the middleware <code>compose</code>.</strong> Step 7. Then explain what it can do
+    that a pipeline cannot.</li>
+    <li><strong>Add per-step error labelling.</strong> Step 6 &mdash; and note that it needs
+    <code>fn.name</code>, so name your steps.</li>
+    <li><strong>Write the generator-stage version.</strong> Step 7's last block. Understanding why
+    <code>take(4)</code> stops the source is the best available intuition for back-pressure.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>A pipeline is a reduce whose accumulator is a promise.</strong> Once you see that, the
+    whole family follows: <code>compose</code> is <code>reduceRight</code>, middleware is the same idea
+    turned inside out so control returns, and a stream pipeline is the same idea one value at a time.
+    And before reaching for any of them, check whether the steps are actually dependent &mdash; a
+    pipeline serialises by construction.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="03-sequential-vs-parallel.html">&larr; Sequential vs Parallel</a>
+  <a href="05-race-timeout.html">Next: Race With Timeout &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

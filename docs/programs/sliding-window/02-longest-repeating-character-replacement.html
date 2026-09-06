@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Longest Repeating Character Replacement</title>
+<meta name="description" content="Window length minus the most frequent character is how many replacements you need — and that one formula is the whole problem.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Sliding window &middot; Problem 02</p>
+  <h1>Longest Repeating Character Replacement</h1>
+  <p class="standfirst">You may change up to <code>k</code> characters. How long can you make a run
+  of identical letters? The entire problem collapses into one formula:
+  <strong>replacements needed = window length &minus; count of the most frequent character</strong>.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Given a string of uppercase letters and a number <code>k</code>, you may replace at most
+  <code>k</code> characters with any letters you like. Return the length of the longest run of the
+  same letter you can produce.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th class="mono">s</th><th class="mono">k</th><th>Answer</th><th>How</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">"ABAB"</td><td class="mono">2</td><td class="mono">4</td><td>change both B&rsquo;s to A</td></tr>
+        <tr><td class="mono">"AABABBA"</td><td class="mono">1</td><td class="mono">4</td><td>"AABA" &rarr; change the B</td></tr>
+        <tr><td class="mono">"AAAA"</td><td class="mono">0</td><td class="mono">4</td><td>nothing to change</td></tr>
+        <tr><td class="mono">"ABCDE"</td><td class="mono">1</td><td class="mono">2</td><td>any two adjacent</td></tr>
+        <tr><td class="mono">"AAAB"</td><td class="mono">0</td><td class="mono">3</td><td>the run of A&rsquo;s</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">The reframe that makes it tractable</span>
+    <p>Do not think about <em>which</em> characters to replace. Think about a window and ask:
+    <strong>could this window be made uniform with at most k changes?</strong></p>
+    <p>The cheapest way to make any window uniform is to keep the character that already appears most
+    often and change everything else. So the cost is:</p>
+    <p><code>windowLength &minus; countOfMostFrequentCharacter</code></p>
+    <p>If that is at most <code>k</code>, the window is achievable. The answer is the longest
+    achievable window.</p>
+  </div>
+
+  <div class="trace">
+<pre>  window "AABABB"    length 6
+  counts:  A x3   B x3
+  most frequent: 3
+
+  replacements needed = 6 - 3 = 3
+
+  so this window works if k >= 3
+</pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; test every window</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; brute force</span></div>
+<pre><code>function costToMakeUniform(s, start, end) {
+  const counts = new Map();
+  let most = 0;
+
+  for (let i = start; i &lt;= end; i++) {
+    const n = (counts.get(s[i]) || 0) + 1;
+    counts.set(s[i], n);
+    if (n &gt; most) most = n;
+  }
+
+  const length = end - start + 1;
+  return length - most;
+}
+
+function longestBrute(s, k) {
+  let best = 0;
+
+  for (let start = 0; start &lt; s.length; start++) {
+    for (let end = start; end &lt; s.length; end++) {
+      if (costToMakeUniform(s, start, end) &lt;= k) {
+        best = Math.max(best, end - start + 1);
+      }
+    }
+  }
+
+  return best;
+}
+
+console.log(longestBrute('ABAB', 2));      // 4
+console.log(longestBrute('AABABBA', 1));   // 4
+console.log(longestBrute('AAAA', 0));      // 4
+console.log(longestBrute('ABCDE', 1));     // 2
+console.log(longestBrute('AAAB', 0));      // 3
+console.log(longestBrute('', 2));          // 0</code></pre>
+  </div>
+
+  <p>Every substring, and counting the characters of each one from scratch: <strong>O(n&sup3;)</strong>
+  in the worst case. Correct, and a fine starting point to say out loud.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 700;
+let s = '';
+for (let i = 0; i &lt; N; i++) s += 'AB'[i % 2];
+const k = 3;
+
+function cost(str, a, b) {
+  const c = new Map();
+  let most = 0;
+  for (let i = a; i &lt;= b; i++) {
+    const n = (c.get(str[i]) || 0) + 1;
+    c.set(str[i], n);
+    if (n &gt; most) most = n;
+  }
+  return (b - a + 1) - most;
+}
+
+function brute(str, k) {
+  let best = 0;
+  for (let a = 0; a &lt; str.length; a++)
+    for (let b = a; b &lt; str.length; b++)
+      if (cost(str, a, b) &lt;= k) best = Math.max(best, b - a + 1);
+  return best;
+}
+
+function windowed(str, k) {
+  const counts = new Array(26).fill(0);
+  let left = 0, most = 0, best = 0;
+  for (let right = 0; right &lt; str.length; right++) {
+    const idx = str.charCodeAt(right) - 65;
+    counts[idx]++;
+    most = Math.max(most, counts[idx]);
+
+    while ((right - left + 1) - most &gt; k) {
+      counts[str.charCodeAt(left) - 65]--;
+      left++;
+    }
+
+    best = Math.max(best, right - left + 1);
+  }
+  return best;
+}
+
+let t = performance.now();
+const p = brute(s, k);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const q = windowed(s, k);
+const winMs = performance.now() - t;
+
+console.log('every substring :', p, 'in', bruteMs.toFixed(1) + ' ms');
+console.log('sliding window  :', q, 'in', winMs.toFixed(2) + ' ms');
+console.log('same answer:', p === q);
+console.log('speed-up:', Math.round(bruteMs / Math.max(winMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; grow, shrink while invalid</h2>
+
+  <p>This is the <strong>longest</strong> shape of sliding window, the same as Longest Substring
+  Without Repeating Characters: grow on the right, shrink from the left while the window is invalid,
+  record the length afterwards.</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>A window is valid when <code>(right - left + 1) - mostFrequentCount &lt;= k</code>.</p>
+    <p>Extend right by one, updating the character counts. While the window is invalid, drop
+    characters from the left. Then record the length &mdash; it is now valid.</p>
+  </div>
+
+  <h3>The part that looks like a bug and is not</h3>
+
+  <p>Here is the detail that makes this problem famous. Most solutions track <code>most</code> as a
+  running maximum and <strong>never decrease it</strong>, even when characters leave the window on the
+  left. That means <code>most</code> can be <em>stale</em> &mdash; larger than any character&rsquo;s
+  actual count in the current window.</p>
+
+  <p>It still gives the right answer, and the reason is worth understanding:</p>
+
+  <div class="note">
+    <span class="t">Why a stale maximum is harmless</span>
+    <p>We only care about the <strong>longest</strong> window ever seen. The window only grows when a
+    genuinely better <code>most</code> is found; a stale <code>most</code> makes the validity test too
+    <em>permissive</em>, so the window never shrinks below the best length already achieved &mdash;
+    it just slides along at that width. Since a too-small window can never become the answer, and the
+    width only increases when a real improvement happens, the maximum recorded length is correct.</p>
+    <p>Put differently: the window size becomes a <em>high-water mark</em>. It never shrinks, and it
+    only grows when justified.</p>
+  </div>
+
+  <p>You can also recompute the true maximum each time. It is O(26) per step &mdash; still linear
+  overall &mdash; and it is much easier to defend. Both are below; write whichever you can explain.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>s = "AABABBA"</code>, <code>k = 1</code>. The answer is 4.</p>
+
+  <div class="trace">
+<pre>left=0  most=0  best=0
+
+right=0 'A'  counts{A:1}  most=1
+        window "A" length 1,  cost 1-1 = 0 &lt;= 1   valid   best=1
+
+right=1 'A'  counts{A:2}  most=2
+        window "AA" length 2, cost 2-2 = 0 &lt;= 1   valid   best=2
+
+right=2 'B'  counts{A:2,B:1}  most=2
+        window "AAB" length 3, cost 3-2 = 1 &lt;= 1  valid   best=3
+
+right=3 'A'  counts{A:3,B:1}  most=3
+        window "AABA" length 4, cost 4-3 = 1 &lt;= 1 valid   best=4
+
+right=4 'B'  counts{A:3,B:2}  most=3
+        window "AABAB" length 5, cost 5-3 = 2 > 1  INVALID
+          drop s[0]='A'  counts{A:2,B:2}  left=1
+          window "ABAB" length 4, cost 4-3 = 1 &lt;= 1   valid
+          (note: most is still 3, though no character has 3 now --
+           this is the stale maximum, and it is safe)
+        best stays 4
+
+right=5 'B'  counts{A:2,B:3}  most=3
+        window "ABABB" length 5, cost 5-3 = 2 > 1  INVALID
+          drop s[1]='A'  counts{A:1,B:3}  left=2
+          window "BABB" length 4, cost 4-3 = 1 &lt;= 1  valid
+        best stays 4
+
+right=6 'A'  counts{A:2,B:3}  most=3
+        window "BABBA" length 5, cost 5-3 = 2 > 1  INVALID
+          drop s[2]='B'  counts{A:2,B:2}  left=3
+          window "ABBA" length 4, cost 4-3 = 1 &lt;= 1  valid
+        best stays 4
+
+answer: 4
+</pre>
+  </div>
+
+  <p>Watch the window width across those steps: 1, 2, 3, 4, 4, 4, 4. It grows while it can and then
+  slides at its best width &mdash; never shrinking below 4. That is the high-water-mark behaviour the
+  stale maximum produces, and it is exactly why the answer stays correct.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function longestExplained(s, k) {
+  const counts = new Map();
+  let left = 0, most = 0, best = 0;
+
+  console.log('s = "' + s + '"   k = ' + k);
+  console.log('');
+
+  for (let right = 0; right &lt; s.length; right++) {
+    const c = s[right];
+    const n = (counts.get(c) || 0) + 1;
+    counts.set(c, n);
+    most = Math.max(most, n);
+
+    console.log("right=" + right + " '" + c + "'   counts " +
+                JSON.stringify([...counts]) + "   most=" + most);
+
+    while ((right - left + 1) - most &gt; k) {
+      const gone = s[left];
+      counts.set(gone, counts.get(gone) - 1);
+      console.log("        window \"" + s.slice(left, right + 1) + "\" needs " +
+                  ((right - left + 1) - most) + " changes > " + k +
+                  "  -> drop '" + gone + "'");
+      left++;
+    }
+
+    const len = right - left + 1;
+    const improved = len &gt; best;
+    if (improved) best = len;
+
+    console.log('        window "' + s.slice(left, right + 1) + '" length ' + len +
+                '   cost ' + (len - most) + '   best=' + best +
+                (improved ? '   *new best*' : ''));
+  }
+
+  console.log('');
+  return best;
+}
+
+console.log('ANSWER:', longestExplained('AABABBA', 1));
+console.log('==========================================');
+console.log('ANSWER:', longestExplained('ABAB', 2));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; recompute the true maximum</span></div>
+<pre><code>function longestManual(s, k) {
+  const counts = [];
+  for (let i = 0; i &lt; 26; i++) counts[i] = 0;
+
+  let left = 0;
+  let best = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    counts[s.charCodeAt(right) - 65] = counts[s.charCodeAt(right) - 65] + 1;
+
+    // the TRUE most frequent count in the current window
+    let most = 0;
+    for (let i = 0; i &lt; 26; i++) {
+      if (counts[i] &gt; most) most = counts[i];
+    }
+
+    // shrink while the window would need more than k replacements
+    while ((right - left + 1) - most &gt; k) {
+      counts[s.charCodeAt(left) - 65] = counts[s.charCodeAt(left) - 65] - 1;
+      left = left + 1;
+
+      // recompute, because a character just left
+      most = 0;
+      for (let i = 0; i &lt; 26; i++) {
+        if (counts[i] &gt; most) most = counts[i];
+      }
+    }
+
+    const length = right - left + 1;
+    if (length &gt; best) best = length;
+  }
+
+  return best;
+}
+
+console.log(longestManual('ABAB', 2));       // 4
+console.log(longestManual('AABABBA', 1));    // 4
+console.log(longestManual('AAAA', 0));       // 4
+console.log(longestManual('ABCDE', 1));      // 2
+console.log(longestManual('AAAB', 0));       // 3
+console.log(longestManual('', 2));           // 0
+console.log(longestManual('ABBB', 2));       // 4
+console.log(longestManual('ABAA', 0));       // 2</code></pre>
+  </div>
+
+  <p>This version is <strong>obviously correct</strong>: the validity test always uses the real
+  maximum. Recomputing over 26 slots is a constant, so it is still O(26n) = O(n). Unless the
+  interviewer specifically asks you to avoid the inner scan, this is the version to write.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; the stale maximum</span></div>
+<pre><code>function longestStaleMax(s, k) {
+  const counts = [];
+  for (let i = 0; i &lt; 26; i++) counts[i] = 0;
+
+  let left = 0;
+  let most = 0;      // a HIGH-WATER MARK, never decreased
+  let best = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    const idx = s.charCodeAt(right) - 65;
+    counts[idx] = counts[idx] + 1;
+    if (counts[idx] &gt; most) most = counts[idx];
+
+    // note: `most` may be larger than any count in the CURRENT window
+    if ((right - left + 1) - most &gt; k) {
+      counts[s.charCodeAt(left) - 65] = counts[s.charCodeAt(left) - 65] - 1;
+      left = left + 1;
+      // the window slides by exactly one; it never gets smaller
+    }
+
+    const length = right - left + 1;
+    if (length &gt; best) best = length;
+  }
+
+  return best;
+}
+
+console.log(longestStaleMax('ABAB', 2));       // 4
+console.log(longestStaleMax('AABABBA', 1));    // 4
+console.log(longestStaleMax('AAAA', 0));       // 4
+console.log(longestStaleMax('ABCDE', 1));      // 2
+console.log(longestStaleMax('AAAB', 0));       // 3
+console.log(longestStaleMax('ABBB', 2));       // 4
+console.log(longestStaleMax('ABAA', 0));       // 2
+
+// Note the `if` instead of a `while` -- with a never-shrinking
+// window, at most one character ever needs to leave per step.
+// Fewer operations, and much harder to justify. Know both.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">proving they agree, on many inputs</span></div>
+<pre><code>function reference(s, k) {          // the obviously-correct brute force
+  const cost = (a, b) =&gt; {
+    const c = new Map();
+    let m = 0;
+    for (let i = a; i &lt;= b; i++) {
+      const n = (c.get(s[i]) || 0) + 1;
+      c.set(s[i], n);
+      if (n &gt; m) m = n;
+    }
+    return (b - a + 1) - m;
+  };
+  let best = 0;
+  for (let a = 0; a &lt; s.length; a++)
+    for (let b = a; b &lt; s.length; b++)
+      if (cost(a, b) &lt;= k) best = Math.max(best, b - a + 1);
+  return best;
+}
+
+function trueMax(s, k) {
+  const counts = new Array(26).fill(0);
+  let left = 0, best = 0;
+  for (let right = 0; right &lt; s.length; right++) {
+    counts[s.charCodeAt(right) - 65]++;
+    let most = Math.max(...counts);
+    while ((right - left + 1) - most &gt; k) {
+      counts[s.charCodeAt(left) - 65]--;
+      left++;
+      most = Math.max(...counts);
+    }
+    best = Math.max(best, right - left + 1);
+  }
+  return best;
+}
+
+function staleMax(s, k) {
+  const counts = new Array(26).fill(0);
+  let left = 0, most = 0, best = 0;
+  for (let right = 0; right &lt; s.length; right++) {
+    const i = s.charCodeAt(right) - 65;
+    most = Math.max(most, ++counts[i]);
+    if ((right - left + 1) - most &gt; k) counts[s.charCodeAt(left++) - 65]--;
+    best = Math.max(best, right - left + 1);
+  }
+  return best;
+}
+
+const letters = 'ABC';
+let agree = 0;
+for (let trial = 0; trial &lt; 400; trial++) {
+  const len = Math.floor(Math.random() * 10);
+  let s = '';
+  for (let i = 0; i &lt; len; i++) s += letters[Math.floor(Math.random() * 3)];
+  const k = Math.floor(Math.random() * 3);
+
+  const r = reference(s, k);
+  if (trueMax(s, k) === r &amp;&amp; staleMax(s, k) === r) agree++;
+  else console.log('DISAGREE', JSON.stringify(s), k, r, trueMax(s, k), staleMax(s, k));
+}
+console.log('400 random cases, all three methods agree:', agree + '/400');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function characterReplacement(s, k) {
+  const counts = new Map();
+  let left = 0;
+  let most = 0;
+  let best = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    const c = s[right];
+    counts.set(c, (counts.get(c) || 0) + 1);
+    most = Math.max(most, counts.get(c));
+
+    // shrink while more than k replacements would be needed
+    while ((right - left + 1) - most &gt; k) {
+      const gone = s[left];
+      counts.set(gone, counts.get(gone) - 1);
+      left++;
+    }
+
+    best = Math.max(best, right - left + 1);
+  }
+
+  return best;
+}
+
+console.log(characterReplacement('ABAB', 2));      // 4
+console.log(characterReplacement('AABABBA', 1));   // 4
+console.log(characterReplacement('AAAA', 0));      // 4
+console.log(characterReplacement('ABCDE', 1));     // 2
+console.log(characterReplacement('AAAB', 0));      // 3
+console.log(characterReplacement('', 2));          // 0
+console.log(characterReplacement('ABBB', 2));      // 4</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Why a <code>while</code> is safe here even with the stale maximum</span>
+    <p>With <code>most</code> stale, the condition can only be true at most once per step &mdash; the
+    window grew by one, so at most one character needs to leave. So the <code>while</code> behaves
+    like an <code>if</code>. Using <code>while</code> costs nothing and keeps the code readable as a
+    standard sliding window. If you also recompute <code>most</code> after each removal, the
+    <code>while</code> becomes genuinely necessary.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">returning the window, and the letter to keep</span></div>
+<pre><code>function bestReplacement(s, k) {
+  const counts = new Map();
+  let left = 0, most = 0, best = 0, bestStart = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    counts.set(s[right], (counts.get(s[right]) || 0) + 1);
+    most = Math.max(most, counts.get(s[right]));
+
+    while ((right - left + 1) - most &gt; k) {
+      counts.set(s[left], counts.get(s[left]) - 1);
+      left++;
+    }
+
+    if (right - left + 1 &gt; best) {
+      best = right - left + 1;
+      bestStart = left;
+    }
+  }
+
+  if (best === 0) return { length: 0, window: '', keep: null, changes: 0 };
+
+  // which letter should we keep in the winning window?
+  const win = s.slice(bestStart, bestStart + best);
+  const winCounts = new Map();
+  for (const c of win) winCounts.set(c, (winCounts.get(c) || 0) + 1);
+
+  let keep = null, keepCount = 0;
+  for (const [c, n] of winCounts) if (n &gt; keepCount) { keep = c; keepCount = n; }
+
+  return { length: best, window: win, keep, changes: best - keepCount };
+}
+
+console.log(bestReplacement('AABABBA', 1));
+// { length: 4, window: 'AABA', keep: 'A', changes: 1 }
+
+console.log(bestReplacement('ABAB', 2));
+console.log(bestReplacement('ABCDE', 1));
+console.log(bestReplacement('AAAB', 0));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Every substring, counted fresh</td><td class="mono">O(n&sup3;)</td><td class="mono">O(1)</td></tr>
+        <tr><td>Window, true max recomputed</td><td class="mono">O(26n) = O(n)</td><td class="mono">O(1)</td></tr>
+        <tr><td><strong>Window, stale max</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Both window versions are linear. Recomputing the maximum scans 26 counters per step, which is a
+  constant factor, not a complexity change &mdash; say &ldquo;O(26n), which is O(n)&rdquo; rather than
+  pretending the scan is free.</p>
+
+  <p>Space is O(26) &mdash; one counter per uppercase letter &mdash; which is O(1) for a fixed
+  alphabet. If the input could be any Unicode character, it becomes O(k) for the distinct characters
+  in the window.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;For any window, the cheapest way to make it uniform is to keep the most frequent
+    character and replace the rest, so the cost is <code>length - maxCount</code>. I slide a window,
+    extending right and shrinking left while that cost exceeds <code>k</code>, recording the longest
+    valid window. Recomputing the max over the 26 counters keeps it O(26n) = O(n) and is easy to
+    justify. There is a variant that never decreases the max, which is also correct because the
+    window then acts as a high-water mark &mdash; it only grows when a genuinely better count appears
+    &mdash; but I would only use it if asked.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Counting the wrong thing as the cost</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; counts distinct characters instead</span></div>
+<pre><code>function broken(s, k) {
+  const counts = new Map();
+  let left = 0, best = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    counts.set(s[right], (counts.get(s[right]) || 0) + 1);
+
+    // "at most k+1 distinct characters" -- wrong measure
+    while (counts.size &gt; k + 1) {
+      const gone = s[left];
+      const n = counts.get(gone) - 1;
+      if (n === 0) counts.delete(gone); else counts.set(gone, n);
+      left++;
+    }
+
+    best = Math.max(best, right - left + 1);
+  }
+  return best;
+}
+
+console.log(broken('ABAB', 2));      // 4   right, by luck
+console.log(broken('AABABBA', 1));   // 7   WRONG, should be 4
+
+// "AABABBA" has only two distinct characters, so this never shrinks
+// and reports the whole string. But making it uniform needs three
+// replacements, not one. The cost is about COUNTS, not about how
+// many distinct characters are present.</code></pre>
+  </div>
+
+  <h3>2. Forgetting to decrement when a character leaves</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; counts never come back down</span></div>
+<pre><code>function broken(s, k) {
+  const counts = new Map();
+  let left = 0, most = 0, best = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    counts.set(s[right], (counts.get(s[right]) || 0) + 1);
+    most = Math.max(most, counts.get(s[right]));
+
+    while ((right - left + 1) - most &gt; k) {
+      left++;                       // moved, but the count was not decremented
+    }
+
+    best = Math.max(best, right - left + 1);
+  }
+  return best;
+}
+
+console.log(broken('ABAB', 2));       // 4   right
+console.log(broken('AABABBA', 1));    // 5   WRONG, should be 4
+console.log(broken('CABCBCC', 0));    // 4   WRONG, should be 2
+console.log(broken('CBCACA', 1));     // 4   WRONG, should be 3
+console.log(broken('BBAACBABC', 1));  // 5   WRONG, should be 3
+
+// The counts drift out of step with the window: a character that
+// left is still counted, so `most` stays inflated and the validity
+// test passes windows that are not actually achievable.
+// It survives many inputs, which is exactly what makes it dangerous.
+// Every character that leaves the window must be decremented.</code></pre>
+  </div>
+
+  <h3>3. Using <code>counts.size</code> or the maximum over the whole string</h3>
+
+  <p>The maximum must be over the <strong>current window</strong>. Computing it once over the whole
+  string, or using the size of the map (the number of distinct characters), both answer different
+  questions. The formula needs the largest <em>count</em> inside the window.</p>
+
+  <h3>4. Recording the length before shrinking</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; measures an invalid window</span></div>
+<pre><code>function broken(s, k) {
+  const counts = new Map();
+  let left = 0, most = 0, best = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    counts.set(s[right], (counts.get(s[right]) || 0) + 1);
+    most = Math.max(most, counts.get(s[right]));
+
+    best = Math.max(best, right - left + 1);    // recorded BEFORE shrinking
+
+    while ((right - left + 1) - most &gt; k) {
+      counts.set(s[left], counts.get(s[left]) - 1);
+      left++;
+    }
+  }
+  return best;
+}
+
+console.log(broken('ABAB', 2));      // 4   right
+console.log(broken('ABCDE', 1));     // 3   WRONG, should be 2
+console.log(broken('AAAB', 0));      // 4   WRONG, should be 3
+
+// In the LONGEST shape, shrink FIRST so the window is valid, THEN
+// record. (In the SHORTEST shape -- Minimum Window Substring -- you
+// record first and then shrink. Know which shape you are in.)</code></pre>
+  </div>
+
+  <h3>5. Assuming uppercase A&ndash;Z</h3>
+
+  <p><code>charCodeAt(i) - 65</code> maps <code>'A'</code> to 0. On lowercase input every index is
+  negative and the 26-slot array silently breaks. If the alphabet is not guaranteed, use a
+  <code>Map</code> &mdash; and then &ldquo;recompute the max&rdquo; means iterating the map&rsquo;s
+  values, which is O(distinct) rather than O(26).</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Say the cost formula out loud</strong> &mdash; window length minus the most frequent
+    count &mdash; and why it is the cheapest way to make a window uniform. Everything else follows.</li>
+    <li><strong>Write the recompute-the-max version from memory.</strong> It is the one you can
+    defend, and O(26n) is still linear.</li>
+    <li><strong>Max Consecutive Ones III.</strong> A binary array where you may flip up to
+    <code>k</code> zeros. It is the same window, with the cost being simply the number of zeros
+    inside &mdash; and it is the next page here.</li>
+    <li><strong>Return the actual modified string</strong>, not just the length. You have the window
+    and the letter to keep; the rest is a replace.</li>
+    <li><strong>Explain the stale-maximum argument</strong> to someone else. If you can convince them,
+    you understand it. If you cannot, write the recompute version and say why.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Turn &ldquo;what should I change?&rdquo; into &ldquo;what would this cost?&rdquo;</strong>
+    Searching over which characters to replace is hopeless; computing the cost of a candidate window
+    is one subtraction. That reframe &mdash; from choosing actions to evaluating candidates &mdash; is
+    what makes a sliding window possible here, and it is the same move that turned Trapping Rain Water
+    from &ldquo;find the pools&rdquo; into &ldquo;how deep above this bar?&rdquo;.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="01-max-sum-subarray-size-k.html">&larr; Maximum Sum Subarray of Size K</a>
+  <a href="03-permutation-in-string.html">Next: Permutation in String &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

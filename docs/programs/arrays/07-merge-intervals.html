@@ -133,11 +133,21 @@ console.log(mergeBrute([[1,4],[2,3]]));                  // [[1,4]]</code></pre>
 
   <div class="codeblock" data-run>
     <div class="codehead"><span class="tag">Timing demo</span></div>
-<pre><code>// A long chain: each interval touches the next, so the brute force
-// merges one pair, restarts, merges one pair, restarts...
-const N = 900;
+<pre><code>// 6,000 mostly-disjoint intervals with a handful of overlaps hidden
+// in them, then shuffled. The brute force has to compare every pair
+// to discover the overlaps -- and start the whole scan again after
+// each merge it finds.
+const N = 6000;
 const chain = [];
-for (let i = 0; i &lt; N; i++) chain.push([i, i + 1]);
+for (let i = 0; i &lt; N; i++) chain.push([i * 10, i * 10 + 5]);
+for (let k = 0; k &lt; 5; k++) {                          // plant 5 overlaps
+  const at = Math.floor(Math.random() * (N - 1));
+  chain[at] = [chain[at][0], chain[at + 1][0] + 1];
+}
+for (let i = chain.length - 1; i &gt; 0; i--) {           // shuffle
+  const j = Math.floor(Math.random() * (i + 1));
+  const t2 = chain[i]; chain[i] = chain[j]; chain[j] = t2;
+}
 
 function brute(intervals) {
   const list = intervals.map(iv =&gt; [iv[0], iv[1]]);
@@ -176,8 +186,9 @@ t = performance.now();
 const b = sweep(chain);
 const fastMs = performance.now() - t;
 
-console.log('brute  :', JSON.stringify(a), 'in', bruteMs.toFixed(1) + ' ms');
-console.log('sweep  :', JSON.stringify(b), 'in', fastMs.toFixed(2) + ' ms');
+console.log('brute  :', a.length, 'intervals in', bruteMs.toFixed(1) + ' ms');
+console.log('sweep  :', b.length, 'intervals in', fastMs.toFixed(2) + ' ms');
+console.log('same count:', a.length === b.length);
 console.log('speed-up:', Math.round(bruteMs / Math.max(fastMs, 0.01)) + 'x');</code></pre>
   </div>
 </section>
@@ -235,13 +246,13 @@ console.log('speed-up:', Math.round(bruteMs / Math.max(fastMs, 0.01)) + 'x');</c
 
 [1,3]   out is empty  ->  push          out = [[1,3]]
 
-[2,6]   last is [1,3].  Does 2 <= 3?  YES  ->  extend
+[2,6]   last is [1,3].  Does 2 &lt;= 3?  YES  ->  extend
         new end = max(3, 6) = 6                out = [[1,6]]
 
-[8,10]  last is [1,6].  Does 8 <= 6?  NO   ->  push
+[8,10]  last is [1,6].  Does 8 &lt;= 6?  NO   ->  push
                                                out = [[1,6],[8,10]]
 
-[15,18] last is [8,10]. Does 15 <= 10? NO  ->  push
+[15,18] last is [8,10]. Does 15 &lt;= 10? NO  ->  push
                                                out = [[1,6],[8,10],[15,18]]
 
 answer: [[1,6],[8,10],[15,18]]
@@ -255,11 +266,11 @@ answer: [[1,6],[8,10],[15,18]]
 
 [1,10]  push                              out = [[1,10]]
 
-[2,3]   2 <= 10?  YES -> extend
+[2,3]   2 &lt;= 10?  YES -> extend
         new end = max(10, 3) = 10         out = [[1,10]]
         (nothing visibly changed -- correct, it was already covered)
 
-[4,20]  4 <= 10?  YES -> extend
+[4,20]  4 &lt;= 10?  YES -> extend
         new end = max(10, 20) = 20        out = [[1,20]]
 
 answer: [[1,20]]

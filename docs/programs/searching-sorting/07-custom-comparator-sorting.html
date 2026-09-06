@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Custom Comparator Sorting</title>
+<meta name="description" content="Why sort() breaks on numbers, how a comparator actually works, and multi-field sorting done properly.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Searching &amp; sorting &middot; Problem 07</p>
+  <h1>Custom Comparator Sorting</h1>
+  <p class="standfirst">The most <em>useful</em> page in this topic, and the one where JavaScript has
+  a genuine trap waiting: <strong><code>[10, 9].sort()</code> gives <code>[10, 9]</code></strong>.
+  This is about comparators &mdash; how they work, and how to write them for real data.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Sort things by a rule of your choosing: numerically, by a field, by several fields, ascending
+  here and descending there.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">The trap, first</span></div>
+<pre><code>console.log([10, 9, 100, 20].sort());
+// [10, 100, 20, 9]   -- NOT sorted numerically
+
+console.log([10, 9, 100, 20].sort((a, b) =&gt; a - b));
+// [9, 10, 20, 100]   -- correct
+
+console.log([1, 5, 10].sort());
+// [1, 5, 10]   -- "works", which is exactly why the bug survives
+
+console.log([1, 5, 10, 15].sort());
+// [1, 10, 15, 5]   -- and now it does not</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Why the default sort does this</span>
+    <p><code>Array.prototype.sort()</code> with no comparator converts every element to a
+    <strong>string</strong> and sorts those strings in code-unit order. So <code>"10"</code> comes
+    before <code>"9"</code>, because <code>"1"</code> is before <code>"9"</code> &mdash; exactly as
+    &ldquo;apple&rdquo; comes before &ldquo;banana&rdquo;.</p>
+    <p>It is not a bug in JavaScript; it is a documented default that happens to be almost never what
+    you want. Single-digit arrays hide it perfectly, which is why it reaches production.</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Goal</th><th>Comparator</th></tr></thead>
+      <tbody>
+        <tr><td>numbers ascending</td><td class="mono">(a, b) =&gt; a - b</td></tr>
+        <tr><td>numbers descending</td><td class="mono">(a, b) =&gt; b - a</td></tr>
+        <tr><td>strings ascending</td><td class="mono">(a, b) =&gt; a.localeCompare(b)</td></tr>
+        <tr><td>by a numeric field</td><td class="mono">(a, b) =&gt; a.age - b.age</td></tr>
+        <tr><td>by a string field</td><td class="mono">(a, b) =&gt; a.name.localeCompare(b.name)</td></tr>
+        <tr><td>by two fields</td><td class="mono">(a, b) =&gt; a.x - b.x || a.y - b.y</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; what is a comparator, exactly?</h2>
+
+  <p>A comparator is a function you hand to <code>sort</code>. It receives two elements and answers
+  one question: <em>which of these should come first?</em></p>
+
+  <div class="note key">
+    <span class="t">The contract &mdash; the whole thing</span>
+    <p><code>compare(a, b)</code> must return:</p>
+    <ul style="margin-bottom:0">
+      <li>a <strong>negative</strong> number if <code>a</code> should come <strong>before</strong>
+      <code>b</code></li>
+      <li>a <strong>positive</strong> number if <code>a</code> should come <strong>after</strong>
+      <code>b</code></li>
+      <li><strong>zero</strong> if their order does not matter</li>
+    </ul>
+  </div>
+
+  <p>That is why <code>a - b</code> works: if <code>a</code> is smaller the result is negative, so
+  <code>a</code> goes first &mdash; which is ascending. And <code>b - a</code> flips every sign, which
+  is descending. There is nothing else to it.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">watching the comparator get called</span></div>
+<pre><code>const nums = [3, 1, 4, 1, 5];
+
+const sorted = [...nums].sort((a, b) =&gt; {
+  const result = a - b;
+  const verdict = result &lt; 0 ? a + ' first'
+                : result &gt; 0 ? b + ' first'
+                : 'tie';
+  console.log('compare(' + a + ', ' + b + ') = ' + result + '   -> ' + verdict);
+  return result;
+});
+
+console.log('');
+console.log('sorted:', sorted);
+console.log('');
+console.log('Note: the engine decides WHICH pairs to compare and in');
+console.log('what order. Your job is only to answer each question');
+console.log('correctly and consistently.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">only the SIGN matters</span></div>
+<pre><code>const nums = [3, 1, 4, 1, 5];
+
+// all of these sort ascending -- the magnitude is irrelevant
+console.log([...nums].sort((a, b) =&gt; a - b));
+console.log([...nums].sort((a, b) =&gt; (a - b) * 1000));
+console.log([...nums].sort((a, b) =&gt; a &lt; b ? -1 : a &gt; b ? 1 : 0));
+console.log([...nums].sort((a, b) =&gt; Math.sign(a - b)));
+
+// and these all sort descending
+console.log([...nums].sort((a, b) =&gt; b - a));
+console.log([...nums].sort((a, b) =&gt; a &gt; b ? -1 : a &lt; b ? 1 : 0));
+
+// A boolean is NOT a valid comparator: true becomes 1, false
+// becomes 0 -- so it can say "after" or "tie" but never "before".
+console.log('boolean comparator:', [...nums].sort((a, b) =&gt; a &gt; b));
+// may look sorted on small arrays, and is not reliable</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why the default hurts, and where else it bites</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">the default sort, on everything</span></div>
+<pre><code>// numbers
+console.log('numbers   :', [1, 5, 10, 50, 100].sort());
+// [1, 10, 100, 5, 50]
+
+// mixed sign
+console.log('negatives :', [-1, -10, -2].sort());
+// [-1, -10, -2]   -- "-1" < "-10" as strings
+
+// booleans
+console.log('booleans  :', [true, false, true].sort());
+// [false, true, true]  -- alphabetical: "false" < "true". Correct by luck.
+
+// undefined and holes go to the END, always, comparator or not
+console.log('undefined :', [3, undefined, 1].sort((a, b) =&gt; a - b));
+// [1, 3, undefined]
+
+// dates: the default calls toString(), which starts with the DAY
+// NAME -- so it sorts by "Fri" vs "Mon" vs "Wed". Useless.
+const dates = [new Date('2024-03-01'), new Date('2023-01-15'), new Date('2024-01-02')];
+console.log('dates, default   :',
+  [...dates].sort().map(d =&gt; d.toISOString().slice(0, 10)));
+console.log('dates, comparator:',
+  [...dates].sort((a, b) =&gt; a - b).map(d =&gt; d.toISOString().slice(0, 10)));
+// The default left them in their original order here, which is
+// pure coincidence. a - b works because subtraction coerces a Date
+// to milliseconds -- that is the idiomatic date comparator.</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Two more things about <code>sort()</code> that surprise people</span>
+    <p><strong>It mutates.</strong> <code>arr.sort()</code> reorders <code>arr</code> itself and
+    returns the same array. To keep the original, sort a copy:
+    <code>[...arr].sort(...)</code> or <code>arr.toSorted(...)</code> in newer runtimes.</p>
+    <p><strong><code>undefined</code> is special-cased.</strong> Undefined elements are moved to the
+    end without ever being passed to your comparator. So a comparator cannot control where they go.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">mutation, demonstrated</span></div>
+<pre><code>const original = [3, 1, 2];
+const result = original.sort((a, b) =&gt; a - b);
+
+console.log('original:', original);          // [1,2,3] -- changed
+console.log('result  :', result);            // [1,2,3]
+console.log('same object?', original === result);   // true
+
+// the safe versions
+const safe = [3, 1, 2];
+const copy = [...safe].sort((a, b) =&gt; a - b);
+console.log('safe   :', safe, '  copy:', copy);
+
+if (Array.prototype.toSorted) {
+  const s2 = [3, 1, 2];
+  console.log('toSorted:', s2.toSorted((a, b) =&gt; a - b), ' original:', s2);
+}
+
+// A real bug this causes: sorting inside a render function or a
+// getter silently reorders shared state.
+const config = { levels: [3, 1, 2] };
+function getSortedLevelsBad() { return config.levels.sort((a, b) =&gt; a - b); }
+function getSortedLevelsGood() { return [...config.levels].sort((a, b) =&gt; a - b); }
+
+getSortedLevelsBad();
+console.log('config after the bad getter:', config.levels);   // reordered</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; compose comparators</h2>
+
+  <p>Real sorting is almost never by one field. &ldquo;By department, then by salary descending, then
+  by name&rdquo; is the normal case.</p>
+
+  <div class="note key">
+    <span class="t">The unlock &mdash; the <code>||</code> chain</span>
+    <p><code>(a, b) =&gt; compareFirst(a, b) || compareSecond(a, b) || compareThird(a, b)</code></p>
+    <p>It works because a tie returns <strong>0</strong>, which is falsy &mdash; so
+    <code>||</code> moves on to the next comparison. A non-zero result is truthy and short-circuits
+    immediately. The tie-breaking falls out of JavaScript&rsquo;s own semantics.</p>
+  </div>
+
+  <div class="trace">
+<pre>  sort by team, then by score descending, then by name
+
+  (a, b) =>
+       a.team.localeCompare(b.team)      // different teams? done.
+    || b.score - a.score                 // same team, higher score first
+    || a.name.localeCompare(b.name)      // same score, alphabetical
+
+  If the first returns 0 (a tie), || evaluates the second.
+  If that returns 0 too, || evaluates the third.
+</pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The one hazard in the <code>||</code> chain</span>
+    <p><code>0</code> means &ldquo;tie&rdquo;, and <code>||</code> also treats
+    <code>NaN</code> as falsy. So if a field is missing, <code>a.score - b.score</code> is
+    <code>NaN</code>, the chain silently moves on, and you get a plausible-looking but arbitrary
+    order &mdash; with no error. Guard missing fields explicitly.</p>
+  </div>
+
+  <h3>The three comparator building blocks</h3>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">memorise these</span></div>
+<pre><code>numbers   :  (a, b) =&gt; a - b
+strings   :  (a, b) =&gt; a.localeCompare(b)
+booleans  :  (a, b) =&gt; (a ? 1 : 0) - (b ? 1 : 0)     // false first
+dates     :  (a, b) =&gt; a - b                          // coerces to ms
+
+reverse anything:  (a, b) =&gt; -inner(a, b)</code></pre>
+  </div>
+
+  <p>Why <code>localeCompare</code> rather than <code>a &lt; b</code> for strings? Because
+  <code>&lt;</code> compares UTF-16 code units, which puts every uppercase letter before every
+  lowercase one (<code>"Z"</code> before <code>"a"</code>) and mis-orders accented characters.
+  <code>localeCompare</code> gives human-expected ordering.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; watch a multi-field sort decide</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the comparator, narrating itself</span></div>
+<pre><code>const players = [
+  { name: 'ana',  team: 'red',  score: 30 },
+  { name: 'bo',   team: 'blue', score: 30 },
+  { name: 'cy',   team: 'red',  score: 45 },
+  { name: 'di',   team: 'blue', score: 45 },
+  { name: 'ed',   team: 'red',  score: 30 }
+];
+
+const sorted = [...players].sort((a, b) =&gt; {
+  const byTeam = a.team.localeCompare(b.team);
+  if (byTeam !== 0) {
+    console.log(a.name + ' vs ' + b.name + ':  teams differ (' +
+                a.team + ' vs ' + b.team + ')  -> ' + byTeam);
+    return byTeam;
+  }
+
+  const byScore = b.score - a.score;          // descending
+  if (byScore !== 0) {
+    console.log(a.name + ' vs ' + b.name + ':  same team, scores ' +
+                a.score + ' vs ' + b.score + '  -> ' + byScore);
+    return byScore;
+  }
+
+  const byName = a.name.localeCompare(b.name);
+  console.log(a.name + ' vs ' + b.name + ':  same team AND score, ' +
+              'falling back to name  -> ' + byName);
+  return byName;
+});
+
+console.log('');
+console.log('result:');
+for (const p of sorted) {
+  console.log('  ' + p.team.padEnd(5) + ' ' + String(p.score).padStart(3) + '  ' + p.name);
+}</code></pre>
+  </div>
+
+  <p>Read the log. Most comparisons never reach the second field &mdash; the first one decides. Only
+  genuine ties fall through, which is exactly what you want: the later fields cost nothing until they
+  are needed.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the same thing with the || chain</span></div>
+<pre><code>const players = [
+  { name: 'ana',  team: 'red',  score: 30 },
+  { name: 'bo',   team: 'blue', score: 30 },
+  { name: 'cy',   team: 'red',  score: 45 },
+  { name: 'di',   team: 'blue', score: 45 },
+  { name: 'ed',   team: 'red',  score: 30 }
+];
+
+const sorted = [...players].sort((a, b) =&gt;
+     a.team.localeCompare(b.team)
+  || b.score - a.score
+  || a.name.localeCompare(b.name)
+);
+
+for (const p of sorted) {
+  console.log(p.team.padEnd(5) + ' ' + String(p.score).padStart(3) + '  ' + p.name);
+}
+
+console.log('');
+console.log('Identical result, three lines. The || chain IS the');
+console.log('if-block above -- 0 is falsy, so a tie falls through.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <p>Writing a sort that <em>accepts</em> a comparator makes it obvious what
+  <code>Array.prototype.sort</code> is actually doing with your function.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; a stable merge sort taking a comparator</span></div>
+<pre><code>function sortWith(input, compare) {
+  // default to the ascending-numbers comparator, like sort() should have
+  const cmp = compare || function (a, b) { return a &lt; b ? -1 : a &gt; b ? 1 : 0; };
+
+  const a = [];
+  for (let i = 0; i &lt; input.length; i++) a[i] = input[i];
+
+  const buffer = [];
+  for (let i = 0; i &lt; a.length; i++) buffer[i] = 0;
+
+  function sortRange(lo, hi) {
+    if (hi - lo &lt; 1) return;
+    const mid = lo + ((hi - lo) - ((hi - lo) % 2)) / 2;
+    sortRange(lo, mid);
+    sortRange(mid + 1, hi);
+
+    let i = lo, j = mid + 1, k = lo;
+
+    while (i &lt;= mid &amp;&amp; j &lt;= hi) {
+      // &lt;= 0 means "a comes first OR it is a tie" -- taking the LEFT
+      // element on a tie is what makes this sort STABLE
+      if (cmp(a[i], a[j]) &lt;= 0) {
+        buffer[k] = a[i];
+        i = i + 1;
+      } else {
+        buffer[k] = a[j];
+        j = j + 1;
+      }
+      k = k + 1;
+    }
+
+    while (i &lt;= mid) { buffer[k] = a[i]; i = i + 1; k = k + 1; }
+    while (j &lt;= hi)  { buffer[k] = a[j]; j = j + 1; k = k + 1; }
+
+    for (let x = lo; x &lt;= hi; x++) a[x] = buffer[x];
+  }
+
+  sortRange(0, a.length - 1);
+  return a;
+}
+
+console.log(sortWith([10, 9, 100, 20], (a, b) =&gt; a - b));   // [9,10,20,100]
+console.log(sortWith([10, 9, 100, 20], (a, b) =&gt; b - a));   // [100,20,10,9]
+console.log(sortWith(['banana', 'apple', 'cherry']));       // alphabetical
+
+const people = [
+  { n: 'ana', age: 30 }, { n: 'bo', age: 25 }, { n: 'cy', age: 30 }
+];
+console.log(sortWith(people, (a, b) =&gt; a.age - b.age).map(p =&gt; p.n + ':' + p.age));
+// bo:25  ana:30  cy:30   -- ana before cy, their original order (stable)
+
+console.log(sortWith([], (a, b) =&gt; a - b));                 // []
+console.log(sortWith([1], (a, b) =&gt; a - b));                // [1]</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">comparator factories &mdash; the reusable version</span></div>
+<pre><code>// Instead of writing comparators by hand, build them.
+const byNumber = (keyOf) =&gt; (a, b) =&gt; keyOf(a) - keyOf(b);
+const byString = (keyOf) =&gt; (a, b) =&gt; String(keyOf(a)).localeCompare(String(keyOf(b)));
+const desc     = (cmp)  =&gt; (a, b) =&gt; -cmp(a, b);
+const then     = (...cmps) =&gt; (a, b) =&gt; {
+  for (const c of cmps) {
+    const r = c(a, b);
+    if (r !== 0) return r;
+  }
+  return 0;
+};
+
+const players = [
+  { name: 'ana',  team: 'red',  score: 30 },
+  { name: 'bo',   team: 'blue', score: 30 },
+  { name: 'cy',   team: 'red',  score: 45 },
+  { name: 'di',   team: 'blue', score: 45 },
+  { name: 'ed',   team: 'red',  score: 30 }
+];
+
+const byTeamThenScoreDescThenName = then(
+  byString(p =&gt; p.team),
+  desc(byNumber(p =&gt; p.score)),
+  byString(p =&gt; p.name)
+);
+
+for (const p of [...players].sort(byTeamThenScoreDescThenName)) {
+  console.log(p.team.padEnd(5) + String(p.score).padStart(4) + '  ' + p.name);
+}
+
+console.log('');
+// and any other ordering, for free
+console.log('by score only:',
+  [...players].sort(byNumber(p =&gt; p.score)).map(p =&gt; p.name).join(' '));
+console.log('by name desc :',
+  [...players].sort(desc(byString(p =&gt; p.name))).map(p =&gt; p.name).join(' '));
+
+// `then` uses an explicit !== 0 check rather than ||, so a NaN from
+// a missing field cannot silently fall through.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the comparators you will actually write</span></div>
+<pre><code>const orders = [
+  { id: 3, customer: 'ana',   total: 120, placed: '2024-03-01', paid: true  },
+  { id: 1, customer: 'Bo',    total: 340, placed: '2024-01-15', paid: false },
+  { id: 4, customer: 'cy',    total: 120, placed: '2024-02-20', paid: true  },
+  { id: 2, customer: 'ana',   total: 890, placed: '2024-03-01', paid: false }
+];
+
+// by a number
+console.log('total asc :',
+  [...orders].sort((a, b) =&gt; a.total - b.total).map(o =&gt; o.total).join(' '));
+
+// by a number, descending
+console.log('total desc:',
+  [...orders].sort((a, b) =&gt; b.total - a.total).map(o =&gt; o.total).join(' '));
+
+// by a string, case-insensitively and locale-aware
+console.log('customer  :',
+  [...orders].sort((a, b) =&gt; a.customer.localeCompare(b.customer))
+             .map(o =&gt; o.customer).join(' '));
+
+// by a date string -- ISO dates sort correctly as strings
+console.log('placed    :',
+  [...orders].sort((a, b) =&gt; a.placed.localeCompare(b.placed))
+             .map(o =&gt; o.placed).join(' '));
+
+// by a boolean: unpaid first
+console.log('unpaid 1st:',
+  [...orders].sort((a, b) =&gt; (a.paid ? 1 : 0) - (b.paid ? 1 : 0))
+             .map(o =&gt; o.id + (o.paid ? '(paid)' : '(unpaid)')).join(' '));
+
+// multi-field: by date, then total descending, then id
+console.log('');
+console.log('date, then total desc, then id:');
+for (const o of [...orders].sort((a, b) =&gt;
+       a.placed.localeCompare(b.placed)
+    || b.total - a.total
+    || a.id - b.id)) {
+  console.log('  ' + o.placed + '  ' + String(o.total).padStart(4) + '  #' + o.id);
+}</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">a custom order, and natural sorting</span></div>
+<pre><code>// Sorting by a fixed list of allowed values -- extremely common.
+const priorityOrder = ['critical', 'high', 'medium', 'low'];
+const rank = new Map(priorityOrder.map((p, i) =&gt; [p, i]));
+
+const tickets = [
+  { id: 1, priority: 'low' },
+  { id: 2, priority: 'critical' },
+  { id: 3, priority: 'medium' },
+  { id: 4, priority: 'high' },
+  { id: 5, priority: 'critical' }
+];
+
+console.log('by priority:',
+  [...tickets]
+    .sort((a, b) =&gt; rank.get(a.priority) - rank.get(b.priority))
+    .map(t =&gt; t.priority + '#' + t.id).join('  '));
+
+// A Map of ranks is better than a chain of if-statements: it is
+// data, so the order can come from config, and adding a level is
+// a one-word change.
+
+console.log('');
+// "Natural" sorting: file2 before file10
+const files = ['file10.txt', 'file2.txt', 'file1.txt', 'file20.txt'];
+
+console.log('plain     :', [...files].sort((a, b) =&gt; a.localeCompare(b)));
+// file1, file10, file2, file20  -- "10" before "2"
+
+console.log('numeric   :', [...files].sort((a, b) =&gt;
+  a.localeCompare(b, undefined, { numeric: true })));
+// file1, file2, file10, file20  -- what a human expects
+
+// Intl.Collator is the same thing, reusable and much faster when
+// you sort repeatedly, because it compiles the collation once.
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+console.log('collator  :', [...files].sort(collator.compare));</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the pattern that beats an expensive comparator</span></div>
+<pre><code>// If the sort key is expensive to compute, do NOT compute it inside
+// the comparator -- it runs O(n log n) times. Compute it once per
+// element, sort the pairs, then unwrap. (This is a Schwartzian
+// transform, or "decorate-sort-undecorate".)
+function expensiveKey(s) {
+  // pretend this is slow
+  let h = 0;
+  for (let i = 0; i &lt; s.length; i++) {
+    for (let k = 0; k &lt; 60; k++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h) % 1000;
+}
+
+const words = [];
+for (let i = 0; i &lt; 4000; i++) words.push('word' + i);
+
+// naive: the key is recomputed on every comparison
+let t = performance.now();
+const naive = [...words].sort((a, b) =&gt; expensiveKey(a) - expensiveKey(b));
+const naiveMs = performance.now() - t;
+
+// decorated: one key per element, then sort the pairs
+t = performance.now();
+const decorated = words
+  .map(w =&gt; ({ w, k: expensiveKey(w) }))
+  .sort((a, b) =&gt; a.k - b.k)
+  .map(pair =&gt; pair.w);
+const decoratedMs = performance.now() - t;
+
+console.log('key inside the comparator : ' + naiveMs.toFixed(1) + ' ms');
+console.log('key computed once each    : ' + decoratedMs.toFixed(1) + ' ms');
+console.log('same result:', naive.length === decorated.length &amp;&amp;
+            expensiveKey(naive[0]) === expensiveKey(decorated[0]));
+console.log('');
+console.log('n elements need n keys, not 2 x n log n keys.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Aspect</th><th>Cost</th></tr></thead>
+      <tbody>
+        <tr><td>Comparisons</td><td class="mono">O(n log n)</td></tr>
+        <tr><td>Your comparator runs</td><td class="mono">O(n log n) times</td></tr>
+        <tr><td>Key computed inside the comparator</td><td class="mono">O(n log n) computations</td></tr>
+        <tr><td><strong>Key computed once per element</strong></td><td class="mono">O(n) computations + O(n log n) comparisons</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>The comparator is called about <code>n log n</code> times.</strong> For 10,000 elements
+  that is roughly 130,000 calls. Anything expensive inside it &mdash; a regex, a date parse, a
+  property lookup chain, a <code>toLowerCase()</code> &mdash; is paid 130,000 times instead of 10,000.
+  That is the single most useful performance fact on this page.</p>
+
+  <p><code>Array.prototype.sort</code> has been <strong>required to be stable</strong> since ES2019,
+  so equal elements keep their relative order. Before that it was implementation-defined, and older
+  code sometimes adds an index tie-breaker to force stability. You no longer need to.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;<code>sort()</code> with no comparator stringifies the elements, so
+    <code>[10, 9]</code> stays <code>[10, 9]</code> &mdash; numbers always need
+    <code>(a, b) =&gt; a - b</code>. A comparator returns negative, positive or zero for
+    before, after or tie, and multi-field sorts chain with <code>||</code> because a tie returns 0,
+    which is falsy. It mutates, so I sort a copy. And if the sort key is expensive I compute it once
+    per element rather than inside the comparator, which runs O(n log n) times.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. No comparator on numbers</h3>
+
+  <p>Step 1. It is the most common JavaScript sorting bug there is, and single-digit test data hides
+  it completely.</p>
+
+  <h3>2. Returning a boolean</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; booleans are not comparators</span></div>
+<pre><code>const nums = [5, 3, 9, 1, 7, 2, 8, 6, 4, 10, 12, 11];
+
+console.log('boolean :', [...nums].sort((a, b) =&gt; a &gt; b));
+console.log('correct :', [...nums].sort((a, b) =&gt; a - b));
+
+// `a > b` gives true or false, which coerce to 1 and 0.
+// So the comparator can say "after" (1) or "tie" (0) -- and never
+// "before" (-1). The engine has no way to move an element left.
+console.log('');
+console.log('true  becomes', Number(true));    // 1
+console.log('false becomes', Number(false));   // 0
+console.log('there is no -1 anywhere in that range');</code></pre>
+  </div>
+
+  <h3>3. An inconsistent comparator</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the comparator contradicts itself</span></div>
+<pre><code>const nums = [3, 1, 4, 1, 5, 9, 2, 6];
+
+// A random comparator: the answer to compare(a,b) changes between
+// calls, so no consistent order exists.
+console.log('random  :', [...nums].sort(() =&gt; Math.random() - 0.5));
+console.log('random  :', [...nums].sort(() =&gt; Math.random() - 0.5));
+
+// People use this to "shuffle". It is not a shuffle: the result is
+// biased and depends on the engine's sort algorithm.
+const counts = new Map();
+for (let trial = 0; trial &lt; 20000; trial++) {
+  const shuffled = [1, 2, 3].sort(() =&gt; Math.random() - 0.5);
+  const key = shuffled.join('');
+  counts.set(key, (counts.get(key) || 0) + 1);
+}
+console.log('');
+console.log('20000 "shuffles" of [1,2,3] -- a fair shuffle would give');
+console.log('about 3333 of each of the 6 orderings:');
+for (const [k, v] of [...counts].sort()) console.log('  ' + k + ': ' + v);
+
+console.log('');
+console.log('For a real shuffle use Fisher-Yates:');
+function shuffle(a) {
+  const arr = [...a];
+  for (let i = arr.length - 1; i &gt; 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+const fair = new Map();
+for (let trial = 0; trial &lt; 20000; trial++) {
+  const k = shuffle([1,2,3]).join('');
+  fair.set(k, (fair.get(k) || 0) + 1);
+}
+for (const [k, v] of [...fair].sort()) console.log('  ' + k + ': ' + v);</code></pre>
+  </div>
+
+  <h3>4. Sorting the original when you meant a copy</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; mutating shared state</span></div>
+<pre><code>const state = { items: [3, 1, 2], name: 'shared' };
+
+// looks read-only, is not
+function displayOrder(s) {
+  return s.items.sort((a, b) =&gt; a - b);
+}
+
+console.log('before:', [...state.items]);
+displayOrder(state);
+console.log('after :', state.items);        // reordered
+
+// A worse version: sort() returns the SAME array, so a caller
+// holding both references sees them both change.
+const view = displayOrder(state);
+view.push(99);
+console.log('state.items now:', state.items);   // the 99 is in here too
+
+// The fix, every time:
+function displayOrderSafe(s) {
+  return [...s.items].sort((a, b) =&gt; a - b);
+}</code></pre>
+  </div>
+
+  <h3>5. Comparing strings with <code>&lt;</code> and mis-ordering case</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; code-unit order is not alphabetical</span></div>
+<pre><code>const names = ['banana', 'Apple', 'cherry', 'Date', 'apple'];
+
+console.log('with < :', [...names].sort((a, b) =&gt; a &lt; b ? -1 : a &gt; b ? 1 : 0));
+// Apple, Date, apple, banana, cherry -- ALL capitals first
+
+console.log('locale :', [...names].sort((a, b) =&gt; a.localeCompare(b)));
+// human-expected ordering
+
+console.log('');
+console.log('why: "Z" is code unit', 'Z'.charCodeAt(0),
+            'and "a" is', 'a'.charCodeAt(0));
+
+// case-insensitive, explicitly
+console.log('base   :', [...names].sort((a, b) =&gt;
+  a.localeCompare(b, undefined, { sensitivity: 'base' })));
+
+// and accents:
+const accented = ['zebra', 'Ähnlich', 'apple', 'Zürich'];
+console.log('');
+console.log('accents with < :', [...accented].sort((a, b) =&gt; a &lt; b ? -1 : 1));
+console.log('accents locale :', [...accented].sort((a, b) =&gt; a.localeCompare(b)));</code></pre>
+  </div>
+
+  <h3>6. Computing the key inside the comparator</h3>
+
+  <p>Shown in Step 7. It is correct and it does <code>n log n</code> key computations instead of
+  <code>n</code>. On a date-parse or a regex that is the difference between instant and noticeable.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Recite the comparator contract</strong> &mdash; negative, positive, zero &mdash; and
+    then write the four building blocks from memory: numbers, strings, booleans, reverse.</li>
+    <li><strong>Sort an array of objects by three fields</strong>, one of them descending, using the
+    <code>||</code> chain. Then do it again with the <code>then(...)</code> factory from Step 6 and
+    say which you would ship.</li>
+    <li><strong>Sort by a fixed priority list.</strong> In Step 7 &mdash; build the rank Map from an
+    array so the order is data rather than code.</li>
+    <li><strong>Write Fisher&ndash;Yates from memory</strong>, and be ready to explain why
+    <code>sort(() =&gt; Math.random() - 0.5)</code> is not a shuffle.</li>
+    <li><strong>Sort, filter and paginate an array of records</strong> in one function. That is a
+    Tier&nbsp;4 problem in this collection and it is mostly this page plus <code>slice</code>.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p>Three habits. <strong>Always pass a comparator</strong> &mdash; the default is a string sort
+    and will eventually bite you. <strong>Always sort a copy</strong> unless you have decided to
+    mutate. And <strong>compute expensive keys once per element</strong>, not once per comparison. Of
+    everything in this whole collection, these three are the ones you will use most often in real
+    code.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="06-merge-sort-quick-sort.html">&larr; Merge Sort &amp; Quick Sort</a>
+  <a href="../recursion/01-subsets.html">Next topic: Recursion &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>String Compression</title>
+<meta name="description" content="Run-length encoding in place: the read pointer and write pointer again, plus the multi-digit trap.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Strings &middot; Problem 06</p>
+  <h1>String Compression</h1>
+  <p class="standfirst">Run-length encoding &mdash; <code>"aabbbcc"</code> becomes
+  <code>"a2b3c2"</code>. Straightforward until the in-place version, where the
+  <strong>read and write pointers</strong> from Move Zeroes come back, and a count of 10 or more
+  needs several slots.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Replace each run of repeated characters with the character followed by the length of the run.
+  A run of length 1 keeps just the character &mdash; no <code>"1"</code>.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Compressed</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">"aabbbcc"</td><td class="mono">"a2b3c2"</td><td></td></tr>
+        <tr><td class="mono">"abc"</td><td class="mono">"abc"</td><td>no run is longer than 1</td></tr>
+        <tr><td class="mono">"aaa"</td><td class="mono">"a3"</td><td></td></tr>
+        <tr><td class="mono">"aaaaaaaaaaaa"</td><td class="mono">"a12"</td><td>the count takes two characters</td></tr>
+        <tr><td class="mono">"aabaa"</td><td class="mono">"a2ba2"</td><td>runs are contiguous only</td></tr>
+        <tr><td class="mono">""</td><td class="mono">""</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Two details that decide whether your solution is right:</p>
+
+  <ul>
+    <li><strong>A count of 1 is omitted.</strong> <code>"abc"</code> compresses to
+    <code>"abc"</code>, not <code>"a1b1c1"</code>. Which means compression can make the string
+    <em>longer</em> in general &mdash; but with the 1 omitted it never does.</li>
+    <li><strong>Runs must be adjacent.</strong> In <code>"aabaa"</code> the four a&rsquo;s are two
+    separate runs of two, because a <code>b</code> sits between them.</li>
+  </ul>
+
+  <div class="note warn">
+    <span class="t">The count that does not fit in one slot</span>
+    <p>A run of 12 becomes <code>"a12"</code> &mdash; the character plus <strong>two</strong> digits.
+    Every solution that assumes the count is a single character breaks at 10. This is the bug this
+    problem exists to find, and it never shows up in small hand-written tests.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; building a new string</h2>
+
+  <p>Walk the string, count how long the current run is, and append the character and count to a
+  result.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; build a new string</span></div>
+<pre><code>function compressSimple(s) {
+  if (s.length === 0) return '';
+
+  let result = '';
+  let runChar = s[0];
+  let runLength = 1;
+
+  for (let i = 1; i &lt;= s.length; i++) {
+    // i === s.length is a deliberate extra step so the LAST run
+    // gets flushed without duplicating the code below
+    if (i &lt; s.length &amp;&amp; s[i] === runChar) {
+      runLength++;
+    } else {
+      result += runChar;
+      if (runLength &gt; 1) result += runLength;   // omit a count of 1
+      runChar = s[i];
+      runLength = 1;
+    }
+  }
+
+  return result;
+}
+
+console.log(compressSimple('aabbbcc'));         // 'a2b3c2'
+console.log(compressSimple('abc'));             // 'abc'
+console.log(compressSimple('aaa'));             // 'a3'
+console.log(compressSimple('aaaaaaaaaaaa'));    // 'a12'
+console.log(compressSimple('aabaa'));           // 'a2ba2'
+console.log(compressSimple(''));                // ''
+console.log(compressSimple('a'));               // 'a'</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">The one-past-the-end trick</span>
+    <p>The loop runs to <code>i &lt;= s.length</code>, one step beyond the string. That extra
+    iteration can never match <code>runChar</code> (<code>s[s.length]</code> is
+    <code>undefined</code>), so it always takes the <code>else</code> branch and flushes the final
+    run. Without it you need a duplicate copy of the flush code after the loop &mdash; and forgetting
+    that copy is a genuinely common bug. This trick is worth stealing for any &ldquo;group consecutive
+    items&rdquo; loop.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why the in-place version exists</h2>
+
+  <p>Version 0 is O(n) time and completely fine &mdash; except for <code>result += ...</code>.
+  In JavaScript strings are immutable, so <code>+=</code> can mean building a brand-new string each
+  time. Modern engines optimise this heavily with ropes, so it is usually fine; on other platforms,
+  or with a very large input, it is O(n&sup2;).</p>
+
+  <p>The classic form of this problem hands you a <strong>character array</strong> and asks you to
+  compress it in place, returning the new length. That is where the read/write pointers come in.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; naive concatenation vs an array buffer</span></div>
+<pre><code>// 300,000 characters in runs of 3
+const N = 300000;
+let s = '';
+for (let i = 0; i &lt; N / 3; i++) s += 'abc'[i % 3].repeat(3);
+
+function byConcat(str) {
+  let out = '';
+  let ch = str[0], n = 1;
+  for (let i = 1; i &lt;= str.length; i++) {
+    if (i &lt; str.length &amp;&amp; str[i] === ch) n++;
+    else { out += ch; if (n &gt; 1) out += n; ch = str[i]; n = 1; }
+  }
+  return out;
+}
+
+function byParts(str) {
+  const parts = [];
+  let ch = str[0], n = 1;
+  for (let i = 1; i &lt;= str.length; i++) {
+    if (i &lt; str.length &amp;&amp; str[i] === ch) n++;
+    else { parts.push(ch); if (n &gt; 1) parts.push(n); ch = str[i]; n = 1; }
+  }
+  return parts.join('');
+}
+
+let t = performance.now();
+const a = byConcat(s);
+const concatMs = performance.now() - t;
+
+t = performance.now();
+const b = byParts(s);
+const partsMs = performance.now() - t;
+
+console.log('string +=      : ' + a.length + ' chars in ' + concatMs.toFixed(1) + ' ms');
+console.log('array + join   : ' + b.length + ' chars in ' + partsMs.toFixed(1) + ' ms');
+console.log('same answer:', a === b);
+
+// On a modern engine these are close, because += on strings is
+// heavily optimised. Push to an array and join once anyway: it is
+// the habit that stays correct when the engine cannot help you.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; read and write pointers</h2>
+
+  <p>Exactly the shape from Move Zeroes: one pointer reads the original, a slower pointer writes the
+  compressed form into the same array.</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p><code>read</code> scans runs. <code>write</code> marks where the next compressed character
+    goes. Because the compressed form is never longer than the original,
+    <strong><code>write</code> can never overtake <code>read</code></strong> &mdash; so overwriting as
+    you go is safe.</p>
+  </div>
+
+  <p>Why is it never longer? A run of length 1 writes 1 character. A run of length 2 writes 2
+  (<code>"a2"</code>). A run of length <code>k</code> writes <code>1 + digits(k)</code>, and for
+  <code>k &ge; 2</code> that is always at most <code>k</code>:</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Run length</th><th>Written</th><th>Characters used</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td class="mono">a</td><td class="num">1</td></tr>
+        <tr><td class="num">2</td><td class="mono">a2</td><td class="num">2</td></tr>
+        <tr><td class="num">3</td><td class="mono">a3</td><td class="num">2</td></tr>
+        <tr><td class="num">9</td><td class="mono">a9</td><td class="num">2</td></tr>
+        <tr><td class="num">12</td><td class="mono">a12</td><td class="num">3</td></tr>
+        <tr><td class="num">100</td><td class="mono">a100</td><td class="num">4</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>That is the safety proof for writing in place, and it is exactly the kind of thing an interviewer
+  will ask you to justify.</p>
+
+  <h3>Writing a multi-digit count</h3>
+
+  <p>The count is a number; the array holds characters. So convert it to a string and write its
+  digits one at a time:</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">writing the count</span></div>
+<pre><code>for (const digit of String(runLength)) {
+  chars[write] = digit;
+  write++;
+}
+
+// String(12) is "12", so this writes '1' then '2' -- two slots.
+// Writing chars[write] = runLength would put the NUMBER 12 into a
+// character array, which is a different type and breaks join().</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>chars = ['a','a','b','b','b','c','c']</code>.</p>
+
+  <div class="trace">
+<pre>write = 0   read = 0
+
+read=0  run of 'a' starts
+        scan forward while the character is 'a':  read 0, 1  ->  length 2
+        write 'a' at 0              ['a','a','b','b','b','c','c']   write=1
+        length 2 > 1, write '2' at 1
+                                    ['a','2','b','b','b','c','c']   write=2
+        read is now 2
+
+read=2  run of 'b'
+        scan: read 2, 3, 4  ->  length 3
+        write 'b' at 2              ['a','2','b','b','b','c','c']   write=3
+        write '3' at 3              ['a','2','b','3','b','c','c']   write=4
+        read is now 5
+
+read=5  run of 'c'
+        scan: read 5, 6  ->  length 2
+        write 'c' at 4              ['a','2','b','3','c','c','c']   write=5
+        write '2' at 5              ['a','2','b','3','c','2','c']   write=6
+        read is now 7  ->  done
+
+new length = 6
+the first 6 slots are  a 2 b 3 c 2      the rest is leftover junk
+</pre>
+  </div>
+
+  <p>The array still ends with a stray <code>'c'</code>. That is expected: the contract is
+  &ldquo;the first <code>write</code> entries are the answer&rdquo;. The caller uses the returned
+  length; anything past it is scrap.</p>
+
+  <p>Now the multi-digit case, twelve a&rsquo;s:</p>
+
+  <div class="trace">
+<pre>chars = ['a' x 12]
+
+read=0  run of 'a', length 12
+        write 'a' at 0                              write=1
+        String(12) is "12"
+          write '1' at 1                            write=2
+          write '2' at 2                            write=3
+
+new length = 3,  first three slots: a 1 2   ->  "a12"
+
+A solution that wrote chars[write] = 12 would produce
+['a', 12, ...] -- a number sitting in a character array. It would
+even LOOK right when joined, and then break the moment anything
+inspects the elements.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function compressExplained(chars) {
+  console.log('start: [' + chars.join(',') + ']');
+  console.log('');
+
+  let write = 0;
+  let read = 0;
+
+  while (read &lt; chars.length) {
+    const runChar = chars[read];
+    let runLength = 0;
+
+    // how long is this run?
+    while (read &lt; chars.length &amp;&amp; chars[read] === runChar) {
+      read++;
+      runLength++;
+    }
+
+    console.log("run of '" + runChar + "' length " + runLength +
+                '   (read is now ' + read + ')');
+
+    chars[write] = runChar;
+    write++;
+    console.log('   wrote the character   [' + chars.join(',') +
+                ']   write=' + write);
+
+    if (runLength &gt; 1) {
+      for (const digit of String(runLength)) {
+        chars[write] = digit;
+        write++;
+      }
+      console.log('   wrote the count "' + runLength + '"  [' + chars.join(',') +
+                  ']   write=' + write);
+    } else {
+      console.log('   length 1, no count written');
+    }
+  }
+
+  console.log('');
+  console.log('new length = ' + write + '   result = "' +
+              chars.slice(0, write).join('') + '"');
+  console.log('');
+  return write;
+}
+
+compressExplained(['a','a','b','b','b','c','c']);
+console.log('==========================================');
+compressExplained(['a','a','a','a','a','a','a','a','a','a','a','a']);
+console.log('==========================================');
+compressExplained(['a','b','c']);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; in place, loops only</span></div>
+<pre><code>function compressManual(chars) {
+  let write = 0;      // where the next compressed character goes
+  let read = 0;       // where we are reading from
+
+  while (read &lt; chars.length) {
+    const runChar = chars[read];
+    let runLength = 0;
+
+    // measure the run
+    while (read &lt; chars.length &amp;&amp; chars[read] === runChar) {
+      read = read + 1;
+      runLength = runLength + 1;
+    }
+
+    // write the character
+    chars[write] = runChar;
+    write = write + 1;
+
+    // write the count, one digit at a time, only if it is 2 or more
+    if (runLength &gt; 1) {
+      // turn the number into its digits without using String()
+      const digits = [];
+      let n = runLength;
+      let count = 0;
+      while (n &gt; 0) {
+        digits[count] = n % 10;      // last digit first
+        n = Math.floor(n / 10);
+        count = count + 1;
+      }
+      // digits came out backwards, so write them in reverse
+      for (let d = count - 1; d &gt;= 0; d--) {
+        chars[write] = '' + digits[d];
+        write = write + 1;
+      }
+    }
+  }
+
+  return write;
+}
+
+function run(arr) {
+  const copy = [...arr];
+  const len = compressManual(copy);
+  return { length: len, result: copy.slice(0, len).join('') };
+}
+
+console.log(run(['a','a','b','b','b','c','c']));   // 6,  'a2b3c2'
+console.log(run(['a','b','c']));                   // 3,  'abc'
+console.log(run(['a','a','a']));                   // 2,  'a3'
+console.log(run(Array(12).fill('a')));             // 3,  'a12'
+console.log(run(Array(100).fill('x')));            // 4,  'x100'
+console.log(run(['a','a','b','a','a']));           // 5,  'a2ba2'
+console.log(run(['a']));                           // 1,  'a'
+console.log(run([]));                              // 0,  ''</code></pre>
+  </div>
+
+  <p>The digit extraction is worth reading closely. <code>n % 10</code> gives the last digit;
+  <code>Math.floor(n / 10)</code> chops it off. Repeating that pulls the digits out
+  <strong>backwards</strong>, which is why the write loop runs in reverse. That is how every
+  number-to-string conversion works underneath.</p>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2a &mdash; in place, the interview answer</span></div>
+<pre><code>function compress(chars) {
+  let write = 0;
+  let read = 0;
+
+  while (read &lt; chars.length) {
+    const runChar = chars[read];
+    let runLength = 0;
+
+    while (read &lt; chars.length &amp;&amp; chars[read] === runChar) {
+      read++;
+      runLength++;
+    }
+
+    chars[write++] = runChar;
+
+    if (runLength &gt; 1) {
+      for (const digit of String(runLength)) chars[write++] = digit;
+    }
+  }
+
+  return write;
+}
+
+const a = ['a','a','b','b','b','c','c'];
+console.log(compress(a), a.slice(0, 6).join(''));      // 6 'a2b3c2'
+
+const b = Array(12).fill('a');
+console.log(compress(b), b.slice(0, 3).join(''));      // 3 'a12'
+
+const c = ['a','b','c'];
+console.log(compress(c), c.slice(0, 3).join(''));      // 3 'abc'</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2b &mdash; string in, string out</span></div>
+<pre><code>function compressString(s) {
+  if (!s) return '';
+
+  const parts = [];
+  let i = 0;
+
+  while (i &lt; s.length) {
+    const ch = s[i];
+    let j = i;
+    while (j &lt; s.length &amp;&amp; s[j] === ch) j++;
+
+    const runLength = j - i;
+    parts.push(ch);
+    if (runLength &gt; 1) parts.push(String(runLength));
+
+    i = j;
+  }
+
+  return parts.join('');
+}
+
+console.log(compressString('aabbbcc'));        // 'a2b3c2'
+console.log(compressString('abc'));            // 'abc'
+console.log(compressString('aaaaaaaaaaaa'));   // 'a12'
+console.log(compressString('aabaa'));          // 'a2ba2'
+console.log(compressString(''));               // ''
+
+// A regex does the run-finding for you, if you like it:
+function compressRegex(s) {
+  return s.replace(/(.)\1*/g, m =&gt; m.length &gt; 1 ? m[0] + m.length : m[0]);
+}
+
+console.log(compressRegex('aabbbcc'));         // 'a2b3c2'
+console.log(compressRegex('aaaaaaaaaaaa'));    // 'a12'
+console.log(compressRegex('abc'));             // 'abc'
+
+// (.)\1*  means "any character, then that same character repeated".
+// \1 is a backreference to the first group. Short, and much harder
+// to explain on a whiteboard -- know it, but write the loop.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">and the decompression, which is the useful half</span></div>
+<pre><code>function decompress(s) {
+  const parts = [];
+  let i = 0;
+
+  while (i &lt; s.length) {
+    const ch = s[i];
+    i++;
+
+    // read the digits that follow, if any
+    let digits = '';
+    while (i &lt; s.length &amp;&amp; s[i] &gt;= '0' &amp;&amp; s[i] &lt;= '9') {
+      digits += s[i];
+      i++;
+    }
+
+    const count = digits === '' ? 1 : parseInt(digits, 10);
+    parts.push(ch.repeat(count));
+  }
+
+  return parts.join('');
+}
+
+console.log(decompress('a2b3c2'));     // 'aabbbcc'
+console.log(decompress('abc'));        // 'abc'
+console.log(decompress('a12'));        // 'aaaaaaaaaaaa'
+console.log(decompress('x100'));       // 100 x's
+
+// compress again here so this block stands on its own
+function compressAgain(str) {
+  if (!str) return '';
+  const parts = [];
+  let i = 0;
+  while (i &lt; str.length) {
+    const ch = str[i];
+    let j = i;
+    while (j &lt; str.length &amp;&amp; str[j] === ch) j++;
+    parts.push(ch);
+    if (j - i &gt; 1) parts.push(String(j - i));
+    i = j;
+  }
+  return parts.join('');
+}
+
+const original = 'aaabbbbccd';
+console.log('compressed  :', compressAgain(original));      // 'a3b4c2d'
+console.log('round trip works:', decompress(compressAgain(original)) === original);
+
+// Note the multi-digit read: you must consume ALL the digits, not
+// just one, or 'a12' decompresses to 'a' repeated once then '2'.
+// Same trap as the compression side, from the other direction.</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Run-length encoding breaks on digits in the input</span>
+    <p>If the string can contain digits, <code>"a2"</code> is ambiguous &mdash; is it a run of two
+    a&rsquo;s, or the literal characters <code>a</code> and <code>2</code>? Real formats solve this
+    with an escape character or by always writing the count. Worth raising as a clarifying question:
+    <em>&ldquo;can the input contain digits?&rdquo;</em> is exactly the kind of thing interviewers
+    reward.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Extra space</th></tr></thead>
+      <tbody>
+        <tr><td>String <code>+=</code></td><td class="mono">O(n) to O(n&sup2;)</td><td class="mono">O(n)</td></tr>
+        <tr><td>Array of parts + join</td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+        <tr><td><strong>In place</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Why O(n) despite the nested <code>while</code>.</strong> Same argument as the sliding
+  window: the inner loop advances <code>read</code>, and <code>read</code> only ever moves forward,
+  crossing the array exactly once in total. The outer loop does not restart it.</p>
+
+  <p><strong>O(1) space</strong> for the in-place version &mdash; two indexes and a run counter,
+  whatever the input size. The digits of the count are written straight into the array, not buffered.
+  (Version 1&rsquo;s hand-rolled digit array holds at most 10 entries for any realistic count, which
+  is constant.)</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;I use a read pointer to measure each run and a write pointer for the compressed output.
+    Because a run of length k compresses to 1 + digits(k) characters, which is never more than k, the
+    write pointer can never overtake the read pointer &mdash; so writing in place is safe. A count of
+    10 or more needs several slots, so I write <code>String(count)</code> digit by digit. O(n) time,
+    O(1) space, and I return the new length rather than a string.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Assuming the count is one character</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; a number in a character array</span></div>
+<pre><code>function broken(chars) {
+  let write = 0, read = 0;
+  while (read &lt; chars.length) {
+    const ch = chars[read];
+    let n = 0;
+    while (read &lt; chars.length &amp;&amp; chars[read] === ch) { read++; n++; }
+    chars[write++] = ch;
+    if (n &gt; 1) chars[write++] = n;      // the NUMBER, in one slot -- bug
+  }
+  return write;
+}
+
+const a = Array(12).fill('a');
+const len = broken(a);
+console.log('length reported:', len);              // 2 -- should be 3
+console.log('slots:', a.slice(0, len));            // ['a', 12]
+console.log('types:', a.slice(0, len).map(x =&gt; typeof x));   // ['string','number']
+console.log('joined:', a.slice(0, len).join(''));  // 'a12' -- looks fine!
+
+// join() stringifies, so the output LOOKS correct. But the array
+// contains a number where a character belongs, and the returned
+// length is wrong. Any caller that trusts the length gets 'a1'.</code></pre>
+  </div>
+
+  <h3>2. Forgetting to flush the last run</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the final run is lost</span></div>
+<pre><code>function broken(s) {
+  let out = '';
+  let ch = s[0], n = 1;
+  for (let i = 1; i &lt; s.length; i++) {      // stops AT length -- bug
+    if (s[i] === ch) n++;
+    else { out += ch; if (n &gt; 1) out += n; ch = s[i]; n = 1; }
+  }
+  return out;                               // last run never written
+}
+
+console.log(broken('aabbbcc'));   // 'a2b3'   WRONG, the 'c2' is missing
+console.log(broken('abc'));       // 'ab'     WRONG, the 'c' is missing
+console.log(broken('aaa'));       // ''       WRONG, nothing at all
+
+// The run is only written when a DIFFERENT character arrives, and
+// after the last character none ever does. Either loop to
+// i &lt;= s.length (see Step 2) or flush once more after the loop.</code></pre>
+  </div>
+
+  <h3>3. Writing <code>"1"</code> for a single character</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; and now it can grow</span></div>
+<pre><code>function broken(s) {
+  const parts = [];
+  let i = 0;
+  while (i &lt; s.length) {
+    const ch = s[i];
+    let j = i;
+    while (j &lt; s.length &amp;&amp; s[j] === ch) j++;
+    parts.push(ch, String(j - i));      // always writes the count -- bug
+    i = j;
+  }
+  return parts.join('');
+}
+
+console.log(broken('abc'));       // 'a1b1c1'  -- longer than the input
+console.log(broken('aabbbcc'));   // 'a2b3c2'  -- fine
+
+// Beyond being the wrong answer, this breaks the in-place version's
+// safety proof: the output can now be twice the input, so the write
+// pointer WOULD overtake the read pointer.</code></pre>
+  </div>
+
+  <h3>4. Returning the array instead of the length</h3>
+
+  <p>The in-place signature returns a number. The caller reads only the first <code>k</code> slots
+  and ignores the rest &mdash; which still contain leftover characters. Returning
+  <code>chars</code> or <code>chars.join('')</code> misreads the contract.</p>
+
+  <h3>5. Comparing with the next character instead of tracking the run</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; look-ahead off the end</span></div>
+<pre><code>function broken(s) {
+  let out = '', n = 1;
+  for (let i = 0; i &lt; s.length; i++) {
+    if (s[i] === s[i + 1]) {          // s[length] is undefined -- fine
+      n++;
+    } else {
+      out += s[i] + (n &gt; 1 ? n : '');
+      n = 1;
+    }
+  }
+  return out;
+}
+
+console.log(broken('aabbbcc'));   // 'a2b3c2'   correct
+console.log(broken('abc'));       // 'abc'      correct
+console.log(broken(''));          // ''         correct
+
+// This one actually WORKS -- s[i+1] being undefined at the end
+// conveniently forces the final flush. It is fine, but it relies on
+// out-of-range indexing returning undefined rather than throwing.
+// That is true in JavaScript and NOT true in most other languages,
+// so it is a habit that does not travel. Prefer tracking the run.</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the in-place version from memory</strong>, then test it on twelve identical
+    characters. If it returns 2 instead of 3, you have the single-digit bug.</li>
+    <li><strong>Write the decompressor.</strong> It is in Step 7 &mdash; cover it and rewrite it,
+    paying attention to reading <em>all</em> the digits.</li>
+    <li><strong>Only compress if it helps.</strong> Return the original string when the compressed
+    form is not shorter. (With the count-of-1 omitted it never is longer, but the
+    always-write-the-count variant needs this check.)</li>
+    <li><strong>Case-insensitive runs.</strong> <code>"aAaBb"</code> becomes <code>"a3b2"</code>.
+    One comparison changes.</li>
+    <li><strong>Encode and decode a list of strings.</strong> The real version of this problem:
+    join a list into one string so it can be split back unambiguously, even when the strings contain
+    the separator. Hint: prefix each string with its length. It is the same
+    &ldquo;count then payload&rdquo; idea, and it is how real network protocols do it.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p>Two things. The <strong>read/write pointer pair</strong> is now the third time you have seen it
+    &mdash; Move Zeroes, in-place filtering, and here. And the <strong>one-past-the-end loop</strong>
+    is a small trick worth keeping: when you are grouping consecutive items and need to flush the
+    final group, running one step beyond the array removes the duplicated flush code and the bug that
+    comes with forgetting it.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="05-valid-parentheses.html">&larr; Valid Parentheses</a>
+  <a href="07-longest-common-prefix.html">Next: Longest Common Prefix &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

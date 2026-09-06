@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Combination Sum</title>
+<meta name="description" content="Reuse allowed, so do not advance the index — and pruning turns an exponential search into a small one.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Recursion &middot; Problem 03</p>
+  <h1>Combination Sum</h1>
+  <p class="standfirst">The same skeleton again, with one deliberate change: you may reuse a number
+  as many times as you like &mdash; so <strong>recurse with <code>i</code>, not
+  <code>i + 1</code></strong>. And this is the first page where pruning is not an optimisation but a
+  necessity.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Given an array of <strong>distinct positive</strong> integers and a target, find every
+  combination that sums to the target. <strong>Each number may be used unlimited times.</strong>
+  Two combinations are different only if their multiset of numbers differs &mdash; so
+  <code>[2,3]</code> and <code>[3,2]</code> are the same answer and must appear once.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Candidates</th><th>Target</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[2,3,6,7]</td><td class="mono">7</td><td class="mono">[[2,2,3], [7]]</td></tr>
+        <tr><td class="mono">[2,3,5]</td><td class="mono">8</td><td class="mono">[[2,2,2,2], [2,3,3], [3,5]]</td></tr>
+        <tr><td class="mono">[2]</td><td class="mono">1</td><td class="mono">[]</td></tr>
+        <tr><td class="mono">[3,5]</td><td class="mono">8</td><td class="mono">[[3,5]]</td></tr>
+        <tr><td class="mono">[1]</td><td class="mono">3</td><td class="mono">[[1,1,1]]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">The two rules that shape the code</span>
+    <p><strong>Reuse allowed</strong> &rarr; when you recurse, stay at the same index. Otherwise
+    <code>[2,2,3]</code> is impossible.</p>
+    <p><strong>Order does not matter</strong> &rarr; but you must not produce both
+    <code>[2,3]</code> and <code>[3,2]</code>. The fix is to never go <em>backwards</em>: from index
+    <code>i</code> you may pick <code>i</code> again or anything after it, never anything before.
+    That forces every combination into non-decreasing order, and each one is generated exactly once.</p>
+  </div>
+
+  <p>Note also that all candidates are <strong>positive</strong>. That is what makes pruning possible
+  &mdash; the running sum only ever grows, so overshooting the target means the branch is dead. With
+  zeros or negatives allowed, the search would not even terminate.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; and watch it go wrong</h2>
+
+  <p>The obvious first attempt is the Subsets skeleton with a sum check. Two things break.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0a &mdash; the Subsets skeleton, unchanged</span></div>
+<pre><code>function noReuse(candidates, target) {
+  const out = [], path = [];
+
+  function go(start, sum) {
+    if (sum === target) { out.push([...path]); return; }
+    if (sum &gt; target) return;
+
+    for (let i = start; i &lt; candidates.length; i++) {
+      path.push(candidates[i]);
+      go(i + 1, sum + candidates[i]);      // i + 1 -- no reuse
+      path.pop();
+    }
+  }
+
+  go(0, 0);
+  return out;
+}
+
+console.log(JSON.stringify(noReuse([2,3,6,7], 7)));   // [[7]]
+// missing [2,2,3], because i + 1 forbids using 2 twice
+
+console.log(JSON.stringify(noReuse([1], 3)));         // []
+// missing [1,1,1] entirely
+
+console.log(JSON.stringify(noReuse([2,3,5], 8)));     // [[3,5]]
+// missing [2,2,2,2] and [2,3,3]</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0b &mdash; allow reuse, but start from 0 every time</span></div>
+<pre><code>function duplicates(candidates, target) {
+  const out = [], path = [];
+
+  function go(sum) {
+    if (sum === target) { out.push([...path]); return; }
+    if (sum &gt; target) return;
+
+    for (let i = 0; i &lt; candidates.length; i++) {   // always from 0 -- bug
+      path.push(candidates[i]);
+      go(sum + candidates[i]);
+      path.pop();
+    }
+  }
+
+  go(0);
+  return out;
+}
+
+console.log(JSON.stringify(duplicates([2,3,6,7], 7)));
+// [[2,2,3],[2,3,2],[3,2,2],[7]]  -- the same combination three times
+
+console.log(JSON.stringify(duplicates([2,3], 6)));
+// [[2,2,2],[3,3]]  -- correct here, by luck
+
+console.log('');
+console.log('count for [2,3,5] target 8:', duplicates([2,3,5], 8).length);
+// 6, but there are only 3 distinct combinations</code></pre>
+  </div>
+
+  <p>Reuse without the &ldquo;never go backwards&rdquo; rule generates every <em>ordering</em> of
+  every combination. The fix is a single character.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why pruning is not optional here</h2>
+
+  <p>With reuse allowed, the search tree has no natural depth limit &mdash; only the target stops it.
+  Without pruning, the recursion explores every path until the sum exceeds the target, and the
+  branching factor is the full candidate list at every level.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; sorted plus break, versus neither</span></div>
+<pre><code>const candidates = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29];
+const TARGET = 40;
+
+let noPruneNodes = 0;
+function noPrune(cands, target) {
+  const out = [], path = [];
+  function go(start, sum) {
+    noPruneNodes++;
+    if (sum === target) { out.push([...path]); return; }
+    if (sum &gt; target) return;                // the only check
+    for (let i = start; i &lt; cands.length; i++) {
+      path.push(cands[i]);
+      go(i, sum + cands[i]);
+      path.pop();
+    }
+  }
+  go(0, 0);
+  return out;
+}
+
+let prunedNodes = 0;
+function pruned(cands, target) {
+  const sorted = [...cands].sort((a, b) =&gt; a - b);   // ascending
+  const out = [], path = [];
+  function go(start, remaining) {
+    prunedNodes++;
+    if (remaining === 0) { out.push([...path]); return; }
+    for (let i = start; i &lt; sorted.length; i++) {
+      // sorted, so once one candidate is too big, all the rest are
+      if (sorted[i] &gt; remaining) break;
+      path.push(sorted[i]);
+      go(i, remaining - sorted[i]);
+      path.pop();
+    }
+  }
+  go(0, target);
+  return out;
+}
+
+let t = performance.now();
+const a = noPrune(candidates, TARGET);
+const noPruneMs = performance.now() - t;
+
+t = performance.now();
+const b = pruned(candidates, TARGET);
+const prunedMs = performance.now() - t;
+
+console.log('no pruning : ' + a.length + ' answers, ' +
+            noPruneNodes.toLocaleString('en-US') + ' nodes visited, ' +
+            noPruneMs.toFixed(1) + ' ms');
+console.log('with break : ' + b.length + ' answers, ' +
+            prunedNodes.toLocaleString('en-US') + ' nodes visited, ' +
+            prunedMs.toFixed(1) + ' ms');
+console.log('same count:', a.length === b.length);
+console.log('nodes saved:', ((1 - prunedNodes / noPruneNodes) * 100).toFixed(1) + '%');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; three small decisions</h2>
+
+  <div class="note key">
+    <span class="t">The unlock &mdash; recurse with <code>i</code></span>
+    <p><code>go(i, ...)</code> instead of <code>go(i + 1, ...)</code>. That single character says
+    &ldquo;you may pick this same number again&rdquo;, while still forbidding anything
+    <em>earlier</em> &mdash; which is what keeps each combination unique.</p>
+  </div>
+
+  <p>Then two pruning decisions, and both are worth understanding rather than copying.</p>
+
+  <h3>Prune one: sort, then <code>break</code></h3>
+
+  <p>Sort the candidates ascending. Now inside the loop, if <code>candidates[i] &gt; remaining</code>,
+  every candidate after <code>i</code> is also too big &mdash; so <code>break</code> out of the whole
+  loop rather than <code>continue</code> to the next one.</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">break, not continue</span></div>
+<pre><code>for (let i = start; i &lt; sorted.length; i++) {
+  if (sorted[i] &gt; remaining) break;    // sorted -> the rest are worse too
+  ...
+}
+
+// Unsorted, you would have to write `continue` and check every
+// candidate. Sorting turns "skip this one" into "abandon the rest".</code></pre>
+  </div>
+
+  <h3>Prune two: count down, not up</h3>
+
+  <p>Carry <code>remaining = target - sumSoFar</code> instead of the running sum. The base case
+  becomes <code>remaining === 0</code>, and the overshoot check becomes part of the
+  <code>break</code>. One variable, two jobs, and no separate <code>sum &gt; target</code> test.</p>
+
+  <div class="trace">
+<pre>  candidates sorted: [2, 3, 6, 7]      target 7
+
+  go(0, remaining=7)
+    i=0  take 2   go(0, 5)          <- index STAYS at 0, reuse allowed
+           i=0  take 2   go(0, 3)
+                  i=0  take 2   go(0, 1)
+                         i=0  2 > 1  ->  BREAK
+                  i=1  take 3   go(1, 0)   ->  remaining 0, RECORD [2,2,3]
+                  i=2  6 > 3  ->  BREAK
+           i=1  take 3   go(1, 2)
+                  i=1  3 > 2  ->  BREAK
+           i=2  6 > 5  ->  BREAK
+    i=1  take 3   go(1, 4)
+           i=1  take 3   go(1, 1)
+                  i=1  3 > 1  ->  BREAK
+           i=2  6 > 4  ->  BREAK
+    i=2  take 6   go(2, 1)
+           i=2  6 > 1  ->  BREAK
+    i=3  take 7   go(3, 0)   ->  RECORD [7]
+
+  answer: [[2,2,3], [7]]
+</pre>
+  </div>
+
+  <p>Notice how often <code>BREAK</code> appears. Without sorting and breaking, every one of those
+  would have been a full loop over the remaining candidates.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p>The trace above is the full run for <code>[2,3,6,7]</code> with target 7. Here is the same thing
+  produced by the code, so you can check it line for line.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function combinationSumExplained(candidates, target) {
+  const sorted = [...candidates].sort((a, b) =&gt; a - b);
+  const out = [];
+  const path = [];
+
+  console.log('sorted candidates:', sorted, '  target:', target);
+  console.log('');
+
+  function go(start, remaining, depth) {
+    const pad = '  '.repeat(depth);
+
+    if (remaining === 0) {
+      out.push([...path]);
+      console.log(pad + 'remaining 0  ->  RECORD [' + path.join(',') + ']');
+      return;
+    }
+
+    for (let i = start; i &lt; sorted.length; i++) {
+      if (sorted[i] &gt; remaining) {
+        console.log(pad + sorted[i] + ' &gt; remaining ' + remaining +
+                    '  ->  BREAK (everything after is bigger)');
+        break;
+      }
+
+      path.push(sorted[i]);
+      console.log(pad + 'take ' + sorted[i] + '   path=[' + path.join(',') +
+                  ']   remaining ' + remaining + ' -> ' + (remaining - sorted[i]));
+
+      go(i, remaining - sorted[i], depth + 1);   // i, NOT i + 1
+
+      path.pop();
+    }
+  }
+
+  go(0, target, 0);
+  console.log('');
+  return out;
+}
+
+console.log('ANSWER:', JSON.stringify(combinationSumExplained([2,3,6,7], 7)));
+console.log('==========================================');
+console.log('ANSWER:', JSON.stringify(combinationSumExplained([2,3,5], 8)));</code></pre>
+  </div>
+
+  <p>Read the <code>path</code> column and the <code>remaining</code> column together. The path grows
+  and shrinks exactly as in Subsets; the only new thing is that <code>remaining</code> is the
+  <em>budget</em>, and a branch dies when nothing affordable is left.</p>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; loops only, hand-written sort</span></div>
+<pre><code>function combinationSumManual(candidates, target) {
+  // copy and insertion-sort ascending, so we can break early
+  const sorted = [];
+  for (let i = 0; i &lt; candidates.length; i++) sorted[i] = candidates[i];
+  for (let i = 1; i &lt; sorted.length; i++) {
+    const v = sorted[i];
+    let j = i - 1;
+    while (j &gt;= 0 &amp;&amp; sorted[j] &gt; v) { sorted[j + 1] = sorted[j]; j = j - 1; }
+    sorted[j + 1] = v;
+  }
+
+  const out = [];
+  let outCount = 0;
+
+  const path = [];
+  let pathLength = 0;
+
+  function go(start, remaining) {
+    if (remaining === 0) {
+      const copy = [];
+      for (let i = 0; i &lt; pathLength; i++) copy[i] = path[i];
+      out[outCount] = copy;
+      outCount = outCount + 1;
+      return;
+    }
+
+    for (let i = start; i &lt; sorted.length; i++) {
+      // sorted ascending, so the rest are all too big as well
+      if (sorted[i] &gt; remaining) break;
+
+      path[pathLength] = sorted[i];       // choose
+      pathLength = pathLength + 1;
+
+      go(i, remaining - sorted[i]);       // explore -- i, so reuse is allowed
+
+      pathLength = pathLength - 1;        // un-choose
+    }
+  }
+
+  go(0, target);
+  return out;
+}
+
+console.log(JSON.stringify(combinationSumManual([2,3,6,7], 7)));   // [[2,2,3],[7]]
+console.log(JSON.stringify(combinationSumManual([2,3,5], 8)));     // [[2,2,2,2],[2,3,3],[3,5]]
+console.log(JSON.stringify(combinationSumManual([2], 1)));         // []
+console.log(JSON.stringify(combinationSumManual([1], 3)));         // [[1,1,1]]
+console.log(JSON.stringify(combinationSumManual([7,3,2], 7)));     // unsorted input, still fine
+console.log(JSON.stringify(combinationSumManual([8,7,4,3], 11)));  // [[3,4,4],[3,8],[4,7]]
+console.log(JSON.stringify(combinationSumManual([], 5)));           // []
+console.log(JSON.stringify(combinationSumManual([5], 5)));          // [[5]]</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">counting the answers without listing them</span></div>
+<pre><code>// If you only need the COUNT, this is a dynamic-programming problem
+// and the exponential search disappears entirely.
+function countCombinations(candidates, target) {
+  // ways[t] = how many combinations sum to t
+  const ways = new Array(target + 1).fill(0);
+  ways[0] = 1;                       // one way to make 0: take nothing
+
+  // the OUTER loop over candidates is what makes order not matter
+  for (const c of candidates) {
+    for (let t = c; t &lt;= target; t++) {
+      ways[t] += ways[t - c];
+    }
+  }
+
+  return ways[target];
+}
+
+function listCombinations(candidates, target) {
+  const sorted = [...candidates].sort((a, b) =&gt; a - b);
+  const out = [], path = [];
+  (function go(start, remaining) {
+    if (remaining === 0) { out.push([...path]); return; }
+    for (let i = start; i &lt; sorted.length; i++) {
+      if (sorted[i] &gt; remaining) break;
+      path.push(sorted[i]);
+      go(i, remaining - sorted[i]);
+      path.pop();
+    }
+  })(0, target);
+  return out;
+}
+
+console.log('count  [2,3,6,7] -> 7 :', countCombinations([2,3,6,7], 7));
+console.log('listed                :', listCombinations([2,3,6,7], 7).length);
+console.log('count  [2,3,5] -> 8   :', countCombinations([2,3,5], 8));
+console.log('listed                :', listCombinations([2,3,5], 8).length);
+
+// And the case where listing is impossible but counting is instant:
+const big = [1,2,3,4,5,6,7,8,9,10];
+const t0 = performance.now();
+const n = countCombinations(big, 200);
+console.log('');
+console.log('combinations of 1..10 summing to 200: ' +
+            n.toLocaleString('en-US') + '  (counted in ' +
+            (performance.now() - t0).toFixed(1) + ' ms)');
+console.log('Listing them all would take longer than this universe has left.');
+
+// Note: swap the two loops and you count PERMUTATIONS instead of
+// combinations -- the outer-loop-over-candidates ordering is what
+// makes [2,3] and [3,2] the same answer.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function combinationSum(candidates, target) {
+  const sorted = [...candidates].sort((a, b) =&gt; a - b);
+  const out = [];
+  const path = [];
+
+  function backtrack(start, remaining) {
+    if (remaining === 0) {
+      out.push([...path]);
+      return;
+    }
+
+    for (let i = start; i &lt; sorted.length; i++) {
+      if (sorted[i] &gt; remaining) break;      // sorted -> prune the rest
+
+      path.push(sorted[i]);                  // choose
+      backtrack(i, remaining - sorted[i]);   // explore -- i allows reuse
+      path.pop();                            // un-choose
+    }
+  }
+
+  backtrack(0, target);
+  return out;
+}
+
+console.log(JSON.stringify(combinationSum([2,3,6,7], 7)));
+console.log(JSON.stringify(combinationSum([2,3,5], 8)));
+console.log(JSON.stringify(combinationSum([2], 1)));
+console.log(JSON.stringify(combinationSum([1], 3)));</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the family &mdash; three variants, three small changes</span></div>
+<pre><code>// Combination Sum II: each candidate may be used ONCE, and the
+// input may contain duplicates.
+//   changes:  go(i + 1, ...)   and   skip equal siblings
+function combinationSum2(candidates, target) {
+  const sorted = [...candidates].sort((a, b) =&gt; a - b);
+  const out = [], path = [];
+
+  function go(start, remaining) {
+    if (remaining === 0) { out.push([...path]); return; }
+
+    for (let i = start; i &lt; sorted.length; i++) {
+      if (sorted[i] &gt; remaining) break;
+      // skip a duplicate value as a CHOICE AT THIS LEVEL
+      if (i &gt; start &amp;&amp; sorted[i] === sorted[i - 1]) continue;
+
+      path.push(sorted[i]);
+      go(i + 1, remaining - sorted[i]);      // i + 1: no reuse
+      path.pop();
+    }
+  }
+
+  go(0, target);
+  return out;
+}
+
+console.log('sum II [10,1,2,7,6,1,5] -> 8:');
+console.log(JSON.stringify(combinationSum2([10,1,2,7,6,1,5], 8)));
+// [[1,1,6],[1,2,5],[1,7],[2,6]]
+console.log('sum II [2,5,2,1,2] -> 5:');
+console.log(JSON.stringify(combinationSum2([2,5,2,1,2], 5)));
+// [[1,2,2],[5]]
+
+// Combination Sum III: exactly k numbers, all from 1..9, each once.
+//   changes:  a fixed candidate pool, and a length check
+function combinationSum3(k, target) {
+  const out = [], path = [];
+
+  function go(start, remaining) {
+    if (path.length === k) {
+      if (remaining === 0) out.push([...path]);
+      return;
+    }
+    for (let n = start; n &lt;= 9; n++) {
+      if (n &gt; remaining) break;
+      // prune: not enough numbers left to reach k
+      if (path.length + (9 - n + 1) &lt; k) break;
+      path.push(n);
+      go(n + 1, remaining - n);
+      path.pop();
+    }
+  }
+
+  go(1, target);
+  return out;
+}
+
+console.log('');
+console.log('sum III k=3 target=7:', JSON.stringify(combinationSum3(3, 7)));
+// [[1,2,4]]
+console.log('sum III k=3 target=9:', JSON.stringify(combinationSum3(3, 9)));
+// [[1,2,6],[1,3,5],[2,3,4]]
+console.log('sum III k=4 target=1:', JSON.stringify(combinationSum3(4, 1)));
+// []
+
+// Combination Sum IV: COUNT the permutations (order matters).
+//   changes:  it is not backtracking at all -- it is one-line DP
+function combinationSum4(nums, target) {
+  const ways = new Array(target + 1).fill(0);
+  ways[0] = 1;
+  // target OUTSIDE, candidates INSIDE -> order matters
+  for (let t = 1; t &lt;= target; t++) {
+    for (const n of nums) {
+      if (n &lt;= t) ways[t] += ways[t - n];
+    }
+  }
+  return ways[target];
+}
+
+console.log('');
+console.log('sum IV [1,2,3] -> 4:', combinationSum4([1,2,3], 4));   // 7
+console.log('  (1111, 112, 121, 211, 13, 31, 22)');
+console.log('sum IV [9] -> 3:', combinationSum4([9], 3));            // 0</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The loop order decides combinations versus permutations</span>
+    <p>In the counting DP, <strong>candidates outside, target inside</strong> counts combinations
+    ([2,3] once). <strong>Target outside, candidates inside</strong> counts permutations ([2,3] and
+    [3,2] separately). Two nested loops, swap them, completely different answer &mdash; and it is one
+    of the most commonly confused details in dynamic programming.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Backtracking, no pruning</td><td class="mono">exponential, much worse</td><td class="mono">O(target)</td></tr>
+        <tr><td><strong>Backtracking, sorted + break</strong></td><td class="mono">O(n<sup>target/min</sup>) worst case</td><td class="mono">O(target/min)</td></tr>
+        <tr><td>Counting with DP</td><td class="mono">O(n &middot; target)</td><td class="mono">O(target)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The exponent is honest but ugly, and it is worth explaining rather than reciting. The deepest a
+  path can go is <code>target / smallestCandidate</code> &mdash; with candidates
+  <code>[2,3,6,7]</code> and target 7, at most 3 levels (three 2s would already be 6). At each level
+  the branching factor is at most <code>n</code>. So the tree is bounded by
+  <code>n<sup>target/min</sup></code>.</p>
+
+  <p>Space is O(target / min) for the path and the recursion stack &mdash; the depth, not the number
+  of answers. The output itself can of course be large.</p>
+
+  <p>The last row is the important contrast: if you only need <strong>how many</strong>, the problem
+  stops being exponential entirely. Enumerating is expensive; counting is cheap. That gap is worth
+  spotting in any problem statement.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Same backtracking skeleton as Subsets, with one change: I recurse with <code>i</code>
+    rather than <code>i + 1</code>, so a candidate can be reused &mdash; while still never going
+    backwards, which is what keeps each combination unique instead of generating all its orderings.
+    I sort the candidates ascending and carry the remaining target, so when a candidate exceeds it I
+    can <code>break</code> rather than <code>continue</code>: everything after it is bigger. Depth is
+    bounded by target over the smallest candidate, so it is O(n<sup>target/min</sup>) worst case with
+    O(depth) space. If the question only wants a count, it is a linear DP instead.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Recursing with <code>i + 1</code> when reuse is allowed</h3>
+
+  <p>Step 2, Version 0a. It silently returns a subset of the correct answers &mdash;
+  <code>[[7]]</code> instead of <code>[[2,2,3],[7]]</code>. The tell is that no answer ever contains
+  a repeated value.</p>
+
+  <h3>2. Starting the loop at 0 instead of <code>start</code></h3>
+
+  <p>Step 2, Version 0b. Now you get every ordering of every combination:
+  <code>[2,2,3]</code>, <code>[2,3,2]</code>, <code>[3,2,2]</code>. The tell is that the answer count
+  is far too high and contains the same multiset repeatedly.</p>
+
+  <h3>3. <code>continue</code> where <code>break</code> belongs</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct, and does far more work</span></div>
+<pre><code>const candidates = [2,3,5,7,11,13,17,19,23,29];
+const TARGET = 40;
+
+let breakTests = 0;
+function withBreak(cands, target) {
+  const sorted = [...cands].sort((a, b) =&gt; a - b);
+  const out = [], path = [];
+  (function go(start, remaining) {
+    if (remaining === 0) { out.push([...path]); return; }
+    for (let i = start; i &lt; sorted.length; i++) {
+      breakTests++;                              // one candidate examined
+      if (sorted[i] &gt; remaining) break;
+      path.push(sorted[i]); go(i, remaining - sorted[i]); path.pop();
+    }
+  })(0, target);
+  return out;
+}
+
+let continueTests = 0;
+function withContinue(cands, target) {
+  const sorted = [...cands].sort((a, b) =&gt; a - b);
+  const out = [], path = [];
+  (function go(start, remaining) {
+    if (remaining === 0) { out.push([...path]); return; }
+    for (let i = start; i &lt; sorted.length; i++) {
+      continueTests++;
+      if (sorted[i] &gt; remaining) continue;      // examines every one
+      path.push(sorted[i]); go(i, remaining - sorted[i]); path.pop();
+    }
+  })(0, target);
+  return out;
+}
+
+const a = withBreak(candidates, TARGET);
+const b = withContinue(candidates, TARGET);
+
+console.log('with break    :', a.length, 'answers,', breakTests, 'candidates examined');
+console.log('with continue :', b.length, 'answers,', continueTests, 'candidates examined');
+console.log('same answers:', a.length === b.length);
+console.log('ratio:', (continueTests / breakTests).toFixed(1) + 'x more work');
+console.log('');
+console.log('Identical results, and the same number of recursive');
+console.log('calls -- the extra work is all inside the loops. With');
+console.log('`continue` every node walks the whole remaining');
+console.log('candidate list; with `break` it stops at the first');
+console.log('unaffordable one. If you did NOT sort, `continue` is');
+console.log('required for correctness -- so the two decisions');
+console.log('travel together.');</code></pre>
+  </div>
+
+  <h3>4. Forgetting that the candidates might be unsorted</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; breaks on unsorted input</span></div>
+<pre><code>function broken(candidates, target) {
+  const out = [], path = [];
+  // no sort -- bug
+  function go(start, remaining) {
+    if (remaining === 0) { out.push([...path]); return; }
+    for (let i = start; i &lt; candidates.length; i++) {
+      if (candidates[i] &gt; remaining) break;      // break needs sorted input
+      path.push(candidates[i]);
+      go(i, remaining - candidates[i]);
+      path.pop();
+    }
+  }
+  go(0, target);
+  return out;
+}
+
+console.log('sorted   [2,3,6,7] -> 7:', JSON.stringify(broken([2,3,6,7], 7)));
+// [[2,2,3],[7]]   correct -- sorted input, so break is safe
+
+console.log('unsorted [5,2] -> 4    :', JSON.stringify(broken([5,2], 4)));
+// []   WRONG -- should be [[2,2]].
+// 5 > 4 at index 0, so break fires immediately and the 2 is
+// never even looked at.
+
+console.log('unsorted [2,6,3] -> 5  :', JSON.stringify(broken([2,6,3], 5)));
+// []   WRONG -- should be [[2,3]].
+// After taking 2 (remaining 3) the loop reaches 6, breaks, and
+// never reaches the 3 sitting right behind it.
+
+console.log('unsorted [7,2,3,6] -> 7:', JSON.stringify(broken([7,2,3,6], 7)));
+// [[7],[2,2,3]]   correct answers, wrong ORDER -- the big value
+// first happens to be affordable, so nothing is lost here. The
+// bug is input-dependent, which is exactly what makes it nasty.
+
+// `break` is only valid on a sorted list. Either sort first, or use
+// `continue`. Doing neither is the bug.</code></pre>
+  </div>
+
+  <h3>5. Allowing zero or negative candidates</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; a zero never terminates</span></div>
+<pre><code>function combinationSum(candidates, target) {
+  const sorted = [...candidates].sort((a, b) =&gt; a - b);
+  const out = [], path = [];
+  let guard = 0;
+
+  function go(start, remaining) {
+    if (++guard &gt; 200000) throw new Error('runaway recursion');
+    if (remaining === 0) { out.push([...path]); return; }
+    for (let i = start; i &lt; sorted.length; i++) {
+      if (sorted[i] &gt; remaining) break;
+      path.push(sorted[i]);
+      go(i, remaining - sorted[i]);
+      path.pop();
+    }
+  }
+
+  try {
+    go(0, target);
+    return out.length + ' answers';
+  } catch (err) {
+    return 'FAILED: ' + err.message;
+  }
+}
+
+console.log('positives only [2,3] -> 6 :', combinationSum([2,3], 6));
+console.log('with a zero    [0,2] -> 6 :', combinationSum([0,2], 6));
+
+// A candidate of 0 leaves `remaining` unchanged, and since we
+// recurse with `i` we can take it forever. Negatives are worse --
+// they increase the budget.
+// The problem guarantees positive candidates precisely so the
+// search terminates. If it did not, you would need a depth cap or
+// a completely different approach.</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the version from memory</strong>, then say out loud why the recursion uses
+    <code>i</code> and why the loop still starts at <code>start</code>. Those are two different
+    decisions doing two different jobs.</li>
+    <li><strong>Combination Sum II.</strong> In Step 7 &mdash; single use plus duplicate inputs.
+    It needs both <code>i + 1</code> and the <code>i &gt; start</code> skip.</li>
+    <li><strong>Combination Sum III.</strong> Also in Step 7 &mdash; exactly k numbers from 1 to 9.
+    Note the second pruning condition on how many numbers remain.</li>
+    <li><strong>Coin change: fewest coins for a target.</strong> The same candidates-with-reuse
+    structure, but you want the <em>best</em> answer rather than all of them &mdash; which makes it a
+    DP problem. Try backtracking first, watch it be too slow, then do the DP.</li>
+    <li><strong>Write the counting DP from memory</strong> and demonstrate the loop-order difference
+    between combinations and permutations. It is a genuinely common interview follow-up.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Sort first so you can <code>break</code> instead of <code>continue</code>.</strong>
+    That is the general shape of pruning: arrange the choices so that the first failure proves all the
+    later ones fail too. And keep the second lesson in view &mdash; <em>enumerating is exponential,
+    counting often is not</em>. Before you write a backtracking solution, check whether the question
+    actually asked for the list.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="02-permutations.html">&larr; Permutations</a>
+  <a href="04-generate-parentheses.html">Next: Generate Parentheses &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

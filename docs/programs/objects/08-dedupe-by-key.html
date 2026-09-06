@@ -1,0 +1,1202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Remove Duplicates by Object Key</title>
+<meta name="description" content="Map beats filter+findIndex — and first-wins versus last-wins is a decision, not a detail.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Object &amp; data shaping &middot; Problem 08</p>
+  <h1>Remove Duplicates by Object Key</h1>
+  <p class="standfirst">Three lines with a <code>Map</code>, and the version everyone writes instead
+  &mdash; <code>filter</code> plus <code>findIndex</code> &mdash; is quadratic. The interesting
+  question underneath is one nobody asks explicitly: when two rows collide,
+  <strong>which one wins?</strong></p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; three lines, and the two policies</span></div>
+<pre><code>// LAST wins: a later row overwrites an earlier one
+const dedupeLast = (items, keyOf) =&gt;
+  [...new Map(items.map((item) =&gt; [keyOf(item), item])).values()];
+
+// FIRST wins: keep the earliest, ignore later collisions
+const dedupeFirst = (items, keyOf) =&gt; {
+  const seen = new Map();
+  for (const item of items) {
+    const key = keyOf(item);
+    if (!seen.has(key)) seen.set(key, item);
+  }
+  return [...seen.values()];
+};
+
+const rows = [
+  { id: 1, name: 'Ada', updated: '2024-01-01' },
+  { id: 2, name: 'Grace', updated: '2024-01-02' },
+  { id: 1, name: 'Ada Lovelace', updated: '2024-06-01' },   // same id, newer
+  { id: 3, name: 'Alan', updated: '2024-01-03' },
+  { id: 2, name: 'Grace H.', updated: '2024-05-01' },
+];
+
+console.log('input   :', rows.map((r) =&gt; '#' + r.id + ' ' + r.name).join(' | '));
+console.log('');
+console.log('last wins :', dedupeLast(rows, (r) =&gt; r.id)
+  .map((r) =&gt; '#' + r.id + ' ' + r.name).join(' | '));
+console.log('first wins:', dedupeFirst(rows, (r) =&gt; r.id)
+  .map((r) =&gt; '#' + r.id + ' ' + r.name).join(' | '));
+
+console.log('');
+console.log('Same three rows, different DATA. Which is right depends');
+console.log('entirely on where the duplicates came from:');
+console.log('  a paginated feed with overlap -> first wins, the');
+console.log('    earlier page is authoritative;');
+console.log('  a change log or event stream  -> last wins, the newer');
+console.log('    row is the current state;');
+console.log('  two merged sources            -> neither; you probably');
+console.log('    want to MERGE the pair, or pick by a timestamp.');
+
+console.log('');
+console.log('Note the Map preserves INSERTION order in both cases:');
+console.log('  last wins keeps the position of the FIRST occurrence,');
+console.log('  with the value of the LAST. That surprises people:');
+console.log(' ', dedupeLast(rows, (r) =&gt; r.id).map((r) =&gt; r.id).join(', '),
+            '-- not 3, 1, 2');</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why <code>new Map(pairs)</code> works</span>
+    <p><code>new Map([[k, v], ...])</code> takes an iterable of pairs, and a later pair with the same
+    key <strong>overwrites</strong> the earlier one &mdash; while keeping the earlier one's position in
+    the iteration order.</p>
+    <p>So <code>[...new Map(items.map(item =&gt; [key(item), item])).values()]</code> is a complete
+    last-wins dedupe in one expression, and it is O(n).</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the version everyone writes</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0a &mdash; filter plus findIndex</span></div>
+<pre><code>let comparisons = 0;
+
+// the classic one-liner from every answer on the internet
+const dedupeFindIndex = (items, key) =&gt;
+  items.filter((item, index) =&gt;
+    index === items.findIndex((other) =&gt; {
+      comparisons++;
+      return other[key] === item[key];
+    }));
+
+// and the Set-of-keys version, which is O(n)
+const dedupeSet = (items, key) =&gt; {
+  let ops = 0;
+  const seen = new Set();
+  const out = [];
+  for (const item of items) {
+    ops++;
+    if (!seen.has(item[key])) { seen.add(item[key]); out.push(item); }
+  }
+  return { out, ops };
+};
+
+const makeRows = (n) =&gt; Array.from({ length: n }, (_, i) =&gt;
+  ({ id: i % Math.ceil(n / 2), i }));
+
+for (const n of [100, 1000, 4000]) {
+  const rows = makeRows(n);
+
+  comparisons = 0;
+  let t = performance.now();
+  const a = dedupeFindIndex(rows, 'id');
+  const findMs = performance.now() - t;
+
+  t = performance.now();
+  const b = dedupeSet(rows, 'id');
+  const setMs = performance.now() - t;
+
+  console.log(String(n).padStart(5) + ' rows -> ' + a.length + ' unique');
+  console.log('   findIndex: ' + String(comparisons.toLocaleString('en-US')).padStart(12) +
+              ' comparisons, ' + findMs.toFixed(1) + ' ms');
+  console.log('   Set      : ' + String(b.ops.toLocaleString('en-US')).padStart(12) +
+              ' operations,  ' + setMs.toFixed(2) + ' ms');
+  console.log('   same result:', JSON.stringify(a) === JSON.stringify(b.out));
+  console.log('');
+}
+
+console.log('findIndex runs a fresh linear scan for EVERY element, so');
+console.log('it is O(n^2). And it does so even when the answer is');
+console.log('already known -- findIndex on element 3,999 still starts');
+console.log('from index 0.');
+console.log('');
+console.log('It is genuinely correct, and it is first-wins, and it');
+console.log('reads well. It is just quadratic.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">and the other tempting wrong answers</span></div>
+<pre><code>const rows = [
+  { id: 1, name: 'Ada' },
+  { id: 2, name: 'Grace' },
+  { id: 1, name: 'Ada' },
+  { id: 3, name: 'Alan' },
+];
+
+// 1. new Set(objects) -- identity, not structure
+console.log('1. new Set on the objects:', [...new Set(rows)].length,
+            'of', rows.length);
+console.log('   -- a Set compares by IDENTITY. Two objects with the');
+console.log('      same fields are different objects.');
+const shared = { id: 1, name: 'Ada' };
+console.log('   with the SAME object twice:',
+            [...new Set([shared, shared, { id: 2 }])].length, 'of 3');
+
+// 2. JSON.stringify as the key -- works, and depends on key order
+const byJson = (items) =&gt; {
+  const seen = new Set();
+  const out = [];
+  for (const item of items) {
+    const k = JSON.stringify(item);
+    if (!seen.has(k)) { seen.add(k); out.push(item); }
+  }
+  return out;
+};
+console.log('');
+console.log('2. JSON.stringify as the key:', byJson(rows).length, 'of', rows.length);
+console.log('   -- correct here. But:');
+const keyOrder = [{ a: 1, b: 2 }, { b: 2, a: 1 }];
+console.log('   two objects, same data, different key order ->',
+            byJson(keyOrder).length, 'kept (should be 1)');
+console.log('   and it throws on a cycle, drops undefined, and');
+console.log('   stringifies the WHOLE object on every element.');
+
+// 3. indexOf on the array -- same problem as findIndex
+console.log('');
+console.log('3. indexOf: only works for primitives, and is also O(n^2)');
+console.log('   [1,2,1,3].filter((v,i,a) => a.indexOf(v) === i) ->',
+            JSON.stringify([1, 2, 1, 3].filter((v, i, a) =&gt; a.indexOf(v) === i)));
+console.log('   and it uses ===, so NaN never dedupes:');
+console.log('   [NaN,NaN].filter((v,i,a) => a.indexOf(v) === i) ->',
+            JSON.stringify([NaN, NaN].filter((v, i, a) =&gt; a.indexOf(v) === i)));
+console.log('   a Set does dedupe NaN, because it uses SameValueZero:');
+console.log('   [...new Set([NaN, NaN])] ->', JSON.stringify([...new Set([NaN, NaN])]));
+
+// 4. reduce with a spread -- correct and quadratic in a second way
+console.log('');
+console.log('4. reduce + spread:');
+const bySpread = (items) =&gt; items.reduce((acc, item) =&gt;
+  acc.some((x) =&gt; x.id === item.id) ? acc : [...acc, item], []);
+console.log('   result:', bySpread(rows).length, 'of', rows.length);
+console.log('   -- .some() is a scan AND [...acc] is a copy. Two');
+console.log('      quadratic factors in one line.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it matters at realistic sizes</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; how the gap grows</span></div>
+<pre><code>const dedupeFindIndex = (items, key) =&gt;
+  items.filter((item, i) =&gt; i === items.findIndex((o) =&gt; o[key] === item[key]));
+
+const dedupeMap = (items, key) =&gt; {
+  const seen = new Map();
+  for (const item of items) if (!seen.has(item[key])) seen.set(item[key], item);
+  return [...seen.values()];
+};
+
+const makeRows = (n, uniqueRatio) =&gt; {
+  const unique = Math.max(1, Math.floor(n * uniqueRatio));
+  return Array.from({ length: n }, (_, i) =&gt; ({ id: i % unique, i }));
+};
+
+console.log('rows     findIndex      Map      ratio');
+for (const n of [500, 2000, 8000, 20000]) {
+  const rows = makeRows(n, 0.5);
+
+  let t = performance.now();
+  dedupeFindIndex(rows, 'id');
+  const f = performance.now() - t;
+
+  t = performance.now();
+  dedupeMap(rows, 'id');
+  const m = performance.now() - t;
+
+  console.log(String(n).padStart(6) + '  ' +
+              (f.toFixed(1) + ' ms').padStart(10) + '  ' +
+              (m.toFixed(2) + ' ms').padStart(9) + '  ' +
+              Math.round(f / Math.max(m, 0.001)) + 'x');
+}
+
+console.log('');
+console.log('And the shape of the data changes the picture:');
+console.log('');
+console.log('unique%   findIndex   Map');
+for (const ratio of [0.01, 0.5, 1.0]) {
+  const rows = makeRows(8000, ratio);
+
+  let t = performance.now();
+  dedupeFindIndex(rows, 'id');
+  const f = performance.now() - t;
+
+  t = performance.now();
+  dedupeMap(rows, 'id');
+  const m = performance.now() - t;
+
+  console.log(String(Math.round(ratio * 100)).padStart(6) + '%  ' +
+              (f.toFixed(1) + ' ms').padStart(10) + '  ' +
+              (m.toFixed(2) + ' ms').padStart(8));
+}
+
+console.log('');
+console.log('findIndex is fastest when almost everything is a');
+console.log('duplicate, because the match is found near the front.');
+console.log('When the rows are mostly unique, every findIndex scans');
+console.log('almost the whole array before finding itself -- which is');
+console.log('the common case for a deduplication pass.');
+console.log('');
+console.log('The Map version is flat. It does not care.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; and the three questions</h2>
+
+  <div class="trace">
+<pre>  seen = new Map()
+
+  for each item:
+      key = keyOf(item)
+
+      FIRST WINS:   if not seen.has(key):  seen.set(key, item)
+      LAST WINS:    seen.set(key, item)                 always
+      MERGE:        seen.set(key, combine(seen.get(key), item))
+      BEST:         if better(item, seen.get(key)):  seen.set(key, item)
+
+  return [...seen.values()]
+
+
+  One loop, one hash operation per item. O(n).
+
+  And the iteration ORDER of the result is the position of the
+  first time each key was seen -- because Map.set on an existing
+  key updates the value and leaves the position alone.
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The three questions, in order</span>
+    <p><strong>1. What is the key?</strong> A field, a composite of fields, or a normalised form
+    (lower-cased, trimmed). The Group By page's key traps all apply here too.</p>
+    <p><strong>2. Who wins a collision?</strong> First, last, the newest by timestamp, or a merge of
+    both. There is no safe default &mdash; make it explicit.</p>
+    <p><strong>3. What order comes out?</strong> Insertion order of first appearance, by default.
+    If you need something else, sort afterwards.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the key is usually the real problem</span></div>
+<pre><code>const dedupe = (items, keyOf) =&gt; {
+  const seen = new Map();
+  for (const item of items) {
+    const k = keyOf(item);
+    if (!seen.has(k)) seen.set(k, item);
+  }
+  return [...seen.values()];
+};
+
+// user-submitted email addresses, as they actually arrive
+const signups = [
+  { id: 1, email: 'ada@example.com' },
+  { id: 2, email: 'Ada@Example.com' },
+  { id: 3, email: '  ada@example.com  ' },
+  { id: 4, email: 'grace@example.com' },
+  { id: 5, email: 'ADA@EXAMPLE.COM' },
+];
+
+console.log('raw email as the key   :', dedupe(signups, (r) =&gt; r.email).length,
+            'of', signups.length);
+console.log('normalised             :',
+            dedupe(signups, (r) =&gt; r.email.trim().toLowerCase()).length, 'of',
+            signups.length);
+console.log('');
+console.log('Four of those five are the same person. Normalising the');
+console.log('key is the whole job; the dedupe is trivial once you have');
+console.log('decided what "the same" means.');
+
+// a COMPOSITE key
+const bookings = [
+  { room: 'A', date: '2024-01-01', guest: 'Ada' },
+  { room: 'A', date: '2024-01-02', guest: 'Grace' },
+  { room: 'A', date: '2024-01-01', guest: 'Alan' },     // clash
+  { room: 'B', date: '2024-01-01', guest: 'Edsger' },
+];
+console.log('');
+console.log('composite key room+date:',
+            dedupe(bookings, (b) =&gt; b.room + '|' + b.date).length,
+            'of', bookings.length);
+console.log('  kept:', dedupe(bookings, (b) =&gt; b.room + '|' + b.date)
+  .map((b) =&gt; b.room + '/' + b.date.slice(-2) + '/' + b.guest).join(' '));
+
+console.log('');
+console.log('and the separator problem, again:');
+const risky = [
+  { a: 'x|y', b: 'z' },
+  { a: 'x', b: 'y|z' },
+];
+console.log('  joined with "|" :', dedupe(risky, (r) =&gt; r.a + '|' + r.b).length,
+            'of 2 -- collided');
+console.log('  JSON of the parts:',
+            dedupe(risky, (r) =&gt; JSON.stringify([r.a, r.b])).length, 'of 2 -- correct');
+
+// an OBJECT key needs a Map, and it compares by identity
+const objA = { region: 'eu' }, objB = { region: 'eu' };
+console.log('');
+console.log('object keys:');
+console.log('  two equal-looking region objects:',
+            dedupe([{ r: objA }, { r: objB }], (x) =&gt; x.r).length, 'of 2');
+console.log('  the SAME object twice           :',
+            dedupe([{ r: objA }, { r: objA }], (x) =&gt; x.r).length, 'of 2');
+console.log('  -- identity, not structure. Key on r.region instead.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; first, last and merge side by side</h2>
+
+  <div class="trace">
+<pre>  rows:
+      #1 Ada,   updated Jan
+      #2 Grace, updated Jan
+      #1 Ada L, updated Jun
+      #2 Grace H, updated May
+
+  FIRST WINS                          LAST WINS
+  ----------                          ---------
+  #1 not seen -> set Ada              #1 -> set Ada
+  #2 not seen -> set Grace            #2 -> set Grace
+  #1 SEEN     -> skip                 #1 -> set Ada L      (overwrite)
+  #2 SEEN     -> skip                 #2 -> set Grace H    (overwrite)
+
+  [Ada, Grace]                        [Ada L, Grace H]
+
+  In BOTH cases the output order is #1 then #2, because the
+  positions were fixed on the first insert.
+
+
+  MERGE
+  -----
+  #1 -> set Ada
+  #2 -> set Grace
+  #1 -> set combine(Ada, Ada L)
+  #2 -> set combine(Grace, Grace H)
+
+  combine can be anything: newest-wins per field, sum the
+  amounts, concatenate the tags, keep the first non-null.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the four policies, narrating themselves</span></div>
+<pre><code>function dedupeLoud(items, keyOf, policy, combine) {
+  const seen = new Map();
+
+  for (const item of items) {
+    const key = keyOf(item);
+    const existing = seen.get(key);
+    const had = seen.has(key);
+
+    if (!had) {
+      seen.set(key, item);
+      console.log('  ' + JSON.stringify(key) + ' NEW      -> keep ' + item.name);
+      continue;
+    }
+
+    if (policy === 'first') {
+      console.log('  ' + JSON.stringify(key) + ' seen     -> skip ' + item.name);
+    } else if (policy === 'last') {
+      seen.set(key, item);
+      console.log('  ' + JSON.stringify(key) + ' seen     -> replace ' +
+                  existing.name + ' with ' + item.name);
+    } else if (policy === 'merge') {
+      const merged = combine(existing, item);
+      seen.set(key, merged);
+      console.log('  ' + JSON.stringify(key) + ' seen     -> merge -> ' + merged.name);
+    } else if (policy === 'best') {
+      if (combine(item, existing)) {
+        seen.set(key, item);
+        console.log('  ' + JSON.stringify(key) + ' seen     -> ' + item.name +
+                    ' is better than ' + existing.name);
+      } else {
+        console.log('  ' + JSON.stringify(key) + ' seen     -> keeping ' + existing.name);
+      }
+    }
+  }
+
+  return [...seen.values()];
+}
+
+const rows = [
+  { id: 1, name: 'Ada', updated: '2024-01-01', tags: ['a'] },
+  { id: 2, name: 'Grace', updated: '2024-03-01', tags: ['x'] },
+  { id: 1, name: 'Ada L', updated: '2024-06-01', tags: ['b'] },
+  { id: 2, name: 'Grace H', updated: '2024-02-01', tags: ['y'] },
+];
+const key = (r) =&gt; r.id;
+
+console.log('FIRST wins:');
+console.log('  ->', dedupeLoud(rows, key, 'first').map((r) =&gt; r.name).join(', '));
+
+console.log('');
+console.log('LAST wins:');
+console.log('  ->', dedupeLoud(rows, key, 'last').map((r) =&gt; r.name).join(', '));
+
+console.log('');
+console.log('MERGE (concatenate the tags, keep the newer name):');
+const combine = (a, b) =&gt; ({
+  ...a, ...b,
+  name: a.updated &gt; b.updated ? a.name : b.name,
+  tags: [...new Set([...a.tags, ...b.tags])],
+});
+const merged = dedupeLoud(rows, key, 'merge', combine);
+console.log('  ->', merged.map((r) =&gt; r.name + ' ' + JSON.stringify(r.tags)).join(', '));
+
+console.log('');
+console.log('BEST (newest updated wins, regardless of position):');
+const isNewer = (candidate, current) =&gt; candidate.updated &gt; current.updated;
+console.log('  ->', dedupeLoud(rows, key, 'best', isNewer).map((r) =&gt; r.name).join(', '));
+console.log('');
+console.log('Note the difference between LAST and BEST on #2:');
+console.log('  LAST kept Grace H, which arrived later but is OLDER.');
+console.log('  BEST kept Grace, because its updated date is newer.');
+console.log('');
+console.log('If the rows arrive in an arbitrary order -- and rows from');
+console.log('a database do -- then "last" is not a policy, it is an');
+console.log('accident. Use BEST with an explicit criterion.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; index loops, and a plain object as the index</span></div>
+<pre><code>function dedupeManual(items, keyOf, lastWins) {
+  // Object.create(null) so a key of "__proto__" or "toString" is
+  // just a key
+  const index = Object.create(null);
+  const order = [];
+  let orderCount = 0;
+
+  for (let i = 0; i &lt; items.length; i++) {
+    const item = items[i];
+    const key = String(keyOf(item));
+
+    if (index[key] === undefined) {
+      index[key] = { position: orderCount, value: item };
+      order[orderCount] = key;
+      orderCount = orderCount + 1;
+    } else if (lastWins) {
+      index[key].value = item;              // same position, new value
+    }
+  }
+
+  const out = [];
+  for (let i = 0; i &lt; orderCount; i++) out[i] = index[order[i]].value;
+  return out;
+}
+
+const rows = [
+  { id: 1, name: 'Ada' },
+  { id: 2, name: 'Grace' },
+  { id: 1, name: 'Ada L' },
+  { id: 3, name: 'Alan' },
+  { id: 2, name: 'Grace H' },
+];
+
+console.log('first wins:', dedupeManual(rows, (r) =&gt; r.id, false)
+  .map((r) =&gt; '#' + r.id + ' ' + r.name).join(' | '));
+console.log('last wins :', dedupeManual(rows, (r) =&gt; r.id, true)
+  .map((r) =&gt; '#' + r.id + ' ' + r.name).join(' | '));
+
+console.log('');
+console.log('edge cases:');
+console.log('  empty            :', JSON.stringify(dedupeManual([], (r) =&gt; r.id, false)));
+console.log('  all unique       :', dedupeManual(
+  [{ id: 1 }, { id: 2 }, { id: 3 }], (r) =&gt; r.id, false).length, 'of 3');
+console.log('  all the same     :', dedupeManual(
+  [{ id: 1 }, { id: 1 }, { id: 1 }], (r) =&gt; r.id, false).length, 'of 3');
+console.log('  undefined keys   :', dedupeManual(
+  [{ id: undefined, n: 'a' }, { id: undefined, n: 'b' }, { id: 1 }],
+  (r) =&gt; r.id, false).length, 'of 3');
+console.log('    -- both undefined keys became "undefined" and merged.');
+console.log('  1 vs "1"         :', dedupeManual(
+  [{ id: 1 }, { id: '1' }], (r) =&gt; r.id, false).length,
+  'of 2  -- String() collapsed them');
+
+console.log('');
+console.log('dangerous keys:');
+const dangerous = [
+  { id: '__proto__', n: 'a' },
+  { id: 'toString', n: 'b' },
+  { id: 'constructor', n: 'c' },
+  { id: 'normal', n: 'd' },
+];
+console.log('  null-prototype index:', dedupeManual(dangerous, (r) =&gt; r.id, false).length,
+            'of 4');
+
+function dedupePlainObject(items, keyOf) {
+  const index = {};
+  const out = [];
+  for (const item of items) {
+    const k = String(keyOf(item));
+    if (index[k] === undefined) { index[k] = true; out.push(item); }
+  }
+  return out;
+}
+console.log('  plain {} index      :', dedupePlainObject(dangerous, (r) =&gt; r.id).length,
+            'of 4');
+console.log('    -- "toString" and "constructor" are inherited and not');
+console.log('       undefined, so those rows were treated as already');
+console.log('       seen and DROPPED.');
+console.log('  which ones survived :', dedupePlainObject(dangerous, (r) =&gt; r.id)
+  .map((r) =&gt; r.id).join(', '));
+
+console.log('');
+console.log('  a Map has no such problem:');
+const withMap = (items, keyOf) =&gt; {
+  const seen = new Map();
+  for (const item of items) if (!seen.has(keyOf(item))) seen.set(keyOf(item), item);
+  return [...seen.values()];
+};
+console.log('  Map index           :', withMap(dangerous, (r) =&gt; r.id).length, 'of 4');
+console.log('    and it keeps the key TYPE:',
+            withMap([{ id: 1 }, { id: '1' }], (r) =&gt; r.id).length, 'of 2');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the one to write</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function dedupeBy(items, keyOf, options = {}) {
+  const {
+    keep = 'first',        // 'first' | 'last' | a (a, b) => winner
+    onCollision = null,    // (existing, incoming, key) => void
+  } = options;
+
+  const seen = new Map();
+  let collisions = 0;
+
+  const getKey = typeof keyOf === 'function' ? keyOf : (item) =&gt; item[keyOf];
+
+  for (const item of items) {
+    const key = getKey(item);
+
+    if (!seen.has(key)) { seen.set(key, item); continue; }
+
+    collisions++;
+    const existing = seen.get(key);
+    if (onCollision) onCollision(existing, item, key);
+
+    if (keep === 'last') seen.set(key, item);
+    else if (typeof keep === 'function') seen.set(key, keep(existing, item));
+    // 'first' -> leave it alone
+  }
+
+  const result = [...seen.values()];
+  result.collisions = collisions;
+  return result;
+}
+
+const rows = [
+  { id: 1, name: 'Ada', updated: '2024-01-01', score: 10 },
+  { id: 2, name: 'Grace', updated: '2024-03-01', score: 20 },
+  { id: 1, name: 'Ada L', updated: '2024-06-01', score: 5 },
+  { id: 3, name: 'Alan', updated: '2024-02-01', score: 30 },
+  { id: 2, name: 'Grace H', updated: '2024-02-01', score: 25 },
+];
+
+const names = (r) =&gt; r.map((x) =&gt; x.name).join(', ');
+
+console.log('by a property NAME:');
+console.log('  first  :', names(dedupeBy(rows, 'id')));
+console.log('  last   :', names(dedupeBy(rows, 'id', { keep: 'last' })));
+
+console.log('');
+console.log('by a FUNCTION, with a custom winner:');
+console.log('  newest :', names(dedupeBy(rows, (r) =&gt; r.id,
+  { keep: (a, b) =&gt; (a.updated &gt; b.updated ? a : b) })));
+console.log('  highest score:', names(dedupeBy(rows, (r) =&gt; r.id,
+  { keep: (a, b) =&gt; (a.score &gt;= b.score ? a : b) })));
+
+console.log('');
+console.log('merging instead of choosing:');
+const mergedRows = dedupeBy(rows, (r) =&gt; r.id, {
+  keep: (a, b) =&gt; ({
+    ...a,
+    name: a.updated &gt; b.updated ? a.name : b.name,
+    score: a.score + b.score,
+    seenTimes: (a.seenTimes || 1) + 1,
+  }),
+});
+console.log(' ', mergedRows.map((r) =&gt;
+  '#' + r.id + ' ' + r.name + ' score=' + r.score +
+  ' x' + (r.seenTimes || 1)).join(' | '));
+
+console.log('');
+console.log('reporting the collisions, which is what you actually want');
+console.log('in an import pipeline:');
+const log = [];
+const clean = dedupeBy(rows, 'id', {
+  keep: 'last',
+  onCollision: (existing, incoming, key) =&gt;
+    log.push('id ' + key + ': "' + existing.name + '" replaced by "' +
+             incoming.name + '"'),
+});
+console.log('  rows in     :', rows.length);
+console.log('  rows out    :', clean.length);
+console.log('  collisions  :', clean.collisions);
+log.forEach((l) =&gt; console.log('    ' + l));
+
+console.log('');
+console.log('edge cases:');
+console.log('  empty      :', dedupeBy([], 'id').length);
+console.log('  all unique :', dedupeBy([{ id: 1 }, { id: 2 }], 'id').collisions,
+            'collisions');
+console.log('  key types  :', dedupeBy([{ id: 1 }, { id: '1' }], 'id').length,
+            'of 2 -- a Map keeps them distinct');
+console.log('  NaN keys   :', dedupeBy([{ id: NaN }, { id: NaN }], 'id').length,
+            'of 2 -- a Map treats NaN as equal to itself');
+console.log('  null keys  :', dedupeBy([{ id: null }, { id: undefined }], 'id').length,
+            'of 2 -- null and undefined are different keys');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">the related jobs</span></div>
+<pre><code>const dedupeBy = (items, keyOf) =&gt; {
+  const seen = new Map();
+  for (const item of items) {
+    const k = keyOf(item);
+    if (!seen.has(k)) seen.set(k, item);
+  }
+  return [...seen.values()];
+};
+
+const rows = [
+  { id: 1, email: 'a@x.com', name: 'Ada' },
+  { id: 2, email: 'g@x.com', name: 'Grace' },
+  { id: 3, email: 'a@x.com', name: 'Ada L' },
+  { id: 4, email: 'n@x.com', name: 'Alan' },
+  { id: 5, email: 'g@x.com', name: 'Grace H' },
+];
+
+// 1. find the duplicates, rather than removing them
+function findDuplicates(items, keyOf) {
+  const groups = new Map();
+  for (const item of items) {
+    const k = keyOf(item);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(item);
+  }
+  return [...groups.entries()].filter(([, list]) =&gt; list.length &gt; 1);
+}
+console.log('duplicate groups:');
+for (const [key, list] of findDuplicates(rows, (r) =&gt; r.email)) {
+  console.log('  ' + key + ': ' + list.map((r) =&gt; '#' + r.id + ' ' + r.name).join(', '));
+}
+
+// 2. partition into unique and duplicate
+function partitionDuplicates(items, keyOf) {
+  const seen = new Set();
+  const unique = [], duplicates = [];
+  for (const item of items) {
+    const k = keyOf(item);
+    if (seen.has(k)) duplicates.push(item);
+    else { seen.add(k); unique.push(item); }
+  }
+  return { unique, duplicates };
+}
+const { unique, duplicates } = partitionDuplicates(rows, (r) =&gt; r.email);
+console.log('');
+console.log('kept    :', unique.map((r) =&gt; '#' + r.id).join(', '));
+console.log('rejected:', duplicates.map((r) =&gt; '#' + r.id).join(', '));
+console.log('  -- an import endpoint should report BOTH, not silently');
+console.log('     drop the second half.');
+
+// 3. count occurrences, which is often the actual question
+const countBy = (items, keyOf) =&gt; {
+  const counts = new Map();
+  for (const item of items) {
+    const k = keyOf(item);
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  return counts;
+};
+console.log('');
+console.log('counts:');
+for (const [email, n] of countBy(rows, (r) =&gt; r.email)) {
+  console.log('  ' + email.padEnd(10) + n);
+}
+
+// 4. dedupe by structural equality, not by a key
+function dedupeStructural(items) {
+  const seen = new Map();          // canonical string -> item
+  const canonical = (v) =&gt; {
+    if (v === null || typeof v !== 'object') return JSON.stringify(v);
+    if (Array.isArray(v)) return '[' + v.map(canonical).join(',') + ']';
+    return '{' + Object.keys(v).sort()
+      .map((k) =&gt; JSON.stringify(k) + ':' + canonical(v[k])).join(',') + '}';
+  };
+  for (const item of items) {
+    const k = canonical(item);
+    if (!seen.has(k)) seen.set(k, item);
+  }
+  return [...seen.values()];
+};
+const structural = [
+  { a: 1, b: 2 },
+  { b: 2, a: 1 },            // same data, different key order
+  { a: 1, b: 3 },
+];
+console.log('');
+console.log('structural dedupe:', dedupeStructural(structural).length, 'of 3');
+console.log('  -- key order normalised, so the first two collapsed.');
+console.log('  with plain JSON.stringify:',
+            new Set(structural.map((x) =&gt; JSON.stringify(x))).size, 'of 3');
+
+// 5. dedupe a stream, with a bounded memory footprint
+function makeStreamDeduper(limit = 1000) {
+  const seen = new Set();
+  return (key) =&gt; {
+    if (seen.has(key)) return false;
+    seen.add(key);
+    if (seen.size &gt; limit) {
+      // evict the oldest -- a Set iterates in insertion order
+      seen.delete(seen.values().next().value);
+    }
+    return true;
+  };
+}
+console.log('');
+const isNew = makeStreamDeduper(3);
+const stream = ['a', 'b', 'a', 'c', 'd', 'a', 'b'];
+console.log('bounded stream dedupe, window of 3:');
+console.log('  ' + stream.map((k) =&gt; k + (isNew(k) ? '+' : '-')).join(' '));
+console.log('  + = passed through, - = suppressed as a duplicate');
+console.log('  the second "a" was suppressed; the third got through');
+console.log('  because "a" had been evicted from the window.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the Set-based one-liners, and where each is right</span></div>
+<pre><code>// primitives -- a Set is the whole answer
+const nums = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3];
+console.log('unique numbers   :', [...new Set(nums)].join(', '));
+console.log('  and it handles NaN and -0:');
+console.log('   [...new Set([NaN, NaN, 0, -0])] ->',
+            JSON.stringify([...new Set([NaN, NaN, 0, -0])]));
+console.log('   -- SameValueZero: NaN equals itself, and 0 === -0');
+
+// strings, case-insensitively
+const words = ['Apple', 'banana', 'APPLE', 'Banana', 'cherry'];
+console.log('');
+const byLower = new Map();
+for (const w of words) if (!byLower.has(w.toLowerCase())) byLower.set(w.toLowerCase(), w);
+console.log('unique words     :', [...byLower.values()].join(', '));
+console.log('  -- the Map keeps the FIRST original spelling, which is');
+console.log('     usually what you want to display.');
+
+// set operations, which are the same tool
+const a = new Set([1, 2, 3, 4]);
+const b = new Set([3, 4, 5, 6]);
+console.log('');
+console.log('set operations:');
+console.log('  union       :', [...new Set([...a, ...b])].join(', '));
+console.log('  intersection:', [...a].filter((x) =&gt; b.has(x)).join(', '));
+console.log('  difference  :', [...a].filter((x) =&gt; !b.has(x)).join(', '));
+console.log('  symmetric   :', [...[...a].filter((x) =&gt; !b.has(x)),
+                                ...[...b].filter((x) =&gt; !a.has(x))].join(', '));
+
+console.log('');
+console.log('and the native methods, if available:');
+const methods = ['union', 'intersection', 'difference', 'symmetricDifference',
+                 'isSubsetOf', 'isSupersetOf', 'isDisjointFrom'];
+for (const m of methods) {
+  const has = typeof Set.prototype[m] === 'function';
+  console.log('  Set.prototype.' + m.padEnd(20) + (has ? 'yes' : 'not here'));
+}
+if (typeof Set.prototype.union === 'function') {
+  console.log('');
+  console.log('  a.union(b)       :', [...a.union(b)].join(', '));
+  console.log('  a.intersection(b):', [...a.intersection(b)].join(', '));
+  console.log('  a.difference(b)  :', [...a.difference(b)].join(', '));
+  console.log('  -- ES2025. Until you can rely on it, the filter');
+  console.log('     versions above are the portable answer.');
+}
+
+// the one-liner NOT to use
+console.log('');
+console.log('the O(n^2) one-liner, for comparison:');
+console.log('  [3,1,4,1,5].filter((v,i,arr) => arr.indexOf(v) === i) ->',
+            [3, 1, 4, 1, 5].filter((v, i, arr) =&gt; arr.indexOf(v) === i).join(', '));
+console.log('  correct for small arrays, quadratic, and it cannot');
+console.log('  dedupe NaN:');
+console.log('   [NaN,NaN].filter((v,i,a)=>a.indexOf(v)===i).length ->',
+            [NaN, NaN].filter((v, i, arr) =&gt; arr.indexOf(v) === i).length);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Approach</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td><code>filter</code> + <code>findIndex</code></td><td class="mono">O(n<sup>2</sup>)</td><td class="mono">O(k)</td></tr>
+        <tr><td><code>filter</code> + <code>indexOf</code></td><td class="mono">O(n<sup>2</sup>)</td><td class="mono">O(k)</td></tr>
+        <tr><td><code>reduce</code> + spread</td><td class="mono">O(n<sup>2</sup>)</td><td class="mono">O(n<sup>2</sup>) allocated</td></tr>
+        <tr><td><strong>Map or Set</strong></td><td class="mono">O(n)</td><td class="mono">O(k)</td></tr>
+        <tr><td>structural, with a canonical key</td><td class="mono">O(n &middot; size)</td><td class="mono">O(n &middot; size)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><code>n</code> is the number of items and <code>k</code> the number of distinct keys. The
+  <code>Map</code> version does one hash operation per item, so O(n), and holds one entry per distinct
+  key, so O(k) &mdash; which is why deduplicating a million rows down to a thousand costs a thousand
+  entries, not a million.</p>
+
+  <p>The last row is the one to be careful about: a canonical-string key costs the size of each object
+  to build, on every item, and stores that string. For deduplicating large objects by structure that
+  can dominate everything else.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;A <code>Map</code> from key to item, one pass. First-wins is
+    <code>if (!seen.has(key)) seen.set(key, item)</code>; last-wins is an unconditional
+    <code>set</code>, which also happens to be the one-line
+    <code>[...new Map(items.map(i =&gt; [key(i), i])).values()]</code>. Either way it is O(n), and the
+    output is in order of first appearance because <code>Map.set</code> on an existing key updates the
+    value without moving it. The version to avoid is <code>filter</code> with
+    <code>findIndex</code> &mdash; a fresh scan per element, so O(n&sup2;). And the question worth
+    asking back is which row should win: if the input order is arbitrary, 'last' is not a policy, so I
+    would take an explicit comparator or a merge function, and report the collisions rather than
+    silently dropping rows.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. <code>new Set(objects)</code></h3>
+
+  <p>Step 2. A <code>Set</code> compares objects by identity, so it removes nothing unless the very
+  same object appears twice. This is the mistake that produces &ldquo;the dedupe does not
+  work&rdquo;.</p>
+
+  <h3>2. <code>filter</code> plus <code>findIndex</code></h3>
+
+  <p>Step 2 and Step 3. Correct, quadratic, and the most-upvoted answer to this question on the
+  internet.</p>
+
+  <h3>3. Not deciding who wins</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the answer depends on the row order</span></div>
+<pre><code>const dedupeLast = (items, key) =&gt;
+  [...new Map(items.map((i) =&gt; [i[key], i])).values()];
+
+// the same three logical records, in two arrival orders
+const orderA = [
+  { id: 1, status: 'pending', at: '2024-01-01' },
+  { id: 1, status: 'shipped', at: '2024-06-01' },
+];
+const orderB = [
+  { id: 1, status: 'shipped', at: '2024-06-01' },
+  { id: 1, status: 'pending', at: '2024-01-01' },
+];
+
+console.log('last-wins on order A:', dedupeLast(orderA, 'id')[0].status);
+console.log('last-wins on order B:', dedupeLast(orderB, 'id')[0].status);
+console.log('  -- the SAME data, and the order shipped depends on which');
+console.log('     row the database happened to return second.');
+
+console.log('');
+console.log('And a SELECT with no ORDER BY makes no promise. Adding an');
+console.log('index, changing the query plan, or a parallel scan can');
+console.log('flip it -- so this bug appears months after the code was');
+console.log('written, with no code change at all.');
+
+// the fix: choose on the DATA, not the position
+const dedupeNewest = (items, key, tsKey) =&gt; {
+  const seen = new Map();
+  for (const item of items) {
+    const k = item[key];
+    const existing = seen.get(k);
+    if (!existing || item[tsKey] &gt; existing[tsKey]) seen.set(k, item);
+  }
+  return [...seen.values()];
+};
+
+console.log('');
+console.log('newest-wins on order A:', dedupeNewest(orderA, 'id', 'at')[0].status);
+console.log('newest-wins on order B:', dedupeNewest(orderB, 'id', 'at')[0].status);
+console.log('  -- deterministic, because the criterion is in the row.');
+
+console.log('');
+console.log('And when two rows tie on the timestamp, tie-break again:');
+const tied = [
+  { id: 1, status: 'a', at: '2024-01-01', version: 1 },
+  { id: 1, status: 'b', at: '2024-01-01', version: 2 },
+];
+const dedupeStrict = (items) =&gt; {
+  const seen = new Map();
+  for (const item of items) {
+    const e = seen.get(item.id);
+    const better = !e || item.at &gt; e.at ||
+                   (item.at === e.at &amp;&amp; item.version &gt; e.version);
+    if (better) seen.set(item.id, item);
+  }
+  return [...seen.values()];
+};
+console.log('  with a version tie-break:', dedupeStrict(tied)[0].status,
+            'and reversed:', dedupeStrict([...tied].reverse())[0].status);
+console.log('  -- same answer either way. That is the test: reverse the');
+console.log('     input and check nothing changes.');</code></pre>
+  </div>
+
+  <h3>4. Deduping on a field that is not unique</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; real rows silently deleted</span></div>
+<pre><code>const dedupeBy = (items, keyOf) =&gt; {
+  const seen = new Map();
+  for (const item of items) {
+    const k = keyOf(item);
+    if (!seen.has(k)) seen.set(k, item);
+  }
+  return [...seen.values()];
+};
+
+// two genuinely different people
+const people = [
+  { id: 1, name: 'John Smith', email: 'john.smith@a.com', dob: '1980-01-01' },
+  { id: 2, name: 'John Smith', email: 'jsmith@b.com', dob: '1992-07-15' },
+  { id: 3, name: 'Jane Doe', email: 'jane@c.com', dob: '1985-03-20' },
+];
+
+console.log('by name  :', dedupeBy(people, (p) =&gt; p.name).length, 'of 3');
+console.log('  kept   :', dedupeBy(people, (p) =&gt; p.name)
+  .map((p) =&gt; '#' + p.id).join(', '));
+console.log('  -- person #2 was deleted for sharing a name.');
+
+console.log('');
+console.log('by email :', dedupeBy(people, (p) =&gt; p.email).length, 'of 3');
+console.log('by id    :', dedupeBy(people, (p) =&gt; p.id).length, 'of 3');
+
+// and a composite key that is still not unique
+const bookings = [
+  { room: 'A', date: '2024-01-01', slot: 'morning' },
+  { room: 'A', date: '2024-01-01', slot: 'afternoon' },
+];
+console.log('');
+console.log('bookings by room+date:',
+            dedupeBy(bookings, (b) =&gt; b.room + '|' + b.date).length, 'of 2');
+console.log('  -- the afternoon booking vanished. The key needs the');
+console.log('     slot too.');
+console.log('bookings by room+date+slot:',
+            dedupeBy(bookings, (b) =&gt; [b.room, b.date, b.slot].join('|')).length,
+            'of 2');
+
+console.log('');
+console.log('Two ways to catch this before it reaches production:');
+console.log('');
+console.log('1. assert that the key IS unique, and fail if not:');
+function assertUnique(items, keyOf, label) {
+  const seen = new Map();
+  const clashes = [];
+  for (const item of items) {
+    const k = keyOf(item);
+    if (seen.has(k)) clashes.push({ key: k, a: seen.get(k), b: item });
+    else seen.set(k, item);
+  }
+  if (clashes.length) {
+    throw new Error(label + ' is not unique: ' +
+      clashes.map((c) =&gt; JSON.stringify(c.key)).join(', '));
+  }
+  return items;
+}
+try { assertUnique(people, (p) =&gt; p.name, 'name'); }
+catch (e) { console.log('   ' + e.message); }
+console.log('   id is unique      :', assertUnique(people, (p) =&gt; p.id, 'id').length,
+            'rows, no error');
+
+console.log('');
+console.log('2. count what you would remove, and refuse if it is more');
+console.log('   than you expected:');
+const removed = people.length - dedupeBy(people, (p) =&gt; p.name).length;
+console.log('   deduping by name would remove', removed, 'of', people.length,
+            'rows -', Math.round(100 * removed / people.length) + '%');
+console.log('   A dedupe that removes a third of an import is a bug');
+console.log('   report, not a successful run.');</code></pre>
+  </div>
+
+  <h3>5. Deduping the array you are iterating, or losing the order</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; splice while looping, and the order surprise</span></div>
+<pre><code>// (a) removing while iterating forwards
+function dedupeSplice(items, key) {
+  const arr = [...items];
+  const seen = new Set();
+  for (let i = 0; i &lt; arr.length; i++) {
+    if (seen.has(arr[i][key])) arr.splice(i, 1);       // no i--
+    else seen.add(arr[i][key]);
+  }
+  return arr;
+}
+
+const rows = [
+  { id: 1 }, { id: 1 }, { id: 1 }, { id: 2 }, { id: 2 }, { id: 3 },
+];
+
+console.log('splice forwards      :', dedupeSplice(rows, 'id').map((r) =&gt; r.id).join(', '));
+console.log('  -- after removing index 1, index 2 slid into index 1,');
+console.log('     and the loop had already moved past it.');
+
+// backwards works
+function dedupeSpliceBackwards(items, key) {
+  const arr = [...items];
+  const seenLater = new Set();
+  for (let i = arr.length - 1; i &gt;= 0; i--) {
+    if (seenLater.has(arr[i][key])) arr.splice(i, 1);
+    else seenLater.add(arr[i][key]);
+  }
+  return arr;
+}
+console.log('splice backwards     :',
+            dedupeSpliceBackwards(rows, 'id').map((r) =&gt; r.id).join(', '));
+console.log('  -- correct, and note it is LAST-wins by construction,');
+console.log('     because it keeps the last occurrence of each key.');
+
+console.log('');
+console.log('and O(n^2) either way, because splice shifts everything');
+console.log('after it:');
+const big = Array.from({ length: 60000 }, (_, i) =&gt; ({ id: i % 500 }));
+let t = performance.now();
+dedupeSpliceBackwards(big, 'id');
+const spliceMs = performance.now() - t;
+t = performance.now();
+const seen = new Map();
+for (const r of big) if (!seen.has(r.id)) seen.set(r.id, r);
+[...seen.values()];
+const mapMs = performance.now() - t;
+console.log('  60,000 rows down to 500');
+console.log('  splice: ' + spliceMs.toFixed(1) + ' ms');
+console.log('  Map   : ' + mapMs.toFixed(2) + ' ms');
+
+// (b) the order surprise with numeric keys in a plain object
+console.log('');
+console.log('(b) using a plain object as the index loses the order:');
+const byObject = (items, key) =&gt; {
+  const index = {};
+  for (const item of items) if (!(item[key] in index)) index[item[key]] = item;
+  return Object.values(index);
+};
+const numeric = [{ id: 30 }, { id: 4 }, { id: 100 }, { id: 4 }];
+console.log('  input order   :', numeric.map((r) =&gt; r.id).join(', '));
+console.log('  plain object  :', byObject(numeric, 'id').map((r) =&gt; r.id).join(', '));
+const byMap = (items, key) =&gt; {
+  const m = new Map();
+  for (const item of items) if (!m.has(item[key])) m.set(item[key], item);
+  return [...m.values()];
+};
+console.log('  Map           :', byMap(numeric, 'id').map((r) =&gt; r.id).join(', '));
+console.log('  -- integer-like keys sort ascending in a plain object,');
+console.log('     so 30, 4, 100 came back as 4, 30, 100. A Map keeps');
+console.log('     insertion order whatever the keys are.');
+console.log('');
+console.log('That is the last of the object-key traps in this section,');
+console.log('and it is the same one as on the Group By page. When the');
+console.log('keys come from data, reach for a Map.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write both one-liners from memory</strong> &mdash; the <code>new Map(pairs)</code>
+    last-wins version and the explicit first-wins loop &mdash; and say which position each keeps.</li>
+    <li><strong>Explain why <code>filter</code> + <code>findIndex</code> is quadratic</strong> and why
+    it is still the most common answer.</li>
+    <li><strong>Write the newest-wins version</strong> and test it by reversing the input. If the
+    answer changes, the policy is wrong.</li>
+    <li><strong>Write <code>findDuplicates</code> and <code>partitionDuplicates</code>.</strong>
+    Step 7 &mdash; an import endpoint needs to report, not silently drop.</li>
+    <li><strong>Write <code>assertUnique</code>.</strong> Step 9 &mdash; the cheapest possible defence
+    against deduping on a field that is not actually a key.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Build an index instead of rescanning &mdash; and decide who wins.</strong> The first
+    half is the same lesson as Two Sum, groupBy, keyBy and list-to-tree: a hash lookup turns O(n&sup2;)
+    into O(n). The second half is the part specific to real data: deduplication <em>deletes rows</em>,
+    so the collision policy is a data decision, it should be deterministic under reordering, and what
+    it removed is worth reporting.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="07-paginate-sort-filter.html">&larr; Paginate, Sort and Filter</a>
+  <a href="../index.html">All problems &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

@@ -1,0 +1,1224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flat List to Nested Tree</title>
+<meta name="description" content="One pass with a lookup map — plus orphans, cycles, and the O(n²) version to avoid.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Object &amp; data shaping &middot; Problem 05</p>
+  <h1>Flat List With <code>parentId</code> &rarr; Nested Tree</h1>
+  <p class="standfirst">Every database gives you a flat table; every UI wants a tree. The good answer
+  is <strong>one pass with a lookup map</strong> &mdash; and the reason it works in one pass is a trick
+  worth understanding, because it does not depend on the rows being in any order.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">in and out</span></div>
+<pre><code>// what the database returns
+[
+  { id: 1, parentId: null, name: 'Electronics' },
+  { id: 2, parentId: 1,    name: 'Phones' },
+  { id: 3, parentId: 1,    name: 'Laptops' },
+  { id: 4, parentId: 2,    name: 'Android' },
+]
+
+// what the sidebar needs
+[
+  { id: 1, name: 'Electronics', children: [
+    { id: 2, name: 'Phones', children: [
+      { id: 4, name: 'Android', children: [] },
+    ]},
+    { id: 3, name: 'Laptops', children: [] },
+  ]},
+]</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; the ten-line answer</span></div>
+<pre><code>function listToTree(items, { idKey = 'id', parentKey = 'parentId' } = {}) {
+  const byId = new Map();
+  const roots = [];
+
+  // pass 1: put every node in the map, with an empty children array
+  for (const item of items) {
+    byId.set(item[idKey], { ...item, children: [] });
+  }
+
+  // pass 2: attach each node to its parent, or to roots
+  for (const item of items) {
+    const node = byId.get(item[idKey]);
+    const parent = byId.get(item[parentKey]);
+    if (parent) parent.children.push(node);
+    else roots.push(node);
+  }
+
+  return roots;
+}
+
+const rows = [
+  { id: 4, parentId: 2, name: 'Android' },        // deliberately out of order
+  { id: 1, parentId: null, name: 'Electronics' },
+  { id: 3, parentId: 1, name: 'Laptops' },
+  { id: 2, parentId: 1, name: 'Phones' },
+];
+
+const tree = listToTree(rows);
+
+function show(nodes, depth = 0) {
+  for (const n of nodes) {
+    console.log('  '.repeat(depth) + '- ' + n.name + ' (#' + n.id + ')');
+    show(n.children, depth + 1);
+  }
+}
+show(tree);
+
+console.log('');
+console.log('The rows were shuffled, and it still worked. That is the');
+console.log('point of two passes: after pass 1 every node exists, so');
+console.log('pass 2 can always find any parent.');
+console.log('');
+console.log('roots:', tree.length);
+console.log(JSON.stringify(tree, null, 2).split('\n').slice(0, 8)
+  .map((l) =&gt; '  ' + l).join('\n') + '\n  ...');</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why two passes, and why one is not enough</span>
+    <p>In one pass, a child that appears <em>before</em> its parent has nowhere to go &mdash; the
+    parent's node does not exist yet.</p>
+    <p>Two passes fixes that: create every node first, then wire them up. And because the second pass
+    only <em>looks up</em> parents rather than searching for them, the whole thing is O(n).</p>
+    <p>You can do it in one pass if you are willing to create placeholder parents on demand &mdash;
+    shown in Step 7 &mdash; but two passes is clearer and the same complexity.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the recursive filter version</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0a &mdash; filter for children at every node</span></div>
+<pre><code>let comparisons = 0;
+
+function buildRecursive(items, parentId = null) {
+  return items
+    .filter((item) =&gt; { comparisons++; return item.parentId === parentId; })
+    .map((item) =&gt; ({ ...item, children: buildRecursive(items, item.id) }));
+}
+
+function buildWithMap(items) {
+  let ops = 0;
+  const byId = new Map();
+  for (const item of items) { ops++; byId.set(item.id, { ...item, children: [] }); }
+  const roots = [];
+  for (const item of items) {
+    ops++;
+    const node = byId.get(item.id);
+    const parent = byId.get(item.parentId);
+    if (parent) parent.children.push(node);
+    else roots.push(node);
+  }
+  return { roots, ops };
+}
+
+// a realistic org chart: 5 levels, ~1000 people
+function makeRows(levels, fanout) {
+  const rows = [{ id: 1, parentId: null, name: 'root' }];
+  let nextId = 2;
+  let frontier = [1];
+  for (let l = 0; l &lt; levels; l++) {
+    const next = [];
+    for (const parent of frontier) {
+      for (let f = 0; f &lt; fanout; f++) {
+        rows.push({ id: nextId, parentId: parent, name: 'n' + nextId });
+        next.push(nextId);
+        nextId++;
+      }
+    }
+    frontier = next;
+  }
+  return rows;
+}
+
+const rows = makeRows(4, 5);
+console.log('rows:', rows.length);
+
+comparisons = 0;
+let t = performance.now();
+const a = buildRecursive(rows);
+const recMs = performance.now() - t;
+
+t = performance.now();
+const b = buildWithMap(rows);
+const mapMs = performance.now() - t;
+
+console.log('');
+console.log('  recursive filter : ' + String(comparisons.toLocaleString('en-US')).padStart(10) +
+            ' comparisons, ' + recMs.toFixed(1) + ' ms');
+console.log('  lookup map       : ' + String(b.ops.toLocaleString('en-US')).padStart(10) +
+            ' operations,  ' + mapMs.toFixed(1) + ' ms');
+console.log('  same tree        :', JSON.stringify(a) === JSON.stringify(b.roots));
+console.log('  ratio            : ' +
+            Math.round(recMs / Math.max(mapMs, 0.01)) + 'x');
+
+console.log('');
+console.log('The recursive version scans the WHOLE list once per node,');
+console.log('looking for that node children. n nodes, n comparisons');
+console.log('each, so O(n^2).');
+console.log('');
+console.log('It reads beautifully and it is the version that gets');
+console.log('shipped, because a 50-row test fixture does not notice.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why O(n&sup2;) matters here specifically</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; how the gap grows</span></div>
+<pre><code>function buildRecursive(items, parentId = null) {
+  return items
+    .filter((item) =&gt; item.parentId === parentId)
+    .map((item) =&gt; ({ ...item, children: buildRecursive(items, item.id) }));
+}
+function buildWithMap(items) {
+  const byId = new Map();
+  for (const item of items) byId.set(item.id, { ...item, children: [] });
+  const roots = [];
+  for (const item of items) {
+    const node = byId.get(item.id);
+    const parent = byId.get(item.parentId);
+    (parent ? parent.children : roots).push(node);
+  }
+  return roots;
+}
+
+// a flat two-level tree: one root, n-1 children. The worst case for
+// the recursive version, and a very common real shape.
+const makeFlat = (n) =&gt; {
+  const rows = [{ id: 1, parentId: null }];
+  for (let i = 2; i &lt;= n; i++) rows.push({ id: i, parentId: 1 });
+  return rows;
+};
+
+console.log('rows      recursive     map      ratio');
+for (const n of [100, 500, 2000, 5000]) {
+  const rows = makeFlat(n);
+
+  let t = performance.now();
+  buildRecursive(rows);
+  const rec = performance.now() - t;
+
+  t = performance.now();
+  buildWithMap(rows);
+  const map = performance.now() - t;
+
+  console.log(String(n).padStart(5) + '   ' +
+              (rec.toFixed(1) + ' ms').padStart(10) + '   ' +
+              (map.toFixed(2) + ' ms').padStart(9) + '   ' +
+              Math.round(rec / Math.max(map, 0.001)) + 'x');
+}
+
+console.log('');
+console.log('Ten times the rows, a hundred times the work. That is the');
+console.log('signature of a quadratic algorithm, and it is why this');
+console.log('bug is always discovered in production: it is invisible');
+console.log('at 100 rows and unusable at 5,000.');
+console.log('');
+console.log('And 5,000 rows is not a large table. A category tree, a');
+console.log('comment thread, a file listing, an org chart -- all');
+console.log('routinely bigger than that.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; the trick that makes one pass possible</h2>
+
+  <div class="trace">
+<pre>  Two passes:
+
+    PASS 1   id -> node, with children: []
+
+      1 -> { id: 1, children: [] }
+      2 -> { id: 2, children: [] }
+      3 -> { id: 3, children: [] }
+      4 -> { id: 4, children: [] }
+
+    PASS 2   for each row, look up its parent and push
+
+      row 4 (parent 2)   byId.get(2).children.push(node4)
+      row 1 (parent null) no parent  ->  roots.push(node1)
+      row 3 (parent 1)   byId.get(1).children.push(node3)
+      row 2 (parent 1)   byId.get(1).children.push(node2)
+
+
+  The crucial detail: `node2` was ALREADY in the map when row 4
+  attached to it, and node4 was already attached when node2 was
+  pushed into node1.
+
+  Objects are references. Attaching a child to a node that is
+  itself not yet attached anywhere still works -- when the parent
+  is finally attached, its whole subtree comes with it.
+
+  That is why the row ORDER does not matter, and why you never
+  have to sort the input or do multiple sweeps.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">proving the reference trick</span></div>
+<pre><code>const byId = new Map();
+byId.set(1, { id: 1, children: [] });
+byId.set(2, { id: 2, children: [] });
+byId.set(4, { id: 4, children: [] });
+
+// attach 4 under 2, while 2 is attached to nothing
+byId.get(2).children.push(byId.get(4));
+console.log('node 2 so far:', JSON.stringify(byId.get(2)));
+console.log('node 1 so far:', JSON.stringify(byId.get(1)));
+
+// now attach 2 under 1
+byId.get(1).children.push(byId.get(2));
+console.log('');
+console.log('after attaching 2 under 1, node 1 is:');
+console.log(' ', JSON.stringify(byId.get(1)));
+console.log('');
+console.log('Node 4 came along automatically, because node 1 holds a');
+console.log('REFERENCE to node 2, not a copy of it.');
+console.log('');
+console.log('  root.children[0] === byId.get(2) ?',
+            byId.get(1).children[0] === byId.get(2));
+console.log('  and mutating through the map is visible in the tree:');
+byId.get(4).name = 'set afterwards';
+console.log('  root.children[0].children[0].name =',
+            byId.get(1).children[0].children[0].name);
+console.log('');
+console.log('This is the same property that made the deep-merge');
+console.log('aliasing a hazard. Here it is the whole mechanism.');</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The four questions to settle before writing it</span>
+    <p><strong>Orphans</strong> &mdash; a row whose <code>parentId</code> points at nothing. Treat as a
+    root, drop, or throw?</p>
+    <p><strong>Cycles</strong> &mdash; A's parent is B and B's parent is A. Neither ever becomes a
+    root, so both silently disappear from the output.</p>
+    <p><strong>Multiple roots</strong> &mdash; a forest, not a tree. Very common, and the reason the
+    function returns an array.</p>
+    <p><strong>Order</strong> &mdash; children come out in row order. If the UI needs alphabetical or
+    by a <code>sortOrder</code> column, sort each <code>children</code> array afterwards.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; watch the tree assemble</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function listToTreeLoud(items) {
+  const byId = new Map();
+  const roots = [];
+
+  console.log('PASS 1 -- create every node');
+  for (const item of items) {
+    byId.set(item.id, { ...item, children: [] });
+    console.log('  created #' + item.id + ' (' + item.name + ')');
+  }
+
+  console.log('');
+  console.log('PASS 2 -- wire them up');
+  for (const item of items) {
+    const node = byId.get(item.id);
+    const parent = byId.get(item.parentId);
+    if (parent) {
+      parent.children.push(node);
+      console.log('  #' + item.id + ' -> attached under #' + item.parentId);
+    } else if (item.parentId === null || item.parentId === undefined) {
+      roots.push(node);
+      console.log('  #' + item.id + ' -> ROOT (parentId is ' + item.parentId + ')');
+    } else {
+      roots.push(node);
+      console.log('  #' + item.id + ' -> ORPHAN (parent #' + item.parentId +
+                  ' does not exist) -- treated as a root');
+    }
+    console.log('     roots: [' + roots.map((r) =&gt; '#' + r.id).join(', ') + ']');
+  }
+
+  return roots;
+}
+
+const rows = [
+  { id: 4, parentId: 2, name: 'Android' },
+  { id: 1, parentId: null, name: 'Electronics' },
+  { id: 9, parentId: 99, name: 'Mystery' },        // an orphan
+  { id: 3, parentId: 1, name: 'Laptops' },
+  { id: 2, parentId: 1, name: 'Phones' },
+];
+
+const tree = listToTreeLoud(rows);
+
+console.log('');
+console.log('RESULT:');
+(function show(nodes, depth) {
+  for (const n of nodes) {
+    console.log('  ' + '  '.repeat(depth) + '- ' + n.name + ' (#' + n.id + ')');
+    show(n.children, depth + 1);
+  }
+})(tree, 0);
+
+console.log('');
+console.log('Notice #4 was attached to #2 at a point when #2 was not');
+console.log('yet attached to anything, and it still ended up two');
+console.log('levels deep in the final tree.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; index loops, a plain object as the map</span></div>
+<pre><code>function listToTreeManual(items, idKey, parentKey) {
+  if (idKey === undefined) idKey = 'id';
+  if (parentKey === undefined) parentKey = 'parentId';
+
+  // Object.create(null) so an id of "__proto__" or "constructor"
+  // is just an id
+  const byId = Object.create(null);
+  const roots = [];
+  let rootCount = 0;
+
+  for (let i = 0; i &lt; items.length; i++) {
+    const item = items[i];
+    const copy = {};
+    for (const k in item) {
+      if (Object.prototype.hasOwnProperty.call(item, k)) copy[k] = item[k];
+    }
+    copy.children = [];
+    byId[item[idKey]] = copy;
+  }
+
+  for (let i = 0; i &lt; items.length; i++) {
+    const item = items[i];
+    const node = byId[item[idKey]];
+    const parentId = item[parentKey];
+    const parent = (parentId === null || parentId === undefined)
+      ? undefined
+      : byId[parentId];
+
+    if (parent !== undefined) {
+      parent.children[parent.children.length] = node;
+    } else {
+      roots[rootCount] = node;
+      rootCount = rootCount + 1;
+    }
+  }
+
+  return roots;
+}
+
+const count = (nodes) =&gt; nodes.reduce((n, x) =&gt; n + 1 + count(x.children), 0);
+const depth = (nodes) =&gt; nodes.length === 0 ? 0
+  : 1 + Math.max(...nodes.map((x) =&gt; depth(x.children)));
+
+const cases = {
+  'normal        ': [
+    { id: 1, parentId: null }, { id: 2, parentId: 1 }, { id: 3, parentId: 2 },
+  ],
+  'shuffled      ': [
+    { id: 3, parentId: 2 }, { id: 1, parentId: null }, { id: 2, parentId: 1 },
+  ],
+  'a forest      ': [
+    { id: 1, parentId: null }, { id: 2, parentId: null }, { id: 3, parentId: 1 },
+  ],
+  'orphan        ': [
+    { id: 1, parentId: null }, { id: 2, parentId: 99 },
+  ],
+  'empty         ': [],
+  'single node   ': [{ id: 1, parentId: null }],
+  'all roots     ': [
+    { id: 1, parentId: null }, { id: 2, parentId: null },
+  ],
+  'a deep chain  ': Array.from({ length: 50 }, (_, i) =&gt;
+    ({ id: i + 1, parentId: i === 0 ? null : i })),
+  'proto ids     ': [
+    { id: '__proto__', parentId: null }, { id: 'x', parentId: '__proto__' },
+  ],
+};
+
+for (const [label, rows] of Object.entries(cases)) {
+  const tree = listToTreeManual(rows);
+  console.log(label + ' rows ' + String(rows.length).padStart(3) +
+              '  roots ' + tree.length +
+              '  nodes in tree ' + String(count(tree)).padStart(3) +
+              '  depth ' + depth(tree));
+}
+
+console.log('');
+console.log('Note "proto ids": 2 rows, 1 root, 2 nodes, depth 2. With a');
+console.log('plain {} as the map, "__proto__" would not be storable and');
+console.log('the child would be orphaned:');
+const plainMap = {};
+plainMap['__proto__'] = { id: '__proto__' };
+console.log('  plain {} can store "__proto__"?',
+            Object.prototype.hasOwnProperty.call(plainMap, '__proto__'));
+console.log('  a null-prototype object can  :',
+            (() =&gt; { const o = Object.create(null); o['__proto__'] = 1;
+                     return Object.prototype.hasOwnProperty.call(o, '__proto__'); })());
+console.log('');
+console.log('Ids from a database are usually numbers, so this rarely');
+console.log('bites. Slugs and paths as ids are common enough that it');
+console.log('is worth the one-word defence.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the production one</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function listToTree(items, options = {}) {
+  const {
+    idKey = 'id',
+    parentKey = 'parentId',
+    childrenKey = 'children',
+    rootValues = [null, undefined, 0, ''],   // what counts as "no parent"
+    orphans = 'root',                        // 'root' | 'drop' | 'throw'
+    sortBy = null,
+    addDepth = false,
+  } = options;
+
+  const isRoot = (v) =&gt; rootValues.includes(v);
+
+  const byId = new Map();
+  for (const item of items) {
+    byId.set(item[idKey], { ...item, [childrenKey]: [] });
+  }
+
+  const roots = [];
+  const orphaned = [];
+
+  for (const item of items) {
+    const node = byId.get(item[idKey]);
+    const parentId = item[parentKey];
+
+    if (isRoot(parentId)) { roots.push(node); continue; }
+
+    const parent = byId.get(parentId);
+    if (parent) {
+      if (parent === node) {                 // self-parent
+        orphaned.push(node);
+        continue;
+      }
+      parent[childrenKey].push(node);
+    } else {
+      orphaned.push(node);
+    }
+  }
+
+  if (orphaned.length) {
+    if (orphans === 'throw') {
+      throw new Error('orphaned nodes: ' +
+        orphaned.map((n) =&gt; n[idKey]).join(', '));
+    }
+    if (orphans === 'root') roots.push(...orphaned);
+    // 'drop' -> do nothing
+  }
+
+  // a node that is in a cycle is never reachable from any root
+  const reachable = new Set();
+  (function mark(nodes, depth) {
+    for (const n of nodes) {
+      if (reachable.has(n)) continue;        // guards a cycle in the tree itself
+      reachable.add(n);
+      if (addDepth) n.depth = depth;
+      if (sortBy) n[childrenKey].sort(sortBy);
+      mark(n[childrenKey], depth + 1);
+    }
+  })(roots, 0);
+
+  const lost = [...byId.values()].filter((n) =&gt; !reachable.has(n));
+
+  return { tree: roots, orphaned, unreachable: lost };
+}
+
+const rows = [
+  { id: 3, parentId: 1, name: 'Laptops', order: 2 },
+  { id: 1, parentId: null, name: 'Electronics', order: 1 },
+  { id: 2, parentId: 1, name: 'Phones', order: 1 },
+  { id: 4, parentId: 2, name: 'Android', order: 1 },
+  { id: 9, parentId: 99, name: 'Orphan', order: 1 },
+  { id: 10, parentId: 11, name: 'Cycle A', order: 1 },
+  { id: 11, parentId: 10, name: 'Cycle B', order: 1 },
+];
+
+const { tree, orphaned, unreachable } = listToTree(rows, {
+  sortBy: (a, b) =&gt; a.name.localeCompare(b.name),
+  addDepth: true,
+});
+
+console.log('tree:');
+(function show(nodes) {
+  for (const n of nodes) {
+    console.log('  ' + '  '.repeat(n.depth) + '- ' + n.name +
+                ' (#' + n.id + ', depth ' + n.depth + ')');
+    show(n.children);
+  }
+})(tree);
+
+console.log('');
+console.log('roots      :', tree.map((n) =&gt; '#' + n.id).join(', '));
+console.log('orphaned   :', orphaned.map((n) =&gt; '#' + n.id + ' ' + n.name).join(', '));
+console.log('unreachable:', unreachable.map((n) =&gt; '#' + n.id + ' ' + n.name).join(', '));
+console.log('');
+console.log('The cycle pair is the important row. #10 and #11 point at');
+console.log('each other, so neither is ever a root and neither appears');
+console.log('in the tree -- they just VANISH. Reporting them is the');
+console.log('difference between "the sidebar is missing two folders"');
+console.log('and a two-hour debugging session.');
+
+console.log('');
+console.log('with orphans: "drop"');
+const dropped = listToTree(rows, { orphans: 'drop' });
+console.log('  roots:', dropped.tree.map((n) =&gt; '#' + n.id).join(', '));
+
+console.log('');
+console.log('with orphans: "throw"');
+try { listToTree(rows, { orphans: 'throw' }); }
+catch (e) { console.log('  ' + e.message); }</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">the one-pass version, and when it is worth it</span></div>
+<pre><code>// Create placeholder parents on demand, so a single pass suffices.
+function listToTreeOnePass(items, idKey = 'id', parentKey = 'parentId') {
+  const byId = new Map();
+  const roots = [];
+
+  const ensure = (id) =&gt; {
+    if (!byId.has(id)) byId.set(id, { children: [], __placeholder: true });
+    return byId.get(id);
+  };
+
+  for (const item of items) {
+    const node = ensure(item[idKey]);
+    Object.assign(node, item);           // fill in the real fields
+    delete node.__placeholder;
+
+    const parentId = item[parentKey];
+    if (parentId === null || parentId === undefined) roots.push(node);
+    else ensure(parentId).children.push(node);
+  }
+
+  // any node still marked as a placeholder was referenced as a
+  // parent but never appeared as a row -- so its children are
+  // orphans
+  const orphaned = [];
+  for (const [id, node] of byId) {
+    if (node.__placeholder) {
+      orphaned.push(...node.children);
+      byId.delete(id);
+    }
+  }
+  roots.push(...orphaned);
+
+  return roots;
+}
+
+function listToTreeTwoPass(items) {
+  const byId = new Map();
+  for (const item of items) byId.set(item.id, { ...item, children: [] });
+  const roots = [];
+  for (const item of items) {
+    const node = byId.get(item.id);
+    const parent = byId.get(item.parentId);
+    (parent ? parent.children : roots).push(node);
+  }
+  return roots;
+}
+
+const rows = [
+  { id: 4, parentId: 2, name: 'd' },
+  { id: 2, parentId: 1, name: 'b' },
+  { id: 1, parentId: null, name: 'a' },
+  { id: 3, parentId: 1, name: 'c' },
+  { id: 9, parentId: 99, name: 'orphan' },
+];
+
+const one = listToTreeOnePass(rows);
+const two = listToTreeTwoPass(rows);
+
+const summarise = (nodes, depth = 0) =&gt; nodes.flatMap((n) =&gt;
+  ['  ' + '  '.repeat(depth) + '- ' + n.name, ...summarise(n.children, depth + 1)]);
+
+console.log('one pass:');
+summarise(one).forEach((l) =&gt; console.log(l));
+console.log('');
+console.log('two pass:');
+summarise(two).forEach((l) =&gt; console.log(l));
+
+console.log('');
+console.log('same shape:',
+            JSON.stringify(one.map((n) =&gt; n.name).sort()) ===
+            JSON.stringify(two.map((n) =&gt; n.name).sort()));
+
+// the cost
+const makeRows = (n) =&gt; {
+  const r = [{ id: 1, parentId: null }];
+  for (let i = 2; i &lt;= n; i++) r.push({ id: i, parentId: Math.floor(i / 2) });
+  return r;
+};
+const big = makeRows(200000);
+
+let t = performance.now();
+listToTreeOnePass(big);
+const oneMs = performance.now() - t;
+t = performance.now();
+listToTreeTwoPass(big);
+const twoMs = performance.now() - t;
+
+console.log('');
+console.log('200,000 rows:');
+console.log('  one pass : ' + oneMs.toFixed(0) + ' ms');
+console.log('  two pass : ' + twoMs.toFixed(0) + ' ms');
+console.log('');
+console.log('Both are O(n), and the one-pass version measured SLOWER');
+console.log('here -- Object.assign per node plus the placeholder');
+console.log('bookkeeping costs more than the second loop it saved.');
+console.log('');
+console.log('It is also harder to read: placeholders, a marker field,');
+console.log('and a cleanup sweep to find the orphans.');
+console.log('');
+console.log('So: write the two-pass version. Know the one-pass version');
+console.log('exists so that "can you do it in a single pass?" gets');
+console.log('"yes, and it is not worth it -- here is why".');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">the variations you actually need</span></div>
+<pre><code>function listToTree(items) {
+  const byId = new Map();
+  for (const item of items) byId.set(item.id, { ...item, children: [] });
+  const roots = [];
+  for (const item of items) {
+    const node = byId.get(item.id);
+    const parent = byId.get(item.parentId);
+    (parent ? parent.children : roots).push(node);
+  }
+  return roots;
+}
+
+const rows = [
+  { id: 1, parentId: null, name: 'src' },
+  { id: 2, parentId: 1, name: 'components' },
+  { id: 3, parentId: 2, name: 'Button.tsx' },
+  { id: 4, parentId: 2, name: 'Input.tsx' },
+  { id: 5, parentId: 1, name: 'index.ts' },
+  { id: 6, parentId: null, name: 'README.md' },
+];
+const tree = listToTree(rows);
+
+// 1. the PATH to every node -- for breadcrumbs and permalinks
+function withPaths(nodes, prefix = []) {
+  const out = [];
+  for (const n of nodes) {
+    const path = [...prefix, n.name];
+    out.push({ id: n.id, path: path.join('/'), depth: path.length - 1 });
+    out.push(...withPaths(n.children, path));
+  }
+  return out;
+}
+console.log('paths:');
+for (const p of withPaths(tree)) console.log('  ' + p.path);
+
+// 2. find a node, and its ancestors
+function findWithAncestors(nodes, id, trail = []) {
+  for (const n of nodes) {
+    if (n.id === id) return [...trail, n];
+    const found = findWithAncestors(n.children, id, [...trail, n]);
+    if (found) return found;
+  }
+  return null;
+}
+const trail = findWithAncestors(tree, 3);
+console.log('');
+console.log('breadcrumb to #3:', trail.map((n) =&gt; n.name).join(' > '));
+
+// 3. filter the tree, KEEPING ancestors of anything that matches
+function filterTree(nodes, predicate) {
+  const out = [];
+  for (const n of nodes) {
+    const children = filterTree(n.children, predicate);
+    if (predicate(n) || children.length) out.push({ ...n, children });
+  }
+  return out;
+}
+console.log('');
+console.log('only .tsx files (ancestors kept):');
+(function show(nodes, d = 0) {
+  for (const n of nodes) {
+    console.log('  ' + '  '.repeat(d) + '- ' + n.name);
+    show(n.children, d + 1);
+  }
+})(filterTree(tree, (n) =&gt; n.name.endsWith('.tsx')));
+
+// 4. counts that roll up
+function withCounts(nodes) {
+  return nodes.map((n) =&gt; {
+    const children = withCounts(n.children);
+    const total = children.reduce((s, c) =&gt; s + c.totalDescendants, 0) + children.length;
+    return { ...n, children, totalDescendants: total };
+  });
+}
+console.log('');
+console.log('descendant counts:');
+(function show(nodes, d = 0) {
+  for (const n of nodes) {
+    console.log('  ' + '  '.repeat(d) + '- ' + n.name + '  (' + n.totalDescendants + ')');
+    show(n.children, d + 1);
+  }
+})(withCounts(tree));
+
+// 5. the maximum depth, and the leaf count
+const stats = (nodes) =&gt; nodes.reduce((acc, n) =&gt; {
+  const sub = stats(n.children);
+  return {
+    nodes: acc.nodes + 1 + sub.nodes,
+    leaves: acc.leaves + (n.children.length === 0 ? 1 : sub.leaves),
+    depth: Math.max(acc.depth, 1 + sub.depth),
+  };
+}, { nodes: 0, leaves: 0, depth: 0 });
+console.log('');
+console.log('stats:', JSON.stringify(stats(tree)));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Approach</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>recursive filter</td><td class="mono">O(n<sup>2</sup>)</td><td class="mono">O(n)</td></tr>
+        <tr><td><strong>two passes with a map</strong></td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+        <tr><td>one pass with placeholders</td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+        <tr><td>with a sort per node</td><td class="mono">O(n log n)</td><td class="mono">O(n)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The two-pass version does <code>n</code> map inserts and <code>n</code> map lookups, both O(1)
+  amortised, so O(n) total. Space is one map entry and one node object per row &mdash; and note the
+  nodes are <em>shared</em> between the map and the tree, so it is O(n) objects, not 2n.</p>
+
+  <p>The last row is worth flagging: sorting each <code>children</code> array is
+  <code>O(n log n)</code> overall (the sum of <code>k log k</code> over all sibling groups is bounded
+  by <code>n log n</code>), which is fine &mdash; but doing it inside a recursive traversal that also
+  rebuilds nodes with spread is how a linear algorithm quietly becomes something worse.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Two passes and a <code>Map</code> from id to node. First pass creates every node with an
+    empty children array; second pass looks up each row's parent and pushes the node into it, or into
+    the roots list if there is no parent. It is O(n) because the second pass looks parents up rather
+    than searching for them, and it works regardless of row order because after pass one every node
+    exists &mdash; attaching a child to a not-yet-attached parent is fine, since these are references
+    and the whole subtree travels with the parent when it is finally attached. The cases to handle are
+    orphans, whose parent id points at nothing, and cycles, where two nodes point at each other and
+    silently never appear in the output at all.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. The recursive filter</h3>
+
+  <p>Step 2. Beautiful, quadratic, and it always ships.</p>
+
+  <h3>2. Assuming parents come before children</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; a single pass with no placeholders</span></div>
+<pre><code>function onePassNoPlaceholder(items) {
+  const byId = new Map();
+  const roots = [];
+  for (const item of items) {
+    const node = { ...item, children: [] };
+    byId.set(item.id, node);
+    const parent = byId.get(item.parentId);      // may not exist YET
+    if (parent) parent.children.push(node);
+    else roots.push(node);
+  }
+  return roots;
+}
+
+function twoPass(items) {
+  const byId = new Map();
+  for (const item of items) byId.set(item.id, { ...item, children: [] });
+  const roots = [];
+  for (const item of items) {
+    const node = byId.get(item.id);
+    const parent = byId.get(item.parentId);
+    (parent ? parent.children : roots).push(node);
+  }
+  return roots;
+}
+
+const count = (nodes) =&gt; nodes.reduce((n, x) =&gt; n + 1 + count(x.children), 0);
+const shape = (nodes, d = 0) =&gt; nodes.map((n) =&gt;
+  '  '.repeat(d) + '#' + n.id + '\n' + shape(n.children, d + 1)).join('');
+
+const sorted = [
+  { id: 1, parentId: null }, { id: 2, parentId: 1 }, { id: 3, parentId: 2 },
+];
+const shuffled = [
+  { id: 3, parentId: 2 }, { id: 2, parentId: 1 }, { id: 1, parentId: null },
+];
+
+console.log('rows sorted parent-first:');
+console.log('  one pass roots:', onePassNoPlaceholder(sorted).length,
+            ' nodes in tree:', count(onePassNoPlaceholder(sorted)));
+console.log('  two pass roots:', twoPass(sorted).length,
+            ' nodes in tree:', count(twoPass(sorted)));
+
+console.log('');
+console.log('rows shuffled:');
+const bad = onePassNoPlaceholder(shuffled);
+console.log('  one pass roots:', bad.length, ' nodes in tree:', count(bad));
+console.log('    shape:');
+console.log(shape(bad).split('\n').filter(Boolean).map((l) =&gt; '      ' + l).join('\n'));
+const good = twoPass(shuffled);
+console.log('  two pass roots:', good.length, ' nodes in tree:', count(good));
+console.log('    shape:');
+console.log(shape(good).split('\n').filter(Boolean).map((l) =&gt; '      ' + l).join('\n'));
+
+console.log('');
+console.log('The one-pass version produced THREE roots from a three-');
+console.log('node chain, because when #3 was processed neither #2 nor');
+console.log('#1 existed yet.');
+console.log('');
+console.log('And the reason this bug survives review: `ORDER BY');
+console.log('parent_id` or an auto-increment id usually happens to put');
+console.log('parents first. Then someone adds `ORDER BY name` and the');
+console.log('sidebar flattens.');</code></pre>
+  </div>
+
+  <h3>3. Sharing one <code>children</code> array</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; every node has every child</span></div>
+<pre><code>// the classic: one array, reused
+const SHARED = [];
+function brokenShared(items) {
+  const byId = new Map();
+  for (const item of items) byId.set(item.id, { ...item, children: SHARED });
+  const roots = [];
+  for (const item of items) {
+    const node = byId.get(item.id);
+    const parent = byId.get(item.parentId);
+    (parent ? parent.children : roots).push(node);
+  }
+  return roots;
+}
+
+// the subtler version: a "template" object spread in
+const TEMPLATE = { children: [], expanded: false };
+function brokenTemplate(items) {
+  const byId = new Map();
+  for (const item of items) byId.set(item.id, { ...TEMPLATE, ...item });
+  const roots = [];
+  for (const item of items) {
+    const node = byId.get(item.id);
+    const parent = byId.get(item.parentId);
+    (parent ? parent.children : roots).push(node);
+  }
+  return roots;
+}
+
+function correct(items) {
+  const byId = new Map();
+  for (const item of items) byId.set(item.id, { ...item, children: [] });
+  const roots = [];
+  for (const item of items) {
+    const node = byId.get(item.id);
+    const parent = byId.get(item.parentId);
+    (parent ? parent.children : roots).push(node);
+  }
+  return roots;
+}
+
+const rows = [
+  { id: 1, parentId: null }, { id: 2, parentId: 1 }, { id: 3, parentId: 1 },
+];
+
+const c = correct(rows);
+console.log('correct: root #1 has', c[0].children.length, 'children:',
+            c[0].children.map((n) =&gt; '#' + n.id).join(', '));
+
+SHARED.length = 0;
+const s = brokenShared(rows);
+console.log('');
+console.log('shared array:');
+console.log('  roots returned      :', s.length);
+console.log('  SHARED now holds    :', SHARED.length, 'nodes --',
+            SHARED.map((n) =&gt; '#' + n.id).join(', '));
+console.log('  every node.children IS that same array?',
+            SHARED.every((n) =&gt; n.children === SHARED));
+console.log('  so every node reports', SHARED.length, 'children, leaves');
+console.log('  included -- and each node is its own descendant.');
+try {
+  JSON.stringify(s);
+  console.log('  JSON.stringify(tree) -> somehow succeeded');
+} catch (e) {
+  console.log('  JSON.stringify(tree) ->', e.message.split(String.fromCharCode(10))[0]);
+}
+console.log('  A recursive render on that never terminates.');
+
+const t = brokenTemplate(rows);
+console.log('');
+console.log('spread template:');
+console.log('  root #1 children:', t[0].children.length);
+console.log('  node #2 === node #3 children array?');
+const n2 = t[0].children[0], n3 = t[0].children[1];
+console.log('   ', n2.children === n3.children);
+console.log('  -- `{ ...TEMPLATE }` copies the REFERENCE to');
+console.log('     TEMPLATE.children. All three nodes share one array.');
+console.log('  TEMPLATE.children.length is now', TEMPLATE.children.length,
+            '-- the template was mutated');
+
+console.log('');
+console.log('Same trap as `new Array(n).fill([])`. A fresh [] per node');
+console.log('is the only correct answer.');</code></pre>
+  </div>
+
+  <h3>4. Losing nodes to a cycle without noticing</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; rows that silently disappear</span></div>
+<pre><code>function listToTree(items) {
+  const byId = new Map();
+  for (const item of items) byId.set(item.id, { ...item, children: [] });
+  const roots = [];
+  for (const item of items) {
+    const node = byId.get(item.id);
+    const parent = byId.get(item.parentId);
+    (parent ? parent.children : roots).push(node);
+  }
+  return roots;
+}
+
+const count = (nodes, seen = new Set()) =&gt; nodes.reduce((n, x) =&gt; {
+  if (seen.has(x)) return n;
+  seen.add(x);
+  return n + 1 + count(x.children, seen);
+}, 0);
+
+const rows = [
+  { id: 1, parentId: null, name: 'root' },
+  { id: 2, parentId: 1, name: 'child' },
+  { id: 3, parentId: 4, name: 'cycle A' },
+  { id: 4, parentId: 3, name: 'cycle B' },
+  { id: 5, parentId: 5, name: 'self-parent' },
+];
+
+const tree = listToTree(rows);
+console.log('rows in       :', rows.length);
+console.log('nodes in tree :', count(tree));
+console.log('roots         :', tree.length);
+console.log('');
+console.log('Three rows vanished with no error, no warning, and no');
+console.log('trace. The UI shows two items and everyone assumes the');
+console.log('data is wrong.');
+
+console.log('');
+console.log('And the self-parent is worse than missing -- it built a');
+console.log('cyclic object:');
+const selfNode = { id: 5, children: [] };
+selfNode.children.push(selfNode);
+try { JSON.stringify(selfNode); }
+catch (e) { console.log('  JSON.stringify ->', e.message.split('\n')[0]); }
+console.log('  A recursive React render on that never terminates.');
+
+console.log('');
+console.log('The detection, which is cheap:');
+function listToTreeChecked(items) {
+  const byId = new Map();
+  for (const item of items) byId.set(item.id, { ...item, children: [] });
+  const roots = [];
+  for (const item of items) {
+    const node = byId.get(item.id);
+    if (item.parentId === item.id) {
+      throw new Error('node ' + item.id + ' is its own parent');
+    }
+    const parent = byId.get(item.parentId);
+    (parent ? parent.children : roots).push(node);
+  }
+
+  const reachable = new Set();
+  (function mark(nodes) {
+    for (const n of nodes) {
+      if (reachable.has(n)) continue;
+      reachable.add(n);
+      mark(n.children);
+    }
+  })(roots);
+
+  const lost = [...byId.values()].filter((n) =&gt; !reachable.has(n));
+  if (lost.length) {
+    throw new Error('unreachable nodes (a cycle?): ' +
+      lost.map((n) =&gt; n.id).join(', '));
+  }
+  return roots;
+}
+
+try { listToTreeChecked(rows); }
+catch (e) { console.log('  ' + e.message); }
+
+try { listToTreeChecked(rows.filter((r) =&gt; r.id !== 5)); }
+catch (e) { console.log('  ' + e.message); }
+
+console.log('');
+console.log('  clean data:', listToTreeChecked(rows.slice(0, 2)).length, 'root(s), no error');
+console.log('');
+console.log('A reachability sweep is one extra O(n) pass. It turns a');
+console.log('silent data-loss bug into a message that names the rows.');</code></pre>
+  </div>
+
+  <h3>5. Rebuilding the tree on every render</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct, and re-run 60 times a second</span></div>
+<pre><code>function listToTree(items) {
+  const byId = new Map();
+  for (const item of items) byId.set(item.id, { ...item, children: [] });
+  const roots = [];
+  for (const item of items) {
+    const node = byId.get(item.id);
+    const parent = byId.get(item.parentId);
+    (parent ? parent.children : roots).push(node);
+  }
+  return roots;
+}
+
+const rows = (() =&gt; {
+  const r = [{ id: 1, parentId: null }];
+  for (let i = 2; i &lt;= 3000; i++) r.push({ id: i, parentId: Math.floor(i / 2) });
+  return r;
+})();
+
+// a "render" that rebuilds
+let t = performance.now();
+const RENDERS = 100;
+const results = [];
+for (let i = 0; i &lt; RENDERS; i++) results.push(listToTree(rows));
+const rebuildMs = performance.now() - t;
+
+// memoised: rebuild only when the rows change
+let cachedRows = null, cachedTree = null;
+const memoTree = (items) =&gt; {
+  if (items !== cachedRows) { cachedRows = items; cachedTree = listToTree(items); }
+  return cachedTree;
+};
+t = performance.now();
+const memoResults = [];
+for (let i = 0; i &lt; RENDERS; i++) memoResults.push(memoTree(rows));
+const memoMs = performance.now() - t;
+
+console.log(RENDERS + ' renders over 3,000 rows');
+console.log('  rebuild each time: ' + rebuildMs.toFixed(1) + ' ms');
+console.log('  memoised         : ' + memoMs.toFixed(1) + ' ms');
+
+console.log('');
+console.log('The milliseconds are the smaller problem. The real one:');
+console.log('  every rebuild produces NEW node objects');
+console.log('  identical trees, different references?',
+            results[0][0] !== results[1][0]);
+console.log('  memoised, same reference?', memoResults[0] === memoResults[1]);
+console.log('');
+console.log('So every memoised child component sees a new prop and');
+console.log('re-renders -- the whole tree, every time -- and any');
+console.log('component state keyed on node identity is lost.');
+console.log('');
+console.log('Build the tree where the DATA lives, not where it is');
+console.log('displayed: in the selector, the query cache, or a');
+console.log('useMemo keyed on the rows array.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the two-pass version from memory</strong>, then explain why row order does not
+    matter &mdash; the reference argument in Step 4 is the answer.</li>
+    <li><strong>Handle orphans and cycles.</strong> Step 7 &mdash; and say what a cycle does if you do
+    <em>not</em> handle it.</li>
+    <li><strong>Write the one-pass version</strong> so you can answer the follow-up, then say why you
+    would still ship two passes.</li>
+    <li><strong>Write <code>filterTree</code> keeping ancestors.</strong> Step 7 &mdash; it is what
+    every searchable tree UI needs and it is four lines.</li>
+    <li><strong>Tree back to a flat list.</strong> The next page &mdash; the same trip in reverse.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Build an index, then use it.</strong> That is the same move as Two Sum, groupBy and
+    keyBy: replace &ldquo;search the collection again&rdquo; with &ldquo;look it up&rdquo;. The part
+    specific to trees is the reference insight &mdash; attaching a child to a parent that is not yet
+    attached anywhere works, so you never need to sort the input or sweep repeatedly. And always ask
+    what happens to rows that are unreachable, because the default answer is that they disappear
+    without a word.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="04-deep-equal.html">&larr; Deep Equality Check</a>
+  <a href="06-tree-to-list.html">Next: Nested Tree &rarr; Flat List &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

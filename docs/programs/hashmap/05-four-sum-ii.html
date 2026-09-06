@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Four Sum II</title>
+<meta name="description" content="Meet in the middle: split four nested loops into two plus two, and turn n^4 into n^2.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Hash map &middot; Problem 05</p>
+  <h1>Four Sum II</h1>
+  <p class="standfirst">Four arrays, four nested loops, O(n&#8308;). The fix is a technique with its
+  own name &mdash; <strong>meet in the middle</strong>. Split the four loops into two halves, solve
+  each half separately, and join them with a hash map.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>You are given four arrays of the same length. Count how many tuples
+  <code>(i, j, k, l)</code> satisfy <code>A[i] + B[j] + C[k] + D[l] === 0</code>.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>A</th><th>B</th><th>C</th><th>D</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[1,2]</td><td class="mono">[-2,-1]</td><td class="mono">[-1,2]</td><td class="mono">[0,2]</td><td class="mono">2</td></tr>
+        <tr><td class="mono">[0]</td><td class="mono">[0]</td><td class="mono">[0]</td><td class="mono">[0]</td><td class="mono">1</td></tr>
+        <tr><td class="mono">[1]</td><td class="mono">[1]</td><td class="mono">[1]</td><td class="mono">[1]</td><td class="mono">0</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The two tuples in the first row:</p>
+
+  <div class="trace">
+<pre>  A=[1,2]   B=[-2,-1]   C=[-1,2]   D=[0,2]
+
+  (0, 0, 0, 1):   1 + (-2) + (-1) + 2 = 0
+  (1, 1, 0, 0):   2 + (-1) + (-1) + 0 = 0
+
+  count: 2
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">What makes this easier than ordinary Four Sum</span>
+    <p>The numbers come from <strong>four separate arrays</strong>, so you take exactly one from each
+    &mdash; no risk of reusing an element. And you are counting <strong>index tuples</strong>, not
+    distinct value combinations, so <strong>there is no de-duplication to do at all</strong>.</p>
+    <p>That is why Three Sum was fiddly and this is not. Read the problem carefully enough to notice
+    when the annoying part has been removed.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; four loops</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; brute force</span></div>
+<pre><code>function fourSumBrute(A, B, C, D) {
+  let count = 0;
+
+  for (let i = 0; i &lt; A.length; i++)
+    for (let j = 0; j &lt; B.length; j++)
+      for (let k = 0; k &lt; C.length; k++)
+        for (let l = 0; l &lt; D.length; l++)
+          if (A[i] + B[j] + C[k] + D[l] === 0) count++;
+
+  return count;
+}
+
+console.log(fourSumBrute([1,2], [-2,-1], [-1,2], [0,2]));   // 2
+console.log(fourSumBrute([0], [0], [0], [0]));              // 1
+console.log(fourSumBrute([1], [1], [1], [1]));              // 0
+console.log(fourSumBrute([-1,-1], [-1,1], [-1,1], [1,-1])); // 6</code></pre>
+  </div>
+
+  <p>Correct and unusable. With arrays of 200 elements that is 1.6&nbsp;billion additions.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Array length</th><th>O(n&#8308;) operations</th><th>O(n&sup2;) operations</th></tr></thead>
+      <tbody>
+        <tr><td class="num">10</td><td class="num">10,000</td><td class="num">100</td></tr>
+        <tr><td class="num">50</td><td class="num">6,250,000</td><td class="num">2,500</td></tr>
+        <tr><td class="num">100</td><td class="num">100,000,000</td><td class="num">10,000</td></tr>
+        <tr><td class="num">200</td><td class="num">1,600,000,000</td><td class="num">40,000</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 120;
+const A = [], B = [], C = [], D = [];
+for (let i = 0; i &lt; N; i++) {
+  A.push(Math.floor(Math.random() * 21) - 10);
+  B.push(Math.floor(Math.random() * 21) - 10);
+  C.push(Math.floor(Math.random() * 21) - 10);
+  D.push(Math.floor(Math.random() * 21) - 10);
+}
+
+function brute(a, b, c, d) {
+  let n = 0;
+  for (const x of a) for (const y of b) for (const z of c) for (const w of d)
+    if (x + y + z + w === 0) n++;
+  return n;
+}
+
+function meetInMiddle(a, b, c, d) {
+  const sums = new Map();
+  for (const x of a) for (const y of b) {
+    const s = x + y;
+    sums.set(s, (sums.get(s) || 0) + 1);
+  }
+  let n = 0;
+  for (const z of c) for (const w of d) {
+    n += sums.get(-(z + w)) || 0;
+  }
+  return n;
+}
+
+let t = performance.now();
+const p = brute(A, B, C, D);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const q = meetInMiddle(A, B, C, D);
+const fastMs = performance.now() - t;
+
+console.log('four loops       :', p, 'in', bruteMs.toFixed(1) + ' ms');
+console.log('meet in the middle:', q, 'in', fastMs.toFixed(2) + ' ms');
+console.log('same answer:', p === q);
+console.log('speed-up:', Math.round(bruteMs / Math.max(fastMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; meet in the middle</h2>
+
+  <p>Rearrange the equation. Instead of four things summing to zero, think of it as two pairs that
+  cancel each other:</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the rearrangement</span></div>
+<pre><code>A[i] + B[j] + C[k] + D[l] === 0
+
+is the same as
+
+(A[i] + B[j])  ===  -(C[k] + D[l])
+ \___________/       \_____________/
+   left half            right half</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Compute <strong>every</strong> sum of a pair from A and B &mdash; there are n&sup2; of them
+    &mdash; and count how often each sum occurs in a map. Then compute every sum from C and D, and
+    for each one look up how many left-half pairs equal its negative.</p>
+    <p>Two nested loops, then two more. n&sup2; + n&sup2;, not n&#8308;.</p>
+  </div>
+
+  <p>Notice this is Two Sum again, one level up. Two Sum asked &ldquo;have I seen the complement of
+  this <em>number</em>?&rdquo;. Here we ask &ldquo;have I seen the complement of this
+  <em>pair sum</em>?&rdquo;. Same complement lookup, applied to a derived value.</p>
+
+  <h3>Why counts, not presence</h3>
+
+  <p>Several different <code>(i, j)</code> pairs can produce the same sum, and each one is a separate
+  valid tuple. So the map stores <em>how many times</em> each sum occurred, and every match adds that
+  whole count &mdash; not 1.</p>
+
+  <div class="trace">
+<pre>  A = [1, 2]     B = [-2, -1]
+
+  pairs and their sums:
+     1 + (-2) = -1
+     1 + (-1) =  0
+     2 + (-2) =  0
+     2 + (-1) =  1
+
+  sums map:  { -1: 1,  0: 2,  1: 1 }
+                        ^
+              TWO different pairs both make 0
+
+  Later, a (C, D) pair summing to 0 needs a left pair summing to 0
+  -- and there are two of them, so it contributes 2, not 1.
+</pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>A=[1,2]</code>, <code>B=[-2,-1]</code>, <code>C=[-1,2]</code>, <code>D=[0,2]</code>.</p>
+
+  <div class="trace">
+<pre>PHASE 1 -- every (A, B) sum
+
+  1 + (-2) = -1     sums = { -1: 1 }
+  1 + (-1) =  0     sums = { -1: 1, 0: 1 }
+  2 + (-2) =  0     sums = { -1: 1, 0: 2 }
+  2 + (-1) =  1     sums = { -1: 1, 0: 2, 1: 1 }
+
+PHASE 2 -- every (C, D) sum, looking for its negative
+
+  -1 + 0 = -1   need  1   sums has 1 (x1)   ->  count = 1
+  -1 + 2 =  1   need -1   sums has -1 (x1)  ->  count = 2
+   2 + 0 =  2   need -2   not present       ->  count = 2
+   2 + 2 =  4   need -4   not present       ->  count = 2
+
+answer: 2
+</pre>
+  </div>
+
+  <p>Now the case where the counts matter, <code>A=[-1,-1]</code>, <code>B=[-1,1]</code>,
+  <code>C=[-1,1]</code>, <code>D=[1,-1]</code>:</p>
+
+  <div class="trace">
+<pre>PHASE 1
+  -1 + -1 = -2      sums = { -2: 1 }
+  -1 +  1 =  0      sums = { -2: 1, 0: 1 }
+  -1 + -1 = -2      sums = { -2: 2, 0: 1 }
+  -1 +  1 =  0      sums = { -2: 2, 0: 2 }
+
+PHASE 2
+  -1 + 1 = 0    need 0   sums has 0 twice  ->  count = 2
+  -1 + -1 = -2  need 2   not present       ->  count = 2
+   1 + 1 = 2    need -2  sums has -2 twice ->  count = 4
+   1 + -1 = 0   need 0   sums has 0 twice  ->  count = 6
+
+answer: 6
+
+Each lookup added TWO. Storing booleans would have given 3.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function fourSumExplained(A, B, C, D) {
+  console.log('A =', A, ' B =', B, ' C =', C, ' D =', D);
+  console.log('');
+  console.log('PHASE 1 -- count every (A, B) sum');
+
+  const sums = new Map();
+  for (const x of A) {
+    for (const y of B) {
+      const s = x + y;
+      sums.set(s, (sums.get(s) || 0) + 1);
+      console.log('  ' + x + ' + ' + y + ' = ' + s + '     sums = ' +
+                  JSON.stringify([...sums]));
+    }
+  }
+
+  console.log('');
+  console.log('PHASE 2 -- every (C, D) sum, look up its negative');
+
+  let count = 0;
+  for (const z of C) {
+    for (const w of D) {
+      const s = z + w;
+      const hits = sums.get(-s) || 0;
+      count += hits;
+      console.log('  ' + z + ' + ' + w + ' = ' + s + '   need ' + (-s) +
+                  '   found ' + hits + '   count = ' + count);
+    }
+  }
+
+  console.log('');
+  return count;
+}
+
+console.log('ANSWER:', fourSumExplained([1,2], [-2,-1], [-1,2], [0,2]));
+console.log('==========================================');
+console.log('ANSWER:', fourSumExplained([-1,-1], [-1,1], [-1,1], [1,-1]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; plain object, loops only</span></div>
+<pre><code>function fourSumCountManual(A, B, C, D) {
+  const sums = {};    // pair sum -> how many (A, B) pairs make it
+
+  // PHASE 1
+  for (let i = 0; i &lt; A.length; i++) {
+    for (let j = 0; j &lt; B.length; j++) {
+      const s = A[i] + B[j];
+      if (sums[s] === undefined) sums[s] = 0;
+      sums[s] = sums[s] + 1;
+    }
+  }
+
+  // PHASE 2
+  let count = 0;
+
+  for (let k = 0; k &lt; C.length; k++) {
+    for (let l = 0; l &lt; D.length; l++) {
+      const need = -(C[k] + D[l]);
+      if (sums[need] !== undefined) {
+        count = count + sums[need];    // add ALL of them, not 1
+      }
+    }
+  }
+
+  return count;
+}
+
+console.log(fourSumCountManual([1,2], [-2,-1], [-1,2], [0,2]));     // 2
+console.log(fourSumCountManual([0], [0], [0], [0]));                // 1
+console.log(fourSumCountManual([1], [1], [1], [1]));                // 0
+console.log(fourSumCountManual([-1,-1], [-1,1], [-1,1], [1,-1]));   // 6
+console.log(fourSumCountManual([0,0], [0,0], [0,0], [0,0]));        // 16
+console.log(fourSumCountManual([], [], [], []));                    // 0</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Watch out for <code>-0</code></span>
+    <p><code>-(0 + 0)</code> is <code>-0</code>, and as an <em>object key</em> that stringifies to
+    <code>"0"</code>, so the plain-object version is safe. A <code>Map</code>, however, uses
+    SameValueZero, which also treats <code>-0</code> and <code>0</code> as the same key &mdash; so
+    both are fine here. It is still worth writing <code>0 - (z + w)</code> instead of
+    <code>-(z + w)</code> when a stray <code>-0</code> would be visible in output.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">see for yourself</span></div>
+<pre><code>const m = new Map();
+m.set(0, 'zero');
+console.log('Map treats -0 as 0:', m.get(-0));      // 'zero'
+
+const o = {};
+o[0] = 'zero';
+console.log('object key of -0:', o[-0]);            // 'zero'
+console.log('String(-0) is', JSON.stringify(String(-0)));   // "0"
+
+// But -0 is visible if you print it directly:
+console.log(-0);                                    // -0
+console.log(Object.is(-0, 0));                      // false
+console.log(-0 === 0);                              // true</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function fourSumCount(A, B, C, D) {
+  const sums = new Map();
+
+  for (const a of A) {
+    for (const b of B) {
+      const s = a + b;
+      sums.set(s, (sums.get(s) || 0) + 1);
+    }
+  }
+
+  let count = 0;
+
+  for (const c of C) {
+    for (const d of D) {
+      count += sums.get(-(c + d)) || 0;
+    }
+  }
+
+  return count;
+}
+
+console.log(fourSumCount([1,2], [-2,-1], [-1,2], [0,2]));     // 2
+console.log(fourSumCount([0], [0], [0], [0]));                // 1
+console.log(fourSumCount([-1,-1], [-1,1], [-1,1], [1,-1]));   // 6
+console.log(fourSumCount([0,0], [0,0], [0,0], [0,0]));        // 16</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the generalisation &mdash; any number of arrays</span></div>
+<pre><code>// Split k arrays into two halves, enumerate all sums of each half,
+// and join. This is meet-in-the-middle in general form.
+function allSums(arrays) {
+  let sums = new Map([[0, 1]]);          // one way to sum nothing: 0
+
+  for (const arr of arrays) {
+    const next = new Map();
+    for (const [partial, ways] of sums) {
+      for (const value of arr) {
+        const s = partial + value;
+        next.set(s, (next.get(s) || 0) + ways);
+      }
+    }
+    sums = next;
+  }
+
+  return sums;
+}
+
+function kSumCount(arrays, target = 0) {
+  const mid = Math.floor(arrays.length / 2);
+  const left = allSums(arrays.slice(0, mid));
+  const right = allSums(arrays.slice(mid));
+
+  let count = 0;
+  for (const [s, ways] of right) {
+    count += (left.get(target - s) || 0) * ways;
+  }
+  return count;
+}
+
+console.log(kSumCount([[1,2], [-2,-1], [-1,2], [0,2]]));        // 2
+console.log(kSumCount([[-1,-1], [-1,1], [-1,1], [1,-1]]));      // 6
+console.log(kSumCount([[1,2], [3,4]], 5));                      // 2  -> 1+4, 2+3
+console.log(kSumCount([[1], [2], [3], [4], [5], [6]], 21));     // 1
+
+// For k arrays of length n this is O(n^(k/2)) instead of O(n^k) --
+// which is the whole reason the technique has a name.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">why this is Two Sum in disguise</span></div>
+<pre><code>// Two Sum: have I seen the complement of this NUMBER?
+function twoSum(nums, target) {
+  const seen = new Map();
+  for (let i = 0; i &lt; nums.length; i++) {
+    if (seen.has(target - nums[i])) return [seen.get(target - nums[i]), i];
+    seen.set(nums[i], i);
+  }
+  return [];
+}
+
+// Four Sum II: have I seen the complement of this PAIR SUM?
+function fourSumCount(A, B, C, D) {
+  const seen = new Map();
+  for (const a of A) for (const b of B) seen.set(a + b, (seen.get(a + b) || 0) + 1);
+  let count = 0;
+  for (const c of C) for (const d of D) count += seen.get(0 - (c + d)) || 0;
+  return count;
+}
+
+console.log(twoSum([2, 7, 11, 15], 9));                       // [0, 1]
+console.log(fourSumCount([1,2], [-2,-1], [-1,2], [0,2]));     // 2
+
+// Identical shape. The only difference is WHAT gets hashed --
+// a value, or a derived combination of values. Once you see that,
+// "reduce k-sum to 2-sum" stops being a trick and becomes a habit.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Four nested loops</td><td class="mono">O(n&#8308;)</td><td class="mono">O(1)</td></tr>
+        <tr><td>Three loops + a map</td><td class="mono">O(n&sup3;)</td><td class="mono">O(n)</td></tr>
+        <tr><td><strong>Meet in the middle</strong></td><td class="mono">O(n&sup2;)</td><td class="mono">O(n&sup2;)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Phase 1 is n&sup2; insertions; phase 2 is n&sup2; lookups. Sequential, so they add:
+  <strong>2n&sup2;</strong>, which is O(n&sup2;).</p>
+
+  <p>The space is the honest cost: the map can hold up to n&sup2; distinct sums. For n = 200 that is
+  40,000 entries &mdash; trivial. For n = 100,000 it would be ten billion, and meet-in-the-middle
+  stops being viable. Always state the space when you claim this speedup; it is the thing you traded
+  away.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Four nested loops is O(n&#8308;). But the equation splits: <code>A[i] + B[j]</code> must
+    equal <code>-(C[k] + D[l])</code>. So I enumerate all n&sup2; sums of the first two arrays into a
+    map from sum to how many pairs produce it, then enumerate all n&sup2; sums of the last two and add
+    up the matching counts. O(n&sup2;) time and O(n&sup2;) space. It is Two Sum&rsquo;s complement
+    lookup, applied to pair sums instead of values.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Storing presence instead of counts</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; a Set loses the multiplicity</span></div>
+<pre><code>function broken(A, B, C, D) {
+  const sums = new Set();
+  for (const a of A) for (const b of B) sums.add(a + b);
+
+  let count = 0;
+  for (const c of C) for (const d of D) {
+    if (sums.has(-(c + d))) count++;      // adds 1, however many pairs
+  }
+  return count;
+}
+
+console.log(broken([1,2], [-2,-1], [-1,2], [0,2]));     // 2   right, by luck
+console.log(broken([-1,-1], [-1,1], [-1,1], [1,-1]));   // 3   WRONG, should be 6
+console.log(broken([0,0], [0,0], [0,0], [0,0]));        // 4   WRONG, should be 16
+
+// Four (A,B) pairs all sum to 0, and four (C,D) pairs all sum to 0.
+// That is 4 x 4 = 16 tuples. A Set says "yes, 0 exists" and counts 1
+// per right-hand pair, giving 4.</code></pre>
+  </div>
+
+  <h3>2. Adding 1 instead of the stored count</h3>
+
+  <p>The same bug wearing a different coat: <code>if (sums.has(need)) count++;</code> when you have a
+  Map. Write <code>count += sums.get(need) || 0;</code>. The map holds a number for a reason.</p>
+
+  <h3>3. Forgetting to negate</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; looks up the sum, not its negative</span></div>
+<pre><code>function broken(A, B, C, D) {
+  const sums = new Map();
+  for (const a of A) for (const b of B) sums.set(a + b, (sums.get(a + b) || 0) + 1);
+  let count = 0;
+  for (const c of C) for (const d of D) count += sums.get(c + d) || 0;   // no minus
+  return count;
+}
+
+console.log(broken([1,2], [-2,-1], [-1,2], [0,2]));   // 3   WRONG, should be 2
+console.log(broken([0], [0], [0], [0]));              // 1   right, by luck
+
+// It counts pairs whose sums are EQUAL rather than opposite.
+// Zero is its own negative, which is why the all-zeros case hides
+// the bug. Test with something that is not symmetric.</code></pre>
+  </div>
+
+  <h3>4. Trying to de-duplicate</h3>
+
+  <p>People who have just done Three Sum reach for the duplicate-skipping machinery. It is not needed
+  here and it makes the answer <em>wrong</em>: <code>[0,0],[0,0],[0,0],[0,0]</code> has 16 valid
+  index tuples, and collapsing them to one distinct value combination gives 1. Read the question:
+  it counts tuples.</p>
+
+  <h3>5. Splitting unevenly</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct, but a worse split</span></div>
+<pre><code>// Three loops plus a map: also correct, also better than n^4,
+// but O(n^3) instead of O(n^2).
+function threeAndOne(A, B, C, D) {
+  const counts = new Map();
+  for (const d of D) counts.set(d, (counts.get(d) || 0) + 1);
+
+  let n = 0;
+  for (const a of A) for (const b of B) for (const c of C) {
+    n += counts.get(-(a + b + c)) || 0;
+  }
+  return n;
+}
+
+console.log(threeAndOne([1,2], [-2,-1], [-1,2], [0,2]));     // 2
+console.log(threeAndOne([-1,-1], [-1,1], [-1,1], [1,-1]));   // 6
+
+// Splitting 3 + 1 gives n^3 + n. Splitting 2 + 2 gives n^2 + n^2.
+// The EVEN split is what makes meet-in-the-middle worth doing --
+// the cost is driven by the bigger half, so balance them.</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the eight-line version from memory</strong>, then say why the map stores counts
+    rather than a boolean.</li>
+    <li><strong>Return the tuples, not the count.</strong> Now the map must store the actual
+    <code>(i, j)</code> pairs, and the output can be O(n&#8308;) in size &mdash; a good demonstration
+    that <em>counting</em> can be far cheaper than <em>listing</em>.</li>
+    <li><strong>Non-zero target.</strong> Change the target from 0 to any <code>t</code>. One
+    character changes; work out which.</li>
+    <li><strong>Six Sum, six arrays.</strong> Split three and three: O(n&sup3;) instead of
+    O(n&#8310;). The generic <code>kSumCount</code> in Step 7 already does it.</li>
+    <li><strong>Subset sum by meet-in-the-middle.</strong> Given one array of 40 numbers, is there a
+    subset summing to a target? 2&#8308;&#8304; subsets is impossible; splitting into two halves of 20
+    gives 2&sup2;&#8304; each, which is about a million &mdash; entirely doable. This is the technique
+    at its most impressive.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Meet in the middle: split the search space in half, enumerate each half, and join with
+    a hash map.</strong> It turns O(n&#8310;&#7522;&#7525;&#7523;) into roughly the square root of
+    itself, and it works whenever the condition can be rearranged so one half determines exactly what
+    the other half must supply. The price is memory &mdash; you are storing one whole half &mdash; so
+    check that the half fits before you reach for it.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="04-longest-consecutive-sequence.html">&larr; Longest Consecutive Sequence</a>
+  <a href="06-ransom-note.html">Next: Ransom Note &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

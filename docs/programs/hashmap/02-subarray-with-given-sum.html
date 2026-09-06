@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subarray With Given Sum</title>
+<meta name="description" content="When all the numbers are positive a sliding window works — and knowing exactly why is the whole lesson.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Hash map &middot; Problem 02</p>
+  <h1>Subarray With Given Sum</h1>
+  <p class="standfirst">The companion to Subarray Sum Equals K. Here the numbers are
+  <strong>all positive</strong>, and that single guarantee is worth an entire algorithm: it makes the
+  running sum <em>monotonic</em>, which is exactly the property a sliding window needs.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Given an array of <strong>positive</strong> integers and a target, find a contiguous subarray
+  that sums to exactly the target. Return its start and end indexes, or an indication that none
+  exists.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th class="mono">target</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[1, 4, 20, 3, 10, 5]</td><td class="mono">33</td><td class="mono">indexes 2&ndash;4 &rarr; [20, 3, 10]</td></tr>
+        <tr><td class="mono">[1, 4, 0, 0, 3, 10, 5]</td><td class="mono">7</td><td class="mono">indexes 1&ndash;4 &rarr; [4, 0, 0, 3]</td></tr>
+        <tr><td class="mono">[1, 4]</td><td class="mono">0</td><td class="mono">none</td></tr>
+        <tr><td class="mono">[5]</td><td class="mono">5</td><td class="mono">indexes 0&ndash;0</td></tr>
+        <tr><td class="mono">[2, 3, 4]</td><td class="mono">100</td><td class="mono">none</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">The guarantee is the algorithm</span>
+    <p>&ldquo;All positive&rdquo; means the running sum of a window <strong>only grows when you extend
+    it</strong> and <strong>only shrinks when you contract it</strong>. That is monotonicity, and it
+    is what tells you which pointer to move: too small, extend on the right; too big, shrink on the
+    left. Without it there is no rule, and the window is useless.</p>
+  </div>
+
+  <p>Zeros are usually allowed and are harmless &mdash; they neither grow nor shrink the sum, so the
+  monotonicity is non-strict, which is enough. Negatives are not allowed, and if they were, you would
+  need the prefix-sum-plus-map solution from the arrays topic instead.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; every subarray</span></div>
+<pre><code>function findSubarrayBrute(nums, target) {
+  for (let start = 0; start &lt; nums.length; start++) {
+    let sum = 0;
+
+    for (let end = start; end &lt; nums.length; end++) {
+      sum += nums[end];
+
+      if (sum === target) return { from: start, to: end, values: nums.slice(start, end + 1) };
+      if (sum &gt; target) break;      // positives only: it can only grow from here
+    }
+  }
+
+  return null;
+}
+
+console.log(findSubarrayBrute([1, 4, 20, 3, 10, 5], 33));      // 2..4
+console.log(findSubarrayBrute([1, 4, 0, 0, 3, 10, 5], 7));     // 1..4
+console.log(findSubarrayBrute([1, 4], 0));                     // null
+console.log(findSubarrayBrute([5], 5));                        // 0..0
+console.log(findSubarrayBrute([2, 3, 4], 100));                // null</code></pre>
+  </div>
+
+  <p>Note the <code>break</code>. It is only legal <em>because all the numbers are positive</em>:
+  once the sum overshoots, extending further can never bring it back down. That early exit is the
+  same insight as the real solution, applied timidly.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>Even with the <code>break</code>, the worst case is O(n&sup2;): an array of small numbers with a
+  large target, where each start walks a long way before overshooting.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// The worst case: NO subarray matches, and the target is larger than
+// the whole array's total -- so the `break` never fires and every
+// start position walks all the way to the end.
+const N = 12000;
+const nums = new Array(N).fill(2);
+const target = 2 * N + 1;         // impossible: bigger than the total
+
+function brute(a, t) {
+  for (let s = 0; s &lt; a.length; s++) {
+    let sum = 0;
+    for (let e = s; e &lt; a.length; e++) {
+      sum += a[e];
+      if (sum === t) return [s, e];
+      if (sum &gt; t) break;
+    }
+  }
+  return null;
+}
+
+function window(a, t) {
+  let left = 0, sum = 0;
+  for (let right = 0; right &lt; a.length; right++) {
+    sum += a[right];
+    while (sum &gt; t &amp;&amp; left &lt;= right) { sum -= a[left]; left++; }
+    if (sum === t &amp;&amp; left &lt;= right) return [left, right];
+  }
+  return null;
+}
+
+let x = performance.now();
+const p = brute(nums, target);
+const bruteMs = performance.now() - x;
+
+x = performance.now();
+const q = window(nums, target);
+const fastMs = performance.now() - x;
+
+console.log('every subarray :', JSON.stringify(p), 'in', bruteMs.toFixed(1) + ' ms');
+console.log('sliding window :', JSON.stringify(q), 'in', fastMs.toFixed(2) + ' ms');
+console.log('same answer:', JSON.stringify(p) === JSON.stringify(q));
+console.log('speed-up:', Math.round(bruteMs / Math.max(fastMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; one window, two rules</h2>
+
+  <p>The brute force throws the window away and rebuilds it from the next position. But when it
+  overshoots, it already knows something useful: the current window is <em>too big</em>. The fix is
+  not to start over &mdash; it is to make the window smaller from the left.</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Keep one window and its running sum.</p>
+    <ul style="margin-bottom:0">
+      <li><strong>Sum too small</strong> &rarr; extend on the right. (Only adding can help.)</li>
+      <li><strong>Sum too big</strong> &rarr; shrink on the left. (Only removing can help.)</li>
+      <li><strong>Sum exact</strong> &rarr; you have the answer.</li>
+    </ul>
+  </div>
+
+  <p>Each rule is <em>forced</em>, and that is only true because the numbers are positive. Spell out
+  why:</p>
+
+  <div class="trace">
+<pre>  sum is too SMALL:
+     shrinking would remove a positive number, making it smaller
+     still -- strictly worse. So extend.
+
+  sum is too BIG:
+     extending would add a positive number, making it bigger still
+     -- strictly worse. So shrink.
+
+  With a negative number in the array, BOTH of those arguments
+  collapse: adding could shrink the sum, removing could grow it.
+  There is no forced move, and the window is not applicable.
+</pre>
+  </div>
+
+  <p>Both pointers only ever move forward, so together they cross the array once: <strong>O(n)</strong>.</p>
+
+  <div class="note warn">
+    <span class="t">The guard that matters when the target is 0</span>
+    <p>The shrink loop must stop before <code>left</code> passes <code>right</code>, or the window
+    becomes empty and its sum is 0 &mdash; which then &ldquo;matches&rdquo; a target of 0 at every
+    position. Writing <code>while (sum &gt; target &amp;&amp; left &lt;= right)</code> and checking
+    <code>left &lt;= right</code> before reporting a match keeps the window non-empty.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>nums = [1, 4, 20, 3, 10, 5]</code>, <code>target = 33</code>.</p>
+
+  <div class="trace">
+<pre>left = 0   sum = 0
+
+right=0   add 1     sum = 1     1 &lt; 33, keep growing
+right=1   add 4     sum = 5     5 &lt; 33
+right=2   add 20    sum = 25    25 &lt; 33
+right=3   add 3     sum = 28    28 &lt; 33
+right=4   add 10    sum = 38    38 &gt; 33  ->  shrink
+            remove nums[0] = 1   sum = 37   left = 1   still &gt; 33
+            remove nums[1] = 4   sum = 33   left = 2   EXACT
+
+answer: indexes 2..4  ->  [20, 3, 10]
+</pre>
+  </div>
+
+  <p>Watch the shrink at <code>right=4</code>: it removed two elements before landing exactly on the
+  target. The brute force would have restarted from index 1 and re-added 4, 20, 3, 10 from scratch.</p>
+
+  <p>Now a case with no answer, <code>nums = [2, 3, 4]</code>, <code>target = 100</code>:</p>
+
+  <div class="trace">
+<pre>right=0   sum = 2    &lt; 100
+right=1   sum = 5    &lt; 100
+right=2   sum = 9    &lt; 100
+end of array, never reached 100  ->  null
+
+Note the window never shrank at all -- with a target larger than
+the total, the sum is always too small and the right pointer just
+runs off the end.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function findSubarrayExplained(nums, target) {
+  console.log('nums =', nums, '  target =', target);
+  console.log('');
+
+  let left = 0;
+  let sum = 0;
+
+  for (let right = 0; right &lt; nums.length; right++) {
+    sum += nums[right];
+    console.log('right=' + right + '  add ' + nums[right] + '   sum = ' + sum +
+                '   window [' + left + '..' + right + ']');
+
+    while (sum &gt; target &amp;&amp; left &lt;= right) {
+      console.log('        sum ' + sum + ' &gt; ' + target + ' -> remove nums[' + left +
+                  '] = ' + nums[left]);
+      sum -= nums[left];
+      left++;
+      console.log('        sum = ' + sum + '   window [' + left + '..' + right + ']');
+    }
+
+    if (sum === target &amp;&amp; left &lt;= right) {
+      console.log('        EXACT -> indexes ' + left + '..' + right);
+      console.log('');
+      return { from: left, to: right, values: nums.slice(left, right + 1) };
+    }
+  }
+
+  console.log('  end of array, no window matched');
+  console.log('');
+  return null;
+}
+
+console.log('ANSWER:', findSubarrayExplained([1, 4, 20, 3, 10, 5], 33));
+console.log('==========================================');
+console.log('ANSWER:', findSubarrayExplained([1, 4, 0, 0, 3, 10, 5], 7));
+console.log('==========================================');
+console.log('ANSWER:', findSubarrayExplained([2, 3, 4], 100));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; sliding window, loops only</span></div>
+<pre><code>function findSubarrayManual(nums, target) {
+  let left = 0;
+  let sum = 0;
+
+  for (let right = 0; right &lt; nums.length; right++) {
+    sum = sum + nums[right];          // grow on the right
+
+    // too big? shrink from the left until it is not
+    while (sum &gt; target &amp;&amp; left &lt;= right) {
+      sum = sum - nums[left];
+      left = left + 1;
+    }
+
+    // left &lt;= right keeps the window non-empty, which matters when
+    // target is 0 -- an empty window sums to 0 and would "match"
+    if (sum === target &amp;&amp; left &lt;= right) {
+      return [left, right];
+    }
+  }
+
+  return [-1, -1];
+}
+
+console.log(findSubarrayManual([1, 4, 20, 3, 10, 5], 33));    // [2, 4]
+console.log(findSubarrayManual([1, 4, 0, 0, 3, 10, 5], 7));   // [1, 4]
+console.log(findSubarrayManual([5], 5));                      // [0, 0]
+console.log(findSubarrayManual([1, 4], 0));                   // [-1, -1]
+console.log(findSubarrayManual([2, 3, 4], 100));              // [-1, -1]
+console.log(findSubarrayManual([], 5));                       // [-1, -1]
+console.log(findSubarrayManual([1, 2, 3], 6));                // [0, 2]
+console.log(findSubarrayManual([10, 2, 3], 5));               // [1, 2]</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">variation &mdash; count every matching subarray</span></div>
+<pre><code>// How MANY windows sum to the target? Same window, but we must not
+// stop at the first match -- we record it and then shrink past it.
+function countSubarrays(nums, target) {
+  let left = 0, sum = 0, count = 0;
+
+  for (let right = 0; right &lt; nums.length; right++) {
+    sum += nums[right];
+
+    while (sum &gt; target &amp;&amp; left &lt;= right) {
+      sum -= nums[left];
+      left++;
+    }
+
+    if (sum === target &amp;&amp; left &lt;= right) count++;
+  }
+
+  return count;
+}
+
+console.log(countSubarrays([1, 2, 3], 3));      // 2  -> [1,2] and [3]
+console.log(countSubarrays([1, 1, 1], 2));      // 2  -> [1,1] twice
+console.log(countSubarrays([5, 5, 5], 5));      // 3
+console.log(countSubarrays([1, 2, 3], 100));    // 0
+
+// Careful: this counts at most ONE window per right endpoint, which
+// is correct here because with strictly positive numbers there is at
+// most one window ending at each position with a given sum. Add a
+// zero to the array and that stops being true -- [1,0,2] with target
+// 3 has both [1,0,2] and, if you shrink, nothing else. Try it.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function subarrayWithSum(nums, target) {
+  let left = 0;
+  let sum = 0;
+
+  for (let right = 0; right &lt; nums.length; right++) {
+    sum += nums[right];
+
+    while (sum &gt; target &amp;&amp; left &lt;= right) sum -= nums[left++];
+
+    if (sum === target &amp;&amp; left &lt;= right) {
+      return { from: left, to: right, values: nums.slice(left, right + 1) };
+    }
+  }
+
+  return null;
+}
+
+console.log(subarrayWithSum([1, 4, 20, 3, 10, 5], 33));    // 2..4
+console.log(subarrayWithSum([1, 4, 0, 0, 3, 10, 5], 7));   // 1..4
+console.log(subarrayWithSum([1, 2, 3, 7, 5], 12));         // 1..3
+console.log(subarrayWithSum([2, 3, 4], 100));              // null</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the prefix-sum version &mdash; works with negatives too</span></div>
+<pre><code>// If the guarantee "all positive" is removed, the window breaks and
+// you need the prefix-sum map from the arrays topic.
+function subarrayAnySign(nums, target) {
+  const firstSeen = new Map([[0, -1]]);   // running sum -> earliest index
+  let running = 0;
+
+  for (let i = 0; i &lt; nums.length; i++) {
+    running += nums[i];
+
+    if (firstSeen.has(running - target)) {
+      const start = firstSeen.get(running - target) + 1;
+      return { from: start, to: i, values: nums.slice(start, i + 1) };
+    }
+
+    if (!firstSeen.has(running)) firstSeen.set(running, i);
+  }
+
+  return null;
+}
+
+console.log(subarrayAnySign([1, 4, 20, 3, 10, 5], 33));   // 2..4  same answer
+console.log(subarrayAnySign([10, -5, 5], 5));             // 0..2  -- window fails here
+console.log(subarrayAnySign([1, -1, 5], 5));              // 0..2
+console.log(subarrayAnySign([3, 4, -7, 1, 2], 0));        // 0..2
+
+// And watch the window get it wrong on the same input:
+function windowVersion(a, t) {
+  let l = 0, sum = 0;
+  for (let r = 0; r &lt; a.length; r++) {
+    sum += a[r];
+    while (sum &gt; t &amp;&amp; l &lt;= r) sum -= a[l++];
+    if (sum === t &amp;&amp; l &lt;= r) return [l, r];
+  }
+  return null;
+}
+console.log('window on [10,-5,5] target 5:', windowVersion([10, -5, 5], 5));
+// null -- it threw the 10 away and never recovered</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">Which one to write</span>
+    <p>Read the constraints. &ldquo;Positive integers&rdquo; is an invitation to use the window:
+    O(n) time, O(1) space, no map. No such guarantee means prefix sums plus a map: O(n) time,
+    O(n) space. Naming both and explaining the condition that separates them is a much stronger
+    answer than producing either one on its own.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>Negatives?</th></tr></thead>
+      <tbody>
+        <tr><td>Every subarray</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td><td>yes</td></tr>
+        <tr><td><strong>Sliding window</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td><td><strong>no</strong></td></tr>
+        <tr><td>Prefix sums + map</td><td class="mono">O(n)</td><td class="mono">O(n)</td><td>yes</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Why the window is O(n).</strong> The <code>while</code> inside the <code>for</code> looks
+  quadratic but is not: it only advances <code>left</code>, and <code>left</code> travels 0 to n once
+  across the whole run. Total moves: at most 2n.</p>
+
+  <p>The window is the better solution <em>when it applies</em> &mdash; same time, constant space
+  instead of linear. That is the reward for reading the constraint.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Because all the values are positive, the window sum is monotonic: extending only
+    increases it, shrinking only decreases it. So when the sum is below the target I extend right,
+    and when it is above I shrink from the left &mdash; each move is forced. Both pointers only go
+    forward, so O(n) time and O(1) space. If negatives were allowed, that monotonicity is gone and I
+    would use prefix sums with a hash map instead.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Using the window when negatives are possible</h3>
+
+  <p>Demonstrated in Step 7. The window discards elements it will need again. This is the single
+  most important thing to get right about this problem, and it is a <em>reading</em> mistake, not a
+  coding one.</p>
+
+  <h3>2. Shrinking with <code>&gt;=</code> instead of <code>&gt;</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; shrinks past the answer</span></div>
+<pre><code>function broken(nums, target) {
+  let left = 0, sum = 0;
+  for (let right = 0; right &lt; nums.length; right++) {
+    sum += nums[right];
+    while (sum &gt;= target &amp;&amp; left &lt;= right) {    // >= -- bug
+      sum -= nums[left];
+      left++;
+    }
+    if (sum === target &amp;&amp; left &lt;= right) return [left, right];
+  }
+  return null;
+}
+
+console.log(broken([1, 4, 20, 3, 10, 5], 33));   // null  WRONG, should be [2,4]
+console.log(broken([1, 2, 3], 3));               // null  WRONG, should be [0,1]
+
+// The moment the sum REACHES the target, the loop removes an element
+// and destroys it. Shrink only while the sum is strictly greater.</code></pre>
+  </div>
+
+  <h3>3. Forgetting the non-empty guard when the target is 0</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the empty window matches</span></div>
+<pre><code>function broken(nums, target) {
+  let left = 0, sum = 0;
+  for (let right = 0; right &lt; nums.length; right++) {
+    sum += nums[right];
+    while (sum &gt; target) { sum -= nums[left]; left++; }   // no left &lt;= right
+    if (sum === target) return [left, right];             // no guard either
+  }
+  return null;
+}
+
+console.log(broken([1, 4, 20], 33));   // null  fine
+console.log(broken([1, 4], 0));        // [1, 0]  WRONG -- left > right, empty window
+
+// With target 0, the shrink loop empties the window (sum becomes 0)
+// and then 0 === 0 reports a match spanning nothing.
+// Guard with left &lt;= right in both places.</code></pre>
+  </div>
+
+  <h3>4. Not resetting the sum in the brute force</h3>
+
+  <p><code>let sum = 0</code> must be <em>inside</em> the outer loop. Declared outside, it carries
+  over from the previous start position and every answer is nonsense. The same slip appears in
+  Maximum Subarray&rsquo;s quadratic version.</p>
+
+  <h3>5. Returning the values but not the indexes (or vice versa)</h3>
+
+  <p>Decide which the question wants. Returning <code>[20, 3, 10]</code> when it asked for
+  <code>[2, 4]</code> is a full mark lost for a one-line difference. And note that many versions of
+  this problem use <strong>1-based</strong> indexes &mdash; read the examples in the statement, not
+  just the prose.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Say the monotonicity argument out loud.</strong> Why is each pointer move forced?
+    What breaks if a negative appears? That is the whole interview.</li>
+    <li><strong>Shortest subarray with sum at least the target.</strong> Same window, but you record
+    the length while the sum is <em>at or above</em> the target and keep shrinking. It is the
+    &ldquo;shortest&rdquo; shape from Minimum Window Substring.</li>
+    <li><strong>Longest subarray with sum at most the target.</strong> The other direction: shrink
+    while the sum is too big, record the length afterwards.</li>
+    <li><strong>Subarray product less than K.</strong> Products of positive numbers are monotonic too,
+    so the window applies. Watch for values of 1, and for a K of 0 or 1.</li>
+    <li><strong>Redo it with negatives allowed.</strong> Write the prefix-sum version from memory,
+    then test both on <code>[10, -5, 5]</code> with target 5 and watch one of them fail.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>A sliding window needs monotonicity.</strong> Before you write one, ask: <em>does
+    growing the window always move the quantity in one direction?</em> Sums of positives, counts of
+    distinct characters, products of positives &mdash; yes. Sums with negatives, or any quantity that
+    can go both ways &mdash; no, and you need a different tool. Getting this check into your reflexes
+    prevents the most common wrong answer in the whole sliding-window family.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="01-top-k-frequent.html">&larr; Top K Frequent Elements</a>
+  <a href="03-isomorphic-strings.html">Next: Isomorphic Strings &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set Matrix Zeroes</title>
+<meta name="description" content="Using the matrix's own first row and column as bookkeeping — the O(1) space trick, and the ordering trap inside it.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Arrays &middot; Problem 15</p>
+  <h1>Set Matrix Zeroes</h1>
+  <p class="standfirst">Wherever there is a zero, blank out its whole row and column. The naive
+  solution destroys itself as it runs. The clever one uses the matrix&rsquo;s own first row and
+  column as a notepad &mdash; and hides one genuinely subtle ordering trap.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Given an <code>m &times; n</code> matrix, if any cell is <code>0</code>, set its entire row and
+  its entire column to <code>0</code>. Do it <strong>in place</strong>.</p>
+
+  <div class="trace">
+<pre>input                    output
+
+  1  1  1                  1  0  1
+  1  0  1        ->        0  0  0
+  1  1  1                  1  0  1
+
+the 0 at (1,1) blanks row 1 and column 1
+
+
+  0  1  2  0               0  0  0  0
+  3  4  5  2      ->       0  4  5  0
+  1  3  1  5               0  3  1  0
+
+two zeros, at (0,0) and (0,3):
+  rows 0 blanked; columns 0 and 3 blanked
+</pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The trap that makes this a real problem</span>
+    <p>You cannot blank a row the moment you find a zero. The zeros you write become
+    indistinguishable from the zeros that were already there, and the next cell you inspect makes you
+    blank <em>its</em> row too. Run that on the first example and the whole matrix goes to zero.</p>
+    <p><strong>You must decide everything first, then write.</strong> That separation &mdash; collect,
+    then apply &mdash; is the real lesson here.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answers</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0a &mdash; the version that eats itself</span></div>
+<pre><code>function setZeroesNaive(matrix) {
+  for (let r = 0; r &lt; matrix.length; r++) {
+    for (let c = 0; c &lt; matrix[0].length; c++) {
+      if (matrix[r][c] === 0) {
+        // blank immediately -- BUG
+        for (let k = 0; k &lt; matrix[0].length; k++) matrix[r][k] = 0;
+        for (let k = 0; k &lt; matrix.length; k++) matrix[k][c] = 0;
+      }
+    }
+  }
+  return matrix;
+}
+
+console.log(setZeroesNaive([[1,1,1],[1,0,1],[1,1,1]]));
+// [[1,0,0],[0,0,0],[0,0,0]]   WRONG, should be [[1,0,1],[0,0,0],[1,0,1]]
+
+console.log(setZeroesNaive([[1,1,1],[0,1,2]]));
+// [[0,0,0],[0,0,0]]           WRONG, should be [[0,1,1],[0,0,0]]
+
+// The 0 at (1,1) blanks row 1 and column 1 -- fine so far. But the
+// scan then reaches (1,2), which we just set to 0 ourselves, and
+// dutifully blanks column 2 as well. The damage spreads.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0b &mdash; copy the matrix first</span></div>
+<pre><code>function setZeroesCopy(matrix) {
+  const original = matrix.map(row =&gt; [...row]);   // a snapshot to read from
+
+  for (let r = 0; r &lt; matrix.length; r++) {
+    for (let c = 0; c &lt; matrix[0].length; c++) {
+      if (original[r][c] === 0) {                  // read the snapshot
+        for (let k = 0; k &lt; matrix[0].length; k++) matrix[r][k] = 0;
+        for (let k = 0; k &lt; matrix.length; k++) matrix[k][c] = 0;
+      }
+    }
+  }
+  return matrix;
+}
+
+console.log(setZeroesCopy([[1,1,1],[0,1,2]]));       // [[0,1,1],[0,0,0]]
+console.log(setZeroesCopy([[1,1,1],[1,0,1],[1,1,1]]));// [[1,0,1],[0,0,0],[1,0,1]]
+
+// Correct. O(m*n) time -- but O(m*n) extra space for the copy.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0c &mdash; remember only which rows and columns</span></div>
+<pre><code>function setZeroesSets(matrix) {
+  const zeroRows = new Set();
+  const zeroCols = new Set();
+
+  // PASS 1: just note down WHICH rows and columns are doomed
+  for (let r = 0; r &lt; matrix.length; r++) {
+    for (let c = 0; c &lt; matrix[0].length; c++) {
+      if (matrix[r][c] === 0) { zeroRows.add(r); zeroCols.add(c); }
+    }
+  }
+
+  // PASS 2: now apply
+  for (let r = 0; r &lt; matrix.length; r++) {
+    for (let c = 0; c &lt; matrix[0].length; c++) {
+      if (zeroRows.has(r) || zeroCols.has(c)) matrix[r][c] = 0;
+    }
+  }
+
+  return matrix;
+}
+
+console.log(setZeroesSets([[1,1,1],[1,0,1],[1,1,1]]));   // [[1,0,1],[0,0,0],[1,0,1]]
+console.log(setZeroesSets([[0,1,2,0],[3,4,5,2],[1,3,1,5]]));
+// [[0,0,0,0],[0,4,5,0],[0,3,1,0]]
+
+// O(m*n) time, O(m + n) space. This is a genuinely good answer and
+// what you would ship. Say it out loud before going further.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why go further?</h2>
+
+  <p>Version 0c is O(m + n) space, which is already small &mdash; two sets holding at most one entry
+  per row and column. For a 1000&times;1000 matrix that is 2,000 numbers against a million cells.
+  Honestly, ship it.</p>
+
+  <p>The reason to keep going is that the O(1)-space version teaches a technique worth having:
+  <strong>storing your bookkeeping inside the data structure you are already allowed to modify</strong>.
+  That trick reappears in Rotate Image, in First Missing Positive, and in real systems (marking bits,
+  tombstones, sign flags).</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; and space, which is the real point</span></div>
+<pre><code>const R = 900, C = 900;
+function build() {
+  const m = [];
+  for (let r = 0; r &lt; R; r++) {
+    const row = [];
+    for (let c = 0; c &lt; C; c++) row.push((r * C + c) % 997 === 0 ? 0 : 1);
+    m.push(row);
+  }
+  return m;
+}
+
+function withSets(matrix) {
+  const rows = new Set(), cols = new Set();
+  for (let r = 0; r &lt; matrix.length; r++)
+    for (let c = 0; c &lt; matrix[0].length; c++)
+      if (matrix[r][c] === 0) { rows.add(r); cols.add(c); }
+  for (let r = 0; r &lt; matrix.length; r++)
+    for (let c = 0; c &lt; matrix[0].length; c++)
+      if (rows.has(r) || cols.has(c)) matrix[r][c] = 0;
+  return { matrix, extra: rows.size + cols.size };
+}
+
+function withCopy(matrix) {
+  const orig = matrix.map(row =&gt; [...row]);
+  for (let r = 0; r &lt; matrix.length; r++)
+    for (let c = 0; c &lt; matrix[0].length; c++)
+      if (orig[r][c] === 0) {
+        for (let k = 0; k &lt; matrix[0].length; k++) matrix[r][k] = 0;
+        for (let k = 0; k &lt; matrix.length; k++) matrix[k][c] = 0;
+      }
+  return { matrix, extra: R * C };
+}
+
+let t = performance.now();
+const a = withCopy(build());
+const copyMs = performance.now() - t;
+
+t = performance.now();
+const b = withSets(build());
+const setMs = performance.now() - t;
+
+console.log('full copy : ' + copyMs.toFixed(1) + ' ms,  extra cells stored: ' + a.extra);
+console.log('two sets  : ' + setMs.toFixed(1) + ' ms,  extra cells stored: ' + b.extra);
+console.log('same result:', JSON.stringify(a.matrix[5]) === JSON.stringify(b.matrix[5]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; write the notes inside the matrix</h2>
+
+  <p>The two sets record &ldquo;row <code>r</code> is doomed&rdquo; and &ldquo;column <code>c</code> is
+  doomed&rdquo;. But the matrix already has a natural place to keep one flag per row and one per
+  column:</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Use <strong>row 0</strong> as the column flags and <strong>column 0</strong> as the row flags.
+    Setting <code>matrix[0][c] = 0</code> means &ldquo;column c must be blanked&rdquo;. Setting
+    <code>matrix[r][0] = 0</code> means &ldquo;row r must be blanked&rdquo;.</p>
+    <p>These cells are going to end up as 0 anyway if their row or column is doomed &mdash; so
+    using them as markers costs nothing.</p>
+  </div>
+
+  <p>Except for one cell. <code>matrix[0][0]</code> sits in <em>both</em> row 0 and column 0, so it
+  would have to be the flag for two different things at once. That single overlap is the entire
+  difficulty of this problem, and it is solved with one extra boolean.</p>
+
+  <div class="trace">
+<pre>          col0  col1  col2  col3
+          [X]   [f]   [f]   [f]      <- row 0 flags the COLUMNS
+  row1    [f]    .     .     .
+  row2    [f]    .     .     .       <- column 0 flags the ROWS
+  row3    [f]    .     .     .
+
+  X = matrix[0][0], wanted by both.
+      Keep ONE separate boolean for "column 0 has a zero somewhere",
+      and let matrix[0][0] mean "row 0 has a zero somewhere".
+</pre>
+  </div>
+
+  <h3>The four steps</h3>
+
+  <ol>
+    <li><strong>Record whether column 0 itself contains a zero</strong>, in a plain boolean. Do this
+    before anything else, because step 2 is about to overwrite column 0 with flags.</li>
+    <li><strong>Scan the interior</strong> (rows 1+, columns 1+). Whenever you find a zero, set
+    <code>matrix[r][0] = 0</code> and <code>matrix[0][c] = 0</code>.</li>
+    <li><strong>Apply the flags to the interior</strong>, again rows 1+ and columns 1+: if either flag
+    for a cell is 0, zero the cell.</li>
+    <li><strong>Handle the first row and first column last</strong>, using
+    <code>matrix[0][0]</code> and the saved boolean.</li>
+  </ol>
+
+  <div class="note warn">
+    <span class="t">Why step 3 must skip row 0 and column 0</span>
+    <p>They are still holding the flags. If you apply the rule to them while reading them, a flag can
+    trigger blanking that erases another flag you have not used yet. Do the interior first, then the
+    edges &mdash; and do the edges from the flags you saved, not from the matrix&rsquo;s current
+    state.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p>Matrix: <code>[[1,1,1],[1,0,1],[1,1,1]]</code>.</p>
+
+  <div class="trace">
+<pre>start          1  1  1
+               1  0  1
+               1  1  1
+
+STEP 1: does column 0 contain a zero?
+        column 0 is [1, 1, 1]  ->  firstColHasZero = false
+
+STEP 2: scan the interior (r >= 1, c >= 1)
+        (1,1) is 0  ->  set matrix[1][0] = 0   (row 1 doomed)
+                        set matrix[0][1] = 0   (col 1 doomed)
+
+               1  0  1        <- flag: column 1 doomed
+               0  0  1        <- flag: row 1 doomed
+               1  1  1
+
+STEP 3: apply to the interior only
+        (1,1): row flag matrix[1][0] is 0  ->  zero it (already 0)
+        (1,2): row flag matrix[1][0] is 0  ->  matrix[1][2] = 0
+        (2,1): col flag matrix[0][1] is 0  ->  matrix[2][1] = 0
+        (2,2): both flags are 1            ->  leave it
+
+               1  0  1
+               0  0  0
+               1  0  1
+
+STEP 4: edges
+        matrix[0][0] is 1  ->  row 0 is NOT doomed, leave it
+        firstColHasZero is false -> column 0 is NOT doomed, leave it
+
+answer:        1  0  1
+               0  0  0
+               1  0  1
+</pre>
+  </div>
+
+  <p>Now a case where the first row matters, <code>[[0,1,2,0],[3,4,5,2],[1,3,1,5]]</code>:</p>
+
+  <div class="trace">
+<pre>start     0  1  2  0
+          3  4  5  2
+          1  3  1  5
+
+STEP 1: column 0 is [0, 3, 1] -> contains a zero -> firstColHasZero = TRUE
+        (matrix[0][0] is 0, which ALSO means row 0 is doomed --
+         that is exactly why we need the separate boolean)
+
+STEP 2: scan interior r>=1, c>=1
+        no zeros in there at all -- nothing flagged
+
+STEP 3: apply to interior -- for each cell check matrix[r][0] and matrix[0][c]
+        (1,1): row flag matrix[1][0]=3, col flag matrix[0][1]=1  -> keep 4
+        (1,2): matrix[1][0]=3, matrix[0][2]=2                    -> keep 5
+        (1,3): matrix[0][3] = 0  ->  zero it
+        (2,1): matrix[2][0]=1, matrix[0][1]=1                    -> keep 3
+        (2,2): keep 1
+        (2,3): matrix[0][3] = 0  ->  zero it
+
+          0  1  2  0
+          3  4  5  0
+          1  3  1  0
+
+STEP 4: edges
+        matrix[0][0] === 0  ->  row 0 is doomed  ->  blank the whole row
+        firstColHasZero     ->  column 0 doomed  ->  blank the whole column
+
+answer:   0  0  0  0
+          0  4  5  0
+          0  3  1  0
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function show(m) { return m.map(r =&gt; r.join(' ')).join('  |  '); }
+
+function setZeroesExplained(matrix) {
+  const rows = matrix.length, cols = matrix[0].length;
+  let firstColHasZero = false;
+
+  console.log('start          ' + show(matrix));
+
+  // STEP 1
+  for (let r = 0; r &lt; rows; r++) {
+    if (matrix[r][0] === 0) firstColHasZero = true;
+  }
+  console.log('step 1: firstColHasZero = ' + firstColHasZero);
+
+  // STEP 2
+  for (let r = 0; r &lt; rows; r++) {
+    for (let c = 1; c &lt; cols; c++) {
+      if (matrix[r][c] === 0) {
+        matrix[r][0] = 0;
+        matrix[0][c] = 0;
+        console.log('  zero at (' + r + ',' + c + ') -> flag row ' + r + ' and col ' + c);
+      }
+    }
+  }
+  console.log('step 2 flags   ' + show(matrix));
+
+  // STEP 3 -- interior only
+  for (let r = 1; r &lt; rows; r++) {
+    for (let c = 1; c &lt; cols; c++) {
+      if (matrix[r][0] === 0 || matrix[0][c] === 0) matrix[r][c] = 0;
+    }
+  }
+  console.log('step 3 interior' + show(matrix));
+
+  // STEP 4 -- edges, last
+  if (matrix[0][0] === 0) {
+    for (let c = 0; c &lt; cols; c++) matrix[0][c] = 0;
+    console.log('  row 0 was doomed -> blanked');
+  }
+  if (firstColHasZero) {
+    for (let r = 0; r &lt; rows; r++) matrix[r][0] = 0;
+    console.log('  col 0 was doomed -> blanked');
+  }
+
+  console.log('final          ' + show(matrix));
+  console.log('');
+  return matrix;
+}
+
+setZeroesExplained([[1,1,1],[1,0,1],[1,1,1]]);
+console.log('==========================================');
+setZeroesExplained([[0,1,2,0],[3,4,5,2],[1,3,1,5]]);</code></pre>
+  </div>
+
+  <p>Note that step 2 in the code scans <code>r</code> from 0, not 1 &mdash; only <code>c</code> starts
+  at 1. That is deliberate: a zero in row 0 (outside column 0) still needs to flag its column, and
+  writing <code>matrix[0][0] = 0</code> in that case correctly marks row 0 as doomed.</p>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; O(1) extra space</span></div>
+<pre><code>function setZeroesManual(matrix) {
+  if (matrix.length === 0 || matrix[0].length === 0) return matrix;
+
+  const rows = matrix.length;
+  const cols = matrix[0].length;
+  let firstColHasZero = false;
+
+  // STEP 1: column 0 needs its own flag, because matrix[0][0] is
+  // already spoken for by row 0
+  for (let r = 0; r &lt; rows; r++) {
+    if (matrix[r][0] === 0) firstColHasZero = true;
+  }
+
+  // STEP 2: use row 0 and column 0 as the notepad
+  for (let r = 0; r &lt; rows; r++) {
+    for (let c = 1; c &lt; cols; c++) {
+      if (matrix[r][c] === 0) {
+        matrix[r][0] = 0;      // this row is doomed
+        matrix[0][c] = 0;      // this column is doomed
+      }
+    }
+  }
+
+  // STEP 3: apply the flags -- interior only, bottom-right first is
+  // not required here because we never read a cell after writing it
+  for (let r = 1; r &lt; rows; r++) {
+    for (let c = 1; c &lt; cols; c++) {
+      if (matrix[r][0] === 0 || matrix[0][c] === 0) {
+        matrix[r][c] = 0;
+      }
+    }
+  }
+
+  // STEP 4: the edges, using the flags we have finished reading
+  if (matrix[0][0] === 0) {
+    for (let c = 0; c &lt; cols; c++) matrix[0][c] = 0;
+  }
+  if (firstColHasZero) {
+    for (let r = 0; r &lt; rows; r++) matrix[r][0] = 0;
+  }
+
+  return matrix;
+}
+
+console.log(setZeroesManual([[1,1,1],[1,0,1],[1,1,1]]));
+// [[1,0,1],[0,0,0],[1,0,1]]
+
+console.log(setZeroesManual([[0,1,2,0],[3,4,5,2],[1,3,1,5]]));
+// [[0,0,0,0],[0,4,5,0],[0,3,1,0]]
+
+console.log(setZeroesManual([[1,1,1],[0,1,2]]));      // [[0,1,1],[0,0,0]]
+console.log(setZeroesManual([[0]]));                  // [[0]]
+console.log(setZeroesManual([[1]]));                  // [[1]]
+console.log(setZeroesManual([[1,0]]));                // [[0,0]]
+console.log(setZeroesManual([[1],[0]]));              // [[0],[0]]
+console.log(setZeroesManual([[1,2,3],[4,5,6]]));      // unchanged</code></pre>
+  </div>
+
+  <h3>Checking it against the obvious version</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">random testing &mdash; the clever version vs the simple one</span></div>
+<pre><code>function reference(matrix) {                 // the obviously-correct one
+  const rows = new Set(), cols = new Set();
+  for (let r = 0; r &lt; matrix.length; r++)
+    for (let c = 0; c &lt; matrix[0].length; c++)
+      if (matrix[r][c] === 0) { rows.add(r); cols.add(c); }
+  return matrix.map((row, r) =&gt; row.map((v, c) =&gt; (rows.has(r) || cols.has(c)) ? 0 : v));
+}
+
+function clever(matrix) {
+  const rows = matrix.length, cols = matrix[0].length;
+  let firstCol = false;
+  for (let r = 0; r &lt; rows; r++) if (matrix[r][0] === 0) firstCol = true;
+  for (let r = 0; r &lt; rows; r++)
+    for (let c = 1; c &lt; cols; c++)
+      if (matrix[r][c] === 0) { matrix[r][0] = 0; matrix[0][c] = 0; }
+  for (let r = 1; r &lt; rows; r++)
+    for (let c = 1; c &lt; cols; c++)
+      if (matrix[r][0] === 0 || matrix[0][c] === 0) matrix[r][c] = 0;
+  if (matrix[0][0] === 0) for (let c = 0; c &lt; cols; c++) matrix[0][c] = 0;
+  if (firstCol) for (let r = 0; r &lt; rows; r++) matrix[r][0] = 0;
+  return matrix;
+}
+
+let pass = 0, fail = 0;
+for (let trial = 0; trial &lt; 500; trial++) {
+  const R = 1 + Math.floor(Math.random() * 4);
+  const C = 1 + Math.floor(Math.random() * 4);
+  const m = [];
+  for (let r = 0; r &lt; R; r++) {
+    const row = [];
+    for (let c = 0; c &lt; C; c++) row.push(Math.random() &lt; 0.25 ? 0 : 1 + Math.floor(Math.random() * 9));
+    m.push(row);
+  }
+  const expected = reference(m.map(r =&gt; [...r]));
+  const actual = clever(m.map(r =&gt; [...r]));
+  if (JSON.stringify(expected) === JSON.stringify(actual)) pass++; else fail++;
+}
+
+console.log('500 random matrices:  pass ' + pass + '   fail ' + fail);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2a &mdash; the readable one to ship</span></div>
+<pre><code>function setZeroes(matrix) {
+  const zeroRows = new Set();
+  const zeroCols = new Set();
+
+  matrix.forEach((row, r) =&gt;
+    row.forEach((value, c) =&gt; {
+      if (value === 0) { zeroRows.add(r); zeroCols.add(c); }
+    })
+  );
+
+  matrix.forEach((row, r) =&gt;
+    row.forEach((_, c) =&gt; {
+      if (zeroRows.has(r) || zeroCols.has(c)) matrix[r][c] = 0;
+    })
+  );
+
+  return matrix;
+}
+
+console.log(setZeroes([[1,1,1],[1,0,1],[1,1,1]]));
+console.log(setZeroes([[0,1,2,0],[3,4,5,2],[1,3,1,5]]));</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">a non-mutating version, for real code</span></div>
+<pre><code>function zeroed(matrix) {
+  const zeroRows = new Set();
+  const zeroCols = new Set();
+
+  for (const [r, row] of matrix.entries())
+    for (const [c, value] of row.entries())
+      if (value === 0) { zeroRows.add(r); zeroCols.add(c); }
+
+  return matrix.map((row, r) =&gt;
+    row.map((value, c) =&gt; (zeroRows.has(r) || zeroCols.has(c)) ? 0 : value)
+  );
+}
+
+const input = [[1,1,1],[1,0,1],[1,1,1]];
+const output = zeroed(input);
+console.log('output:', output);
+console.log('input untouched:', input);
+
+// entries() gives you [index, value] pairs, which reads better than
+// tracking the index by hand. And returning a new matrix means the
+// caller's data is safe -- worth the allocation in application code.</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The copy trap with nested arrays</span>
+    <p><code>[...matrix]</code> and <code>matrix.slice()</code> are <strong>shallow</strong>: you get a
+    new outer array pointing at the <em>same</em> row arrays. Writing to
+    <code>copy[0][0]</code> changes the original. For a real copy of a 2D array you need
+    <code>matrix.map(row =&gt; [...row])</code>. This catches people constantly.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">see the shallow-copy trap</span></div>
+<pre><code>const original = [[1, 2], [3, 4]];
+
+const shallow = [...original];
+shallow[0][0] = 999;
+console.log('after shallow edit, original =', original);   // [[999,2],[3,4]]  changed!
+
+const original2 = [[1, 2], [3, 4]];
+const deep = original2.map(row =&gt; [...row]);
+deep[0][0] = 999;
+console.log('after deep edit, original2  =', original2);   // [[1,2],[3,4]]  safe</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Extra space</th></tr></thead>
+      <tbody>
+        <tr><td>Blank as you go</td><td class="mono">&mdash;</td><td class="mono">O(1)</td></tr>
+        <tr><td>Copy the matrix</td><td class="mono">O(m&middot;n)</td><td class="mono">O(m&middot;n)</td></tr>
+        <tr><td>Two sets</td><td class="mono">O(m&middot;n)</td><td class="mono">O(m + n)</td></tr>
+        <tr><td><strong>Flags in row 0 / column 0</strong></td><td class="mono">O(m&middot;n)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The first row has no complexity because it does not solve the problem &mdash; a wrong answer has
+  no running time worth quoting.</p>
+
+  <p>All three correct versions are O(m&middot;n) time: you must look at every cell at least once,
+  and the flag version makes three passes over the matrix, which still adds to a constant multiple of
+  m&middot;n. Only the space differs, and that is the whole point of the exercise.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Blanking as I go corrupts the scan, so I have to separate collecting from applying.
+    The straightforward way is two sets of doomed rows and columns &mdash; O(m+n) space. To get O(1),
+    I store those flags in the matrix itself: row 0 marks doomed columns, column 0 marks doomed rows.
+    <code>matrix[0][0]</code> is claimed by both, so I keep one extra boolean for whether column 0
+    originally held a zero. Then I apply the flags to the interior, and handle row 0 and column 0
+    last so I do not destroy a flag before reading it.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Blanking during the scan</h3>
+
+  <p>Covered in Step 2, and it is the mistake this problem exists to catch. The moment you write a
+  zero, you have contaminated the data you are still reading. Collect first, apply second.</p>
+
+  <h3>2. Forgetting that <code>matrix[0][0]</code> is double-booked</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; no separate first-column flag</span></div>
+<pre><code>function broken(matrix) {
+  const rows = matrix.length, cols = matrix[0].length;
+  // no firstColHasZero -- bug
+  for (let r = 0; r &lt; rows; r++)
+    for (let c = 1; c &lt; cols; c++)
+      if (matrix[r][c] === 0) { matrix[r][0] = 0; matrix[0][c] = 0; }
+
+  for (let r = 1; r &lt; rows; r++)
+    for (let c = 1; c &lt; cols; c++)
+      if (matrix[r][0] === 0 || matrix[0][c] === 0) matrix[r][c] = 0;
+
+  if (matrix[0][0] === 0) {
+    for (let c = 0; c &lt; cols; c++) matrix[0][c] = 0;
+    for (let r = 0; r &lt; rows; r++) matrix[r][0] = 0;   // both, from one flag
+  }
+  return matrix;
+}
+
+console.log(broken([[1,1,1],[0,1,1],[1,1,1]]));
+// [[1,1,1],[0,0,0],[1,1,1]]   WRONG, should be [[0,1,1],[0,0,0],[0,1,1]]
+
+// Row 1 was blanked correctly -- matrix[1][0] was already 0, so it
+// read as a row flag by accident. But COLUMN 0 was never blanked,
+// because the c-starts-at-1 loop never inspects column 0 and nothing
+// ever sets matrix[0][0]. Column 0 needs its own boolean, captured
+// before the flags start overwriting it.</code></pre>
+  </div>
+
+  <h3>3. Applying the flags to row 0 and column 0 in the same loop</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; destroys flags mid-read</span></div>
+<pre><code>function broken(matrix) {
+  const rows = matrix.length, cols = matrix[0].length;
+  let firstCol = false;
+  for (let r = 0; r &lt; rows; r++) if (matrix[r][0] === 0) firstCol = true;
+  for (let r = 0; r &lt; rows; r++)
+    for (let c = 1; c &lt; cols; c++)
+      if (matrix[r][c] === 0) { matrix[r][0] = 0; matrix[0][c] = 0; }
+
+  // starting at 0 instead of 1 -- bug
+  for (let r = 0; r &lt; rows; r++)
+    for (let c = 0; c &lt; cols; c++)
+      if (matrix[r][0] === 0 || matrix[0][c] === 0) matrix[r][c] = 0;
+
+  return matrix;
+}
+
+console.log(broken([[1,2,3],[4,0,6],[7,8,9]]));
+// [[1,0,3],[0,0,0],[7,0,9]]   right -- row 0 and column 0 are clean here
+
+console.log(broken([[0,2,3],[4,5,6],[7,8,9]]));
+// [[0,0,0],[0,0,0],[0,0,0]]   WRONG, should be [[0,0,0],[0,5,6],[0,8,9]]
+
+// The moment matrix[0][0] is 0, applying the rule to row 0 and
+// column 0 zeroes (1,0) -- which is column 0's flag for row 1 --
+// and the cascade blanks the entire matrix. The flags must be
+// applied to the INTERIOR only, and the edges handled afterwards.</code></pre>
+  </div>
+
+  <h3>4. Using <code>new Array(n).fill([])</code> to build a matrix</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">the shared-row trap</span></div>
+<pre><code>const bad = new Array(3).fill(new Array(3).fill(0));
+bad[0][0] = 9;
+console.log(bad);   // [[9,0,0],[9,0,0],[9,0,0]]  -- all three rows are ONE array
+
+const good = Array.from({ length: 3 }, () =&gt; new Array(3).fill(0));
+good[0][0] = 9;
+console.log(good);  // [[9,0,0],[0,0,0],[0,0,0]]  -- three separate arrays
+
+// fill() puts the SAME reference in every slot. Array.from with a
+// factory function calls it once per row.</code></pre>
+  </div>
+
+  <h3>5. Assuming the matrix is square</h3>
+
+  <p><code>matrix.length</code> is the number of <em>rows</em>; <code>matrix[0].length</code> is the
+  number of <em>columns</em>. Using one for the other works on square matrices and throws or silently
+  misbehaves on everything else. Name them <code>rows</code> and <code>cols</code> and use them
+  consistently.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the two-sets version from memory</strong> first. It is the one you should
+    actually reach for, and being able to produce it instantly buys you thinking time for the
+    O(1) version.</li>
+    <li><strong>Explain the <code>matrix[0][0]</code> problem out loud</strong> without looking. If you
+    can state why one cell cannot be two flags, you understand the whole solution.</li>
+    <li><strong>Do it with column 0 as the special case instead of row 0.</strong> Symmetric, and
+    doing it the other way round proves you are not pattern-matching.</li>
+    <li><strong>Set matrix ones.</strong> Same problem with a different marker value &mdash; and now
+    you cannot use the value itself as a flag, since 1s are meaningful data. What changes?</li>
+    <li><strong>Game of Life, in place.</strong> The classic follow-up: each cell updates based on its
+    neighbours&rsquo; <em>old</em> values, so you have the same collect-then-apply problem. The
+    O(1)-space trick there is to encode both old and new state in one number using bits
+    (<code>0</code>, <code>1</code>, <code>2</code>, <code>3</code>). Same idea, different notepad.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p>Two habits. First, <strong>separate collecting from applying</strong> whenever a transformation
+    reads and writes the same structure &mdash; if writes can be mistaken for reads, you have a bug.
+    Second, <strong>look for spare capacity in the data you already own</strong>: cells that are about
+    to be overwritten, sign bits, sentinel values. That is how O(m+n) bookkeeping becomes O(1).</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="14-subarray-sum-equals-k.html">&larr; Subarray Sum Equals K</a>
+  <a href="16-spiral-matrix.html">Next: Spiral Matrix &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

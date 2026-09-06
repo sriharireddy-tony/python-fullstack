@@ -1,0 +1,952 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flatten to Depth N</title>
+<meta name="description" content="Recursion with a budget, an iterative version with no stack limit, and every hole and edge case flat() handles.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">JavaScript semantics &middot; Problem 10</p>
+  <h1>Flatten a Nested Array to Depth N</h1>
+  <p class="standfirst">The recursion page already flattened arrays. This one adds a
+  <strong>budget</strong> &mdash; one extra parameter that turns &ldquo;go all the way down&rdquo; into
+  &ldquo;go exactly this far&rdquo; &mdash; and then matches every edge case of the real
+  <code>Array.prototype.flat</code>, holes included.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Call</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[1,[2,[3,[4]]]].flat(0)</td><td class="mono">[1,[2,[3,[4]]]]</td></tr>
+        <tr><td class="mono">[1,[2,[3,[4]]]].flat(1)</td><td class="mono">[1,2,[3,[4]]]</td></tr>
+        <tr><td class="mono">[1,[2,[3,[4]]]].flat(2)</td><td class="mono">[1,2,3,[4]]</td></tr>
+        <tr><td class="mono">[1,[2,[3,[4]]]].flat(Infinity)</td><td class="mono">[1,2,3,4]</td></tr>
+        <tr><td class="mono">[1,[2,[3,[4]]]].flat()</td><td class="mono">[1,2,[3,[4]]] &mdash; the default is 1</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">The one change from an unlimited flatten</span>
+    <p>Carry a <code>depth</code> parameter and decrement it on the way down. The test becomes
+    &ldquo;is this an array <strong>and</strong> do I have budget left?&rdquo; &mdash; when the budget
+    runs out, the array is kept as a value rather than descended into.</p>
+    <p>That is the same shape as the <em>remaining</em> counter in Combination Sum: one number that
+    both drives the recursion and stops it.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; the eight-line answer</span></div>
+<pre><code>function flatten(arr, depth = 1) {
+  const out = [];
+
+  for (const item of arr) {
+    if (Array.isArray(item) &amp;&amp; depth &gt; 0) {
+      out.push(...flatten(item, depth - 1));   // spend one unit of budget
+    } else {
+      out.push(item);                          // keep it as-is
+    }
+  }
+
+  return out;
+}
+
+const nested = [1, [2, [3, [4, [5]]]]];
+for (const d of [0, 1, 2, 3, 4, Infinity]) {
+  console.log('depth ' + String(d).padEnd(9) + JSON.stringify(flatten(nested, d)));
+}
+
+console.log('');
+console.log('matches the built-in:',
+            [0, 1, 2, 3, 4].every((d) =&gt;
+              JSON.stringify(flatten(nested, d)) === JSON.stringify(nested.flat(d))));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the version without a budget, and why it is not enough</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">where a partial flatten is what you actually want</span></div>
+<pre><code>// grouped API data: rows, each row a list of cells
+const grid = [
+  [['a1', 'a2'], ['a3']],
+  [['b1'], ['b2', 'b3']],
+];
+
+const flattenAll = (a) =&gt; a.reduce(
+  (acc, x) =&gt; acc.concat(Array.isArray(x) ? flattenAll(x) : x), []);
+
+console.log('fully flattened  :', JSON.stringify(flattenAll(grid)));
+console.log('  -- all structure gone; you cannot tell rows apart');
+
+console.log('');
+console.log('depth 1 (rows of cells):');
+console.log(' ', JSON.stringify(grid.flat(1)));
+console.log('  -- one entry per cell group, rows merged. Usually what');
+console.log('     "flatten this response" actually means.');
+
+console.log('');
+console.log('The general rule: flatten as far as the SHAPE you want,');
+console.log('not as far as the array will go. Infinity is a choice, not');
+console.log('a default.');
+
+console.log('');
+console.log('And the shape flat(1) is really for -- a map that returns');
+console.log('arrays:');
+const users = [
+  { name: 'Ada', tags: ['math', 'code'] },
+  { name: 'Grace', tags: ['navy'] },
+  { name: 'Alan', tags: [] },
+];
+console.log('  map            :', JSON.stringify(users.map((u) =&gt; u.tags)));
+console.log('  map + flat(1)  :', JSON.stringify(users.map((u) =&gt; u.tags).flat()));
+console.log('  flatMap        :', JSON.stringify(users.flatMap((u) =&gt; u.tags)));
+console.log('');
+console.log('flatMap is exactly map followed by flat(1) -- and note');
+console.log('that Alan contributed nothing, which is how you use it to');
+console.log('filter and map in one pass:');
+console.log('  keep evens, doubled:',
+            JSON.stringify([1,2,3,4,5].flatMap((n) =&gt; (n % 2 ? [] : [n * 2]))));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why the naive version is slow</h2>
+
+  <p>Two traps, and they are the same two as on the Flatten page: <code>concat</code> in a reduce, and
+  <code>push(...spread)</code> on a large array.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; three ways to accumulate</span></div>
+<pre><code>function buildDeepWide(depth, width) {
+  let node = [];
+  for (let d = 0; d &lt; depth; d++) {
+    const level = [];
+    for (let w = 0; w &lt; width; w++) level.push(d * width + w);
+    level.push(node);
+    node = level;
+  }
+  return node;
+}
+const data = buildDeepWide(300, 300);
+
+// (a) reduce + concat -- copies the accumulator every step
+function withConcat(arr, depth) {
+  return depth &lt; 1 ? arr.slice() : arr.reduce(
+    (acc, x) =&gt; acc.concat(Array.isArray(x) ? withConcat(x, depth - 1) : x), []);
+}
+
+// (b) push(...spread) -- allocates an argument list per level
+function withSpread(arr, depth) {
+  const out = [];
+  for (const item of arr) {
+    if (Array.isArray(item) &amp;&amp; depth &gt; 0) out.push(...withSpread(item, depth - 1));
+    else out.push(item);
+  }
+  return out;
+}
+
+// (c) one shared accumulator, pushed into directly
+function withAccumulator(arr, depth) {
+  const out = [];
+  (function walk(list, d) {
+    for (const item of list) {
+      if (Array.isArray(item) &amp;&amp; d &gt; 0) walk(item, d - 1);
+      else out.push(item);
+    }
+  })(arr, depth);
+  return out;
+}
+
+let t = performance.now();
+const a = withConcat(data, Infinity);
+const concatMs = performance.now() - t;
+
+t = performance.now();
+const b = withSpread(data, Infinity);
+const spreadMs = performance.now() - t;
+
+t = performance.now();
+const c = withAccumulator(data, Infinity);
+const accMs = performance.now() - t;
+
+console.log('items:', a.length.toLocaleString('en-US'));
+console.log('all three agree:',
+            JSON.stringify(a) === JSON.stringify(b) &amp;&amp;
+            JSON.stringify(b) === JSON.stringify(c));
+console.log('');
+console.log('  reduce + concat  : ' + concatMs.toFixed(1) + ' ms');
+console.log('  push(...spread)  : ' + spreadMs.toFixed(1) + ' ms');
+console.log('  shared accumulator: ' + accMs.toFixed(1) + ' ms');
+console.log('');
+console.log('concat copies the growing result at every level.');
+console.log('push(...arr) builds an argument LIST -- and above roughly');
+console.log('100,000 elements it does not just slow down, it throws:');
+
+const huge = [new Array(300000).fill(1)];
+try {
+  const out = [];
+  out.push(...huge[0]);
+  console.log('  push(...300k) -> ok');
+} catch (e) {
+  console.log('  push(...300k) ->', e.constructor.name + ':', e.message);
+}
+console.log('  a plain loop or out.push(x) per item has no such limit.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; the budget, and what the real <code>flat</code> does</h2>
+
+  <div class="trace">
+<pre>  walk(list, depth):
+
+      for each item:
+          if it is an array AND depth > 0:
+              walk(item, depth - 1)        <-- spend one unit
+          else:
+              out.push(item)               <-- keep it, whatever it is
+
+
+  [1, [2, [3, [4]]]] with depth 2:
+
+      walk([1, [2,[3,[4]]]], 2)
+          1              not an array   -> keep         out = [1]
+          [2,[3,[4]]]    array, 2 > 0   -> walk(.., 1)
+              2          not an array   -> keep         out = [1,2]
+              [3,[4]]    array, 1 > 0   -> walk(.., 0)
+                  3      not an array   -> keep         out = [1,2,3]
+                  [4]    array, but 0   -> KEEP AS-IS   out = [1,2,3,[4]]
+
+  The budget hit zero, so the last array was kept as a value
+  rather than descended into. That is the entire difference from
+  an unlimited flatten.
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Four details the real <code>flat</code> has</span>
+    <p><strong>The default is 1</strong>, not <code>Infinity</code>. A surprising number of bugs come
+    from assuming otherwise.</p>
+    <p><strong>Holes are removed</strong>, at every level, even at depth 0.</p>
+    <p><strong>Depth is coerced with <code>ToIntegerOrInfinity</code></strong> &mdash;
+    <code>'2'</code> works, <code>undefined</code> becomes 1, <code>null</code> and <code>NaN</code>
+    become 0, and a negative becomes 0.</p>
+    <p><strong>Only real arrays are flattened.</strong> An array-like object with a
+    <code>length</code> is left alone, and so is a string &mdash; even though both are iterable.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">all four, demonstrated on the built-in</span></div>
+<pre><code>console.log('1. the default depth:');
+console.log('   [1,[2,[3]]].flat()         ->', JSON.stringify([1,[2,[3]]].flat()));
+console.log('   [1,[2,[3]]].flat(Infinity) ->',
+            JSON.stringify([1,[2,[3]]].flat(Infinity)));
+
+console.log('');
+console.log('2. holes are removed at every level:');
+const holey = [1, , 3, [4, , 6]];
+console.log('   input          :', holey, ' length', holey.length);
+console.log('   .flat(0)       :', holey.flat(0), ' length', holey.flat(0).length);
+console.log('   .flat(1)       :', holey.flat(1));
+console.log('   -- even flat(0), which flattens nothing, still');
+console.log('      compacts the holes away.');
+
+console.log('');
+console.log('3. depth coercion:');
+for (const d of ['2', undefined, null, NaN, -1, 1.9, true, [2]]) {
+  console.log('   flat(' + JSON.stringify(d) + ')'.padEnd(6) +
+              ' -> ' + JSON.stringify([1, [2, [3]]].flat(d)));
+}
+
+console.log('');
+console.log('4. only real arrays:');
+const arrayLike = { 0: 'a', 1: 'b', length: 2 };
+console.log('   [1, arrayLike].flat(9)  ->', JSON.stringify([1, arrayLike].flat(9)));
+console.log('   [1, "ab"].flat(9)       ->', JSON.stringify([1, 'ab'].flat(9)));
+console.log('   [1, new Set([2])].flat(9)->',
+            JSON.stringify([1, new Set([2])].flat(9)));
+console.log('   -- all three are iterable, none is an Array, so none is');
+console.log('      flattened. Array.isArray is the test, not iterability.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; watch the budget drain</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function flattenLoud(arr, depth = 1) {
+  const out = [];
+
+  (function walk(list, d, indent) {
+    const pad = '  '.repeat(indent);
+    for (const item of list) {
+      const isArr = Array.isArray(item);
+
+      if (isArr &amp;&amp; d &gt; 0) {
+        console.log(pad + JSON.stringify(item) +
+                    '  array, budget ' + d + ' -> descend with ' + (d - 1));
+        walk(item, d - 1, indent + 1);
+      } else if (isArr) {
+        out.push(item);
+        console.log(pad + JSON.stringify(item) +
+                    '  array, budget 0 -> KEEP AS-IS');
+      } else {
+        out.push(item);
+        console.log(pad + JSON.stringify(item) + '  value -> keep');
+      }
+    }
+  })(arr, depth, 0);
+
+  return out;
+}
+
+const nested = [1, [2, [3, [4]]]];
+
+console.log('=== depth 2 ===');
+console.log('RESULT', JSON.stringify(flattenLoud(nested, 2)));
+
+console.log('');
+console.log('=== depth 0 ===');
+console.log('RESULT', JSON.stringify(flattenLoud(nested, 0)));
+
+console.log('');
+console.log('=== depth Infinity ===');
+console.log('RESULT', JSON.stringify(flattenLoud(nested, Infinity)));
+console.log('');
+console.log('Infinity - 1 is still Infinity, which is why the budget');
+console.log('never runs out. No special case needed.');
+console.log('  Infinity - 1 ===', Infinity - 1);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; index loops, holes handled by hand</span></div>
+<pre><code>function flattenManual(arr, depth) {
+  if (depth === undefined) depth = 1;
+
+  // the real flat coerces the depth: ToIntegerOrInfinity
+  depth = Number(depth);
+  if (Number.isNaN(depth)) depth = 0;
+  else if (depth !== Infinity &amp;&amp; depth !== -Infinity) depth = Math.trunc(depth);
+  if (depth &lt; 0) depth = 0;
+
+  const out = [];
+  let count = 0;
+
+  function walk(list, d) {
+    const len = list.length;
+    for (let i = 0; i &lt; len; i++) {
+      if (!(i in list)) continue;              // a hole -- skip it entirely
+
+      const item = list[i];
+      if (Object.prototype.toString.call(item) === '[object Array]' &amp;&amp; d &gt; 0) {
+        walk(item, d - 1);
+      } else {
+        out[count] = item;
+        count = count + 1;
+      }
+    }
+  }
+
+  walk(arr, depth);
+  return out;
+}
+
+// --- compare against the built-in on everything awkward ---------
+const cases = [
+  [[1, [2, [3, [4]]]], 0],
+  [[1, [2, [3, [4]]]], 1],
+  [[1, [2, [3, [4]]]], 2],
+  [[1, [2, [3, [4]]]], Infinity],
+  [[1, , 3, [4, , 6]], 1],
+  [[1, , 3, [4, , 6]], 0],
+  [new Array(3), 1],
+  [[], 5],
+  [[[], [[]], [[[]]]], Infinity],
+  [[1, [2]], '2'],
+  [[1, [2]], undefined],
+  [[1, [2]], null],
+  [[1, [2]], NaN],
+  [[1, [2]], -3],
+  [[1, [2]], 1.9],
+  [[0, false, null, undefined, '', NaN], 1],
+];
+
+let pass = 0;
+for (const [input, depth] of cases) {
+  const mine = flattenManual(input, depth);
+  const real = input.flat(depth);
+  const same = JSON.stringify(mine) === JSON.stringify(real) &amp;&amp;
+               mine.length === real.length &amp;&amp;
+               JSON.stringify(Object.keys(mine)) === JSON.stringify(Object.keys(real));
+  if (same) pass++;
+  else {
+    console.log('MISMATCH', JSON.stringify(input), 'depth', String(depth));
+    console.log('  mine:', mine, ' real:', real);
+  }
+}
+console.log(pass + '/' + cases.length + ' cases match Array.prototype.flat exactly');
+console.log('  (values, length AND which indexes exist)');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; iterative, no recursion limit</span></div>
+<pre><code>// Carry the remaining depth alongside each item on an explicit
+// stack. No call stack, so no depth limit.
+function flattenIterative(arr, depth = 1) {
+  const out = [];
+  const stack = [];
+
+  // push in reverse so the first element pops first
+  for (let i = arr.length - 1; i &gt;= 0; i--) {
+    if (i in arr) stack.push({ value: arr[i], depth });
+  }
+
+  while (stack.length &gt; 0) {
+    const { value, depth: d } = stack.pop();
+
+    if (Array.isArray(value) &amp;&amp; d &gt; 0) {
+      for (let i = value.length - 1; i &gt;= 0; i--) {
+        if (i in value) stack.push({ value: value[i], depth: d - 1 });
+      }
+    } else {
+      out.push(value);
+    }
+  }
+
+  return out;
+}
+
+const nested = [1, [2, [3, [4, [5]]]]];
+for (const d of [0, 1, 2, Infinity]) {
+  console.log('depth ' + String(d).padEnd(9) +
+              JSON.stringify(flattenIterative(nested, d)) +
+              '   matches built-in: ' +
+              (JSON.stringify(flattenIterative(nested, d)) ===
+               JSON.stringify(nested.flat(d))));
+}
+
+// the payoff
+let deep = [0];
+for (let i = 1; i &lt; 60000; i++) deep = [i, deep];
+
+function flattenRecursive(a, d) {
+  const out = [];
+  (function w(l, k) {
+    for (const it of l) {
+      if (Array.isArray(it) &amp;&amp; k &gt; 0) w(it, k - 1);
+      else out.push(it);
+    }
+  })(a, d);
+  return out;
+}
+
+console.log('');
+console.log('a 60,000-level-deep structure:');
+try {
+  flattenRecursive(deep, Infinity);
+  console.log('  recursive: survived');
+} catch (e) {
+  console.log('  recursive:', e.message);
+}
+const flat = flattenIterative(deep, Infinity);
+console.log('  iterative:', flat.length, 'items, first three:', flat.slice(0, 3));
+
+// and it still respects a finite budget at that depth
+console.log('  at depth 3:', JSON.stringify(flattenIterative(deep, 3).slice(0, 4)) +
+            ' ... (' + flattenIterative(deep, 3).length + ' items)');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; and the variations</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function flatten(arr, depth = 1) {
+  const out = [];
+
+  (function walk(list, d) {
+    for (let i = 0; i &lt; list.length; i++) {
+      if (!(i in list)) continue;                    // skip holes, like flat
+      const item = list[i];
+      if (Array.isArray(item) &amp;&amp; d &gt; 0) walk(item, d - 1);
+      else out.push(item);
+    }
+  })(arr, depth);
+
+  return out;
+}
+
+const nested = [1, [2, [3, [4, [5]]]]];
+console.log('flatten(nested)            :', JSON.stringify(flatten(nested)));
+console.log('flatten(nested, 2)         :', JSON.stringify(flatten(nested, 2)));
+console.log('flatten(nested, Infinity)  :', JSON.stringify(flatten(nested, Infinity)));
+console.log('flatten([1,,3])            :', JSON.stringify(flatten([1, , 3])),
+            ' length', flatten([1, , 3]).length);</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the variations you get asked next</span></div>
+<pre><code>// 1. flatMap, from scratch
+function myFlatMap(arr, fn) {
+  const out = [];
+  for (let i = 0; i &lt; arr.length; i++) {
+    if (!(i in arr)) continue;
+    const mapped = fn(arr[i], i, arr);
+    if (Array.isArray(mapped)) out.push(...mapped);   // exactly ONE level
+    else out.push(mapped);
+  }
+  return out;
+}
+const users = [{ tags: ['a', 'b'] }, { tags: [] }, { tags: ['c'] }];
+console.log('flatMap  :', JSON.stringify(myFlatMap(users, (u) =&gt; u.tags)));
+console.log('built-in :', JSON.stringify(users.flatMap((u) =&gt; u.tags)));
+console.log('  note flatMap only ever flattens ONE level:');
+console.log('  ', JSON.stringify([1, 2].flatMap((n) =&gt; [[n * 2]])));
+
+// 2. how deep IS this array?
+function depthOf(arr) {
+  if (!Array.isArray(arr)) return 0;
+  let max = 0;
+  for (const item of arr) max = Math.max(max, depthOf(item));
+  return max + 1;
+}
+console.log('');
+console.log('depthOf([1,2,3])            :', depthOf([1, 2, 3]));
+console.log('depthOf([1,[2,[3,[4]]]])    :', depthOf([1, [2, [3, [4]]]]));
+console.log('depthOf([])                 :', depthOf([]));
+console.log('depthOf(5)                  :', depthOf(5));
+console.log('  -- so arr.flat(depthOf(arr) - 1) fully flattens without');
+console.log('     needing Infinity.');
+
+// 3. flatten while keeping the path to each leaf
+function flattenWithPath(arr, path = []) {
+  const out = [];
+  arr.forEach((item, i) =&gt; {
+    if (Array.isArray(item)) out.push(...flattenWithPath(item, [...path, i]));
+    else out.push({ value: item, path: [...path, i].join('.') });
+  });
+  return out;
+}
+console.log('');
+console.log('with paths:');
+flattenWithPath([1, [2, [3]], 4]).forEach((e) =&gt;
+  console.log('  ' + e.path.padEnd(8) + e.value));
+
+// 4. flatten an ITERABLE-aware version, if that is what you meant
+function flattenIterables(value, depth = Infinity) {
+  const out = [];
+  (function walk(v, d) {
+    const iterable = v !== null &amp;&amp; typeof v === 'object' &amp;&amp;
+                     typeof v[Symbol.iterator] === 'function';
+    if (iterable &amp;&amp; d &gt; 0) { for (const x of v) walk(x, d - 1); }
+    else out.push(v);
+  })(value, depth);
+  return out;
+}
+console.log('');
+console.log('iterable-aware:');
+console.log(' ', JSON.stringify(flattenIterables([1, new Set([2, 3]), new Map([['k', 4]])])));
+console.log('  -- Sets and Maps descended into, which Array.prototype');
+console.log('     .flat would never do. Only do this if the question');
+console.log('     asked for it.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">flattening in place, and the generator version</span></div>
+<pre><code>// A lazy flatten. Nothing is built until you ask for the next item,
+// so you can flatten something huge and stop early.
+function* flatGen(arr, depth = Infinity) {
+  for (const item of arr) {
+    if (Array.isArray(item) &amp;&amp; depth &gt; 0) yield* flatGen(item, depth - 1);
+    else yield item;
+  }
+}
+
+// 200,000 items in 200,000 little arrays -- wide, only 2 deep, so
+// the built-in flat can handle it without overflowing
+const big = [];
+for (let i = 0; i &lt; 200000; i++) big.push([i, [i * 2]]);
+
+// eager: builds all 400,000 items before you can read the first one
+let t = performance.now();
+const firstFiveEager = big.flat(Infinity).slice(0, 5);
+const eagerMs = performance.now() - t;
+
+// lazy: stops after five
+t = performance.now();
+const firstFiveLazy = [];
+for (const x of flatGen(big)) {
+  firstFiveLazy.push(x);
+  if (firstFiveLazy.length === 5) break;
+}
+const lazyMs = performance.now() - t;
+
+console.log('first 5 items of a 200,000-element nested structure');
+console.log('  eager .flat(Infinity) : ' + eagerMs.toFixed(1) + ' ms ->',
+            JSON.stringify(firstFiveEager));
+console.log('  lazy generator        : ' + lazyMs.toFixed(1) + ' ms ->',
+            JSON.stringify(firstFiveLazy));
+console.log('');
+console.log('The generator touched three of the 200,000 groups and');
+console.log('stopped. The eager version built a 400,000-element array');
+console.log('and then threw 399,995 of them away.');
+console.log('');
+console.log('It still recurses, so it has the same DEPTH ceiling as any');
+console.log('recursive version -- laziness helps with width, not with');
+console.log('a pathologically deep structure. For that you still need');
+console.log('the explicit-stack version from Step 6.');
+
+// and a truly in-place flatten, for when the array must not be replaced
+function flattenInPlace(arr) {
+  for (let i = 0; i &lt; arr.length; i++) {
+    if (Array.isArray(arr[i])) {
+      arr.splice(i, 1, ...arr[i]);    // replace the element with its contents
+      i--;                            // re-examine the same index
+    }
+  }
+  return arr;
+}
+const target = [1, [2, [3, [4]]]];
+const sameRef = target;
+flattenInPlace(target);
+console.log('');
+console.log('in place:', JSON.stringify(target));
+console.log('  same array object?', sameRef === target);
+console.log('  (splice is O(n) per call, so this is O(n^2). Use it only');
+console.log('   when something else already holds the reference.)');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Approach</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Recursive with an accumulator</strong></td><td class="mono">O(n)</td><td class="mono">O(d) call stack</td></tr>
+        <tr><td>Recursive with concat</td><td class="mono">O(n &middot; d)</td><td class="mono">O(n &middot; d)</td></tr>
+        <tr><td>Iterative with an explicit stack</td><td class="mono">O(n)</td><td class="mono">O(n) heap</td></tr>
+        <tr><td>Generator, stopping after k</td><td class="mono">O(k + depth)</td><td class="mono">O(d)</td></tr>
+        <tr><td>In place with splice</td><td class="mono">O(n<sup>2</sup>)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><code>n</code> is the total number of nodes, <code>d</code> the nesting depth. The accumulator
+  version visits each node once. The depth budget changes <em>which</em> nodes are visited, not the
+  asymptotic cost &mdash; a smaller budget simply stops earlier.</p>
+
+  <p>Note that the recursion depth is bounded by the nesting depth, <strong>not</strong> by the depth
+  argument. <code>flatten(deeplyNested, 1)</code> only ever recurses one level, so the stack is safe
+  regardless of how deep the data is.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;One recursive walk with a depth counter: if the item is an array <em>and</em> depth is
+    still above zero, recurse with depth minus one; otherwise push it. I use a shared output array
+    rather than concatenating returned arrays, because concat copies and would make it O(n&middot;d).
+    Two details to match the real <code>flat</code>: the default depth is 1, not Infinity, and holes are
+    skipped &mdash; which means testing <code>i in arr</code> rather than iterating values. If the
+    input could be pathologically deep I would swap the call stack for an explicit stack carrying
+    <code>{value, depth}</code> pairs.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Defaulting to <code>Infinity</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; structure destroyed by a default</span></div>
+<pre><code>function flattenWrongDefault(arr, depth = Infinity) {
+  const out = [];
+  for (const item of arr) {
+    if (Array.isArray(item) &amp;&amp; depth &gt; 0) out.push(...flattenWrongDefault(item, depth - 1));
+    else out.push(item);
+  }
+  return out;
+}
+
+// coordinate pairs -- the inner arrays are the DATA
+const path = [[[0, 0], [1, 1]], [[2, 2], [3, 3]]];
+
+console.log('input       :', JSON.stringify(path));
+console.log('mine        :', JSON.stringify(flattenWrongDefault(path)));
+console.log('real .flat():', JSON.stringify(path.flat()));
+console.log('');
+console.log('The default flattened the coordinate pairs into a stream of');
+console.log('numbers. Whoever called it wanted a list of points and got');
+console.log('a list of digits.');
+console.log('');
+console.log('The default matters because it is what people rely on');
+console.log('without reading. Match the platform: depth = 1.');</code></pre>
+  </div>
+
+  <h3>2. Ignoring holes</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; holes become undefined</span></div>
+<pre><code>// for...of visits holes as undefined
+function withForOf(arr, depth = 1) {
+  const out = [];
+  for (const item of arr) {
+    if (Array.isArray(item) &amp;&amp; depth &gt; 0) out.push(...withForOf(item, depth - 1));
+    else out.push(item);
+  }
+  return out;
+}
+
+// `i in arr` skips them, like the real flat
+function withIndexCheck(arr, depth = 1) {
+  const out = [];
+  for (let i = 0; i &lt; arr.length; i++) {
+    if (!(i in arr)) continue;
+    const item = arr[i];
+    if (Array.isArray(item) &amp;&amp; depth &gt; 0) out.push(...withIndexCheck(item, depth - 1));
+    else out.push(item);
+  }
+  return out;
+}
+
+const holey = [1, , 3, [4, , 6]];
+
+console.log('input        :', holey);
+console.log('for...of     :', withForOf(holey), ' length', withForOf(holey).length);
+console.log('index check  :', withIndexCheck(holey), ' length',
+            withIndexCheck(holey).length);
+console.log('real .flat() :', holey.flat(), ' length', holey.flat().length);
+console.log('');
+console.log('The for...of version invented two undefined values that');
+console.log('were never in the data. A caller filtering on');
+console.log('`x !== undefined` will not even notice; one counting');
+console.log('`.length` will get the wrong answer.');
+console.log('');
+console.log('And note new Array(n) is all holes:');
+console.log('  new Array(3).flat()      ->', new Array(3).flat(),
+            ' length', new Array(3).flat().length);
+console.log('  for...of version         ->', withForOf(new Array(3)));</code></pre>
+  </div>
+
+  <h3>3. Using <code>push(...spread)</code> on large arrays</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; RangeError above a certain size</span></div>
+<pre><code>function withSpread(arr, depth = 1) {
+  const out = [];
+  for (const item of arr) {
+    if (Array.isArray(item) &amp;&amp; depth &gt; 0) out.push(...withSpread(item, depth - 1));
+    else out.push(item);
+  }
+  return out;
+}
+
+function withAccumulator(arr, depth = 1) {
+  const out = [];
+  (function walk(list, d) {
+    for (const item of list) {
+      if (Array.isArray(item) &amp;&amp; d &gt; 0) walk(item, d - 1);
+      else out.push(item);
+    }
+  })(arr, depth);
+  return out;
+}
+
+for (const size of [1000, 100000, 300000]) {
+  const input = [new Array(size).fill(1)];
+  let spread, acc;
+  try { spread = withSpread(input).length + ' items'; }
+  catch (e) { spread = e.constructor.name; }
+  try { acc = withAccumulator(input).length + ' items'; }
+  catch (e) { acc = e.constructor.name; }
+  console.log('inner size ' + String(size).padStart(6) +
+              '   spread: ' + spread.padEnd(16) + '   accumulator: ' + acc);
+}
+
+console.log('');
+console.log('push(...arr) passes every element as a separate ARGUMENT,');
+console.log('and the argument list lives on the call stack. Above');
+console.log('roughly 100,000 it overflows.');
+console.log('');
+console.log('Same trap as Math.max(...arr) and');
+console.log('Array.prototype.push.apply(a, b). A shared accumulator');
+console.log('pushed one item at a time has no ceiling.');</code></pre>
+  </div>
+
+  <h3>4. Mutating the input</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the caller's array is destroyed</span></div>
+<pre><code>function flattenMutating(arr, depth = 1) {
+  for (let i = 0; i &lt; arr.length; i++) {
+    if (Array.isArray(arr[i]) &amp;&amp; depth &gt; 0) {
+      arr.splice(i, 1, ...flattenMutating(arr[i], depth - 1));
+      i--;
+    }
+  }
+  return arr;
+}
+
+const original = [1, [2, [3]]];
+const copyForLater = original;
+
+const result = flattenMutating(original, Infinity);
+
+console.log('result      :', JSON.stringify(result));
+console.log('original    :', JSON.stringify(original), '<- also changed');
+console.log('same object?', result === original);
+console.log('');
+console.log('Every other reference to that array now sees the flat');
+console.log('version. If the caller was going to render the nested');
+console.log('shape, it cannot any more.');
+console.log('');
+console.log('And it is worse than it looks -- the INNER arrays were');
+console.log('mutated too:');
+const inner = [3, [4]];
+const outer = [1, [2, inner]];
+console.log('  the inner array before:', JSON.stringify(inner));
+flattenMutating(outer, Infinity);
+console.log('  the inner array after :', JSON.stringify(inner),
+            '<- flattened in place too');
+
+console.log('');
+console.log('flat() returns a NEW array and never touches the input.');
+console.log('Unless mutation is explicitly requested, do the same.');
+const safe = [1, [2, [3]]];
+const flatCopy = safe.flat(Infinity);
+console.log('  after safe.flat():', JSON.stringify(safe), '-- untouched');</code></pre>
+  </div>
+
+  <h3>5. Assuming everything iterable is an array</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; a string exploded into characters</span></div>
+<pre><code>// using "does it have a length?" as the test
+function flattenByLength(arr, depth = 1) {
+  const out = [];
+  for (const item of arr) {
+    if (item &amp;&amp; typeof item.length === 'number' &amp;&amp; depth &gt; 0) {
+      out.push(...flattenByLength(Array.from(item), depth - 1));
+    } else {
+      out.push(item);
+    }
+  }
+  return out;
+}
+
+const data = ['hello', [1, 2], { length: 2, 0: 'a', 1: 'b' }, 'x'];
+
+console.log('input        :', JSON.stringify(data));
+console.log('by length, 2 :', JSON.stringify(flattenByLength(data, 2)));
+console.log('real .flat() :', JSON.stringify(data.flat(Infinity)));
+console.log('');
+console.log('Strings have a length, so they were shredded into');
+console.log('characters. A function object has a length too (its');
+console.log('arity), and so does anything array-like.');
+console.log('');
+console.log('And note the depth had to be finite. With Infinity it');
+console.log('never terminates at all: "h" has length 1, so it becomes');
+console.log('["h"], whose element "h" has length 1, forever.');
+let guard = 0;
+try {
+  (function shred(v) {
+    if (++guard &gt; 20000) throw new Error('runaway -- a 1-character string');
+    if (v &amp;&amp; typeof v.length === 'number') for (const c of Array.from(v)) shred(c);
+  })('h');
+} catch (e) { console.log('  ', e.message); }
+console.log('');
+console.log('Array.isArray is the only correct test. It works across');
+console.log('iframe and worker boundaries as well, which `instanceof');
+console.log('Array` does not:');
+console.log('  Array.isArray([])       :', Array.isArray([]));
+console.log('  Array.isArray("ab")     :', Array.isArray('ab'));
+console.log('  Array.isArray(arguments-like) :',
+            Array.isArray({ 0: 1, length: 1 }));
+console.log('  Array.isArray(new Set())      :', Array.isArray(new Set()));</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the eight-line version from memory</strong>, then say the two details that make it
+    match the real <code>flat</code>: default depth 1, and skipping holes.</li>
+    <li><strong>Write the iterative version.</strong> Step 6b &mdash; carry <code>{value, depth}</code>
+    pairs and push children in reverse.</li>
+    <li><strong>Write <code>flatMap</code></strong> and prove it only flattens one level.</li>
+    <li><strong>Write <code>depthOf</code></strong> &mdash; Step 7 &mdash; and use it to flatten fully
+    without <code>Infinity</code>.</li>
+    <li><strong>The object version.</strong> Flattening <code>{a:{b:1}}</code> to
+    <code>{'a.b':1}</code> is the same recursion on a different shape, and the next section opens with
+    it.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>A budget parameter is the general way to bound a recursion.</strong> Pass a number down,
+    decrement it, and make the recursive branch conditional on it &mdash; the same move as
+    <code>remaining</code> in Combination Sum and <code>k</code> in a bounded search. And the reason
+    <code>Infinity</code> needs no special case is worth keeping: <code>Infinity - 1</code> is still
+    <code>Infinity</code>.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="09-memoize.html">&larr; Memoize a Function</a>
+  <a href="../index.html">All problems &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

@@ -95,33 +95,89 @@
     return Array.prototype.slice.call(args).map(function (a) { return render(a, 0); }).join(' ');
   }
 
-  function run(source, out) {
+  // Blocks are wrapped in an async function, so a snippet may use `await`
+  // at what looks like top level, and anything it schedules with setTimeout
+  // or a promise still gets its output captured. Purely synchronous blocks
+  // behave exactly as before.
+  var AsyncFunction = Function;
+  try {
+    AsyncFunction = Object.getPrototypeOf(
+      new Function('return async function () {}')()
+    ).constructor;
+  } catch (e) { /* very old engine: fall back to sync Function */ }
+
+  // How long to keep listening after the block's promise settles, so output
+  // from a trailing setTimeout(..., 0) still lands.
+  var SETTLE_MS = 400;
+
+  function run(source, out, onDone) {
     var lines = [];
+    var errText = null;
+    var pending = false;
+
+    function paint() {
+      pending = false;
+      out.textContent = lines.length ? lines.join('\n')
+                                     : (errText ? '' : '(ran with no output)');
+      if (errText) {
+        if (lines.length) out.appendChild(document.createTextNode('\n'));
+        var span = document.createElement('span');
+        span.className = 'err';
+        span.textContent = errText;
+        out.appendChild(span);
+      }
+    }
+
+    // Repaint at most once a frame -- a loop that logs thousands of lines
+    // should not force thousands of layouts.
+    function schedulePaint() {
+      if (pending) return;
+      pending = true;
+      (window.requestAnimationFrame || function (f) { setTimeout(f, 16); })(paint);
+    }
+
+    function record() { lines.push(joinArgs(arguments)); schedulePaint(); }
+
     var fakeConsole = {
-      log:   function () { lines.push(joinArgs(arguments)); },
-      info:  function () { lines.push(joinArgs(arguments)); },
-      warn:  function () { lines.push(joinArgs(arguments)); },
-      error: function () { lines.push(joinArgs(arguments)); },
-      table: function () { lines.push(joinArgs(arguments)); }
+      log: record, info: record, warn: record, error: record, table: record
     };
 
     out.textContent = '';
     out.classList.add('shown');
 
-    try {
-      // Function() gives the snippet its own scope, so two blocks on the same
-      // page can both declare `const nums` without colliding.
-      var fn = new Function('console', '"use strict";\n' + source);
-      fn(fakeConsole);
-      out.textContent = lines.length ? lines.join('\n') : '(ran with no output)';
-    } catch (err) {
-      out.textContent = lines.join('\n') + (lines.length ? '\n' : '');
-      var span = document.createElement('span');
-      span.className = 'err';
-      span.textContent = (err && err.name ? err.name : 'Error') + ': ' +
-                         (err && err.message ? err.message : String(err));
-      out.appendChild(span);
+    function finish() {
+      paint();
+      if (onDone) onDone();
     }
+
+    function fail(err) {
+      errText = (err && err.name ? err.name : 'Error') + ': ' +
+                (err && err.message ? err.message : String(err));
+      paint();
+    }
+
+    var result;
+    try {
+      // AsyncFunction() gives the snippet its own scope, so two blocks on the
+      // same page can both declare `const nums` without colliding.
+      var fn = new AsyncFunction('console', '"use strict";\n' + source);
+      result = fn(fakeConsole);
+    } catch (err) {
+      // a syntax error in the snippet, or a throw from a synchronous block
+      fail(err);
+      if (onDone) onDone();
+      return;
+    }
+
+    if (!result || typeof result.then !== 'function') {
+      finish();
+      return;
+    }
+
+    result.then(null, fail).then(function () {
+      // give trailing timers and unawaited promises a moment to report
+      setTimeout(finish, SETTLE_MS);
+    });
   }
 
   function setupRunButtons() {
@@ -143,11 +199,15 @@
       head.appendChild(btn);
 
       btn.addEventListener('click', function () {
+        if (btn.disabled) return;
+        btn.disabled = true;
         btn.textContent = 'Running…';
         // Let the browser paint the label before a slow snippet blocks the thread.
         setTimeout(function () {
-          run(pre.textContent, out);
-          btn.textContent = 'Run again';
+          run(pre.textContent, out, function () {
+            btn.disabled = false;
+            btn.textContent = 'Run again';
+          });
         }, 15);
       });
     });

@@ -1,0 +1,1006 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debounce and Throttle</title>
+<meta name="description" content="Two ways to rate-limit a function, why they are not interchangeable, and the closure that makes both work.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">JavaScript semantics &middot; Problem 01</p>
+  <h1>Debounce and Throttle</h1>
+  <p class="standfirst">Two functions that both &ldquo;slow down&rdquo; a callback, and are constantly
+  confused for each other. They answer different questions: debounce asks <em>have they stopped
+  yet?</em>, throttle asks <em>has enough time passed?</em> Getting the difference right is the whole
+  interview.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>A user types in a search box. Each keystroke fires a handler that calls your API. Thirty
+  keystrokes, thirty requests, twenty-nine of them already stale by the time they land.</p>
+
+  <p>Two different fixes, for two different situations:</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th></th><th>Debounce</th><th>Throttle</th></tr></thead>
+      <tbody>
+        <tr><td>Rule</td><td>run once, <code>d</code> ms after the <em>last</em> call</td><td>run at most once every <code>d</code> ms</td></tr>
+        <tr><td>During a burst</td><td>nothing runs</td><td>runs on a steady beat</td></tr>
+        <tr><td>Question it answers</td><td>have they finished?</td><td>has enough time passed?</td></tr>
+        <tr><td>Use for</td><td>search-as-you-type, autosave, resize-end, form validation</td><td>scroll position, mousemove, progress bars, analytics pings</td></tr>
+        <tr><td>Danger</td><td>a never-ending burst means it <em>never</em> runs</td><td>you may miss the final value</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">The one-line version to remember</span>
+    <p><strong>Debounce</strong> waits for quiet. <strong>Throttle</strong> keeps a rhythm.</p>
+    <p>Or in code terms: debounce <em>resets</em> its timer on every call; throttle <em>ignores</em>
+    calls until its timer expires.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the difference, visibly</span></div>
+<pre><code>function debounce(fn, delay) {
+  let timer = null;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() =&gt; fn.apply(this, args), delay);
+  };
+}
+
+function throttle(fn, interval) {
+  let last = 0;
+  return function (...args) {
+    const now = Date.now();
+    if (now - last &gt;= interval) {
+      last = now;
+      fn.apply(this, args);
+    }
+  };
+}
+
+// simulate a user typing "javascript" -- one letter every 30 ms
+const word = 'javascript';
+const start = Date.now();
+
+const debounced = debounce((ch) =&gt; {
+  console.log('  DEBOUNCE fired at ~' + (Date.now() - start) + ' ms with "' + ch + '"');
+}, 100);
+
+const throttled = throttle((ch) =&gt; {
+  console.log('  THROTTLE fired at ~' + (Date.now() - start) + ' ms with "' + ch + '"');
+}, 100);
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+console.log('typing 10 characters, 30 ms apart, both limited to 100 ms:');
+for (let i = 0; i &lt; word.length; i++) {
+  const soFar = word.slice(0, i + 1);
+  debounced(soFar);
+  throttled(soFar);
+  await sleep(30);
+}
+
+await sleep(200);   // let the trailing debounce land
+
+console.log('');
+console.log('Throttle fired several times DURING the burst, each with a');
+console.log('partial word. Debounce fired once AFTER it, with the whole');
+console.log('word -- which is what a search box actually wants.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; why a plain flag does not work</h2>
+
+  <p>The naive attempt at rate limiting is a boolean.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0 &mdash; a module-level flag</span></div>
+<pre><code>let busy = false;
+
+function search(term) {
+  if (busy) return;
+  busy = true;
+  console.log('  searching for "' + term + '"');
+  setTimeout(() =&gt; { busy = false; }, 100);
+}
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+for (const term of ['j', 'ja', 'jav', 'java']) {
+  search(term);
+  await sleep(30);
+}
+await sleep(150);
+
+console.log('');
+console.log('Three problems:');
+console.log('  1. It kept the FIRST value, "j" -- the least useful one.');
+console.log('  2. `busy` is a global. Two search boxes share it, and');
+console.log('     one silences the other.');
+console.log('  3. There is no way to cancel it or to make a second,');
+console.log('     independently limited version.');</code></pre>
+  </div>
+
+  <p>Problem 2 is the important one, and it is what the exercise is really testing. The state has to
+  live <strong>inside</strong> the rate limiter, one copy per limited function &mdash; which is exactly
+  what a closure is for.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it matters &mdash; count the calls</h2>
+
+  <p>This is not a micro-optimisation. On a scroll handler the difference is two orders of
+  magnitude.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Cost demo &mdash; raw versus throttled versus debounced</span></div>
+<pre><code>function debounce(fn, delay) {
+  let timer = null;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() =&gt; fn.apply(this, args), delay);
+  };
+}
+
+function throttle(fn, interval) {
+  let last = 0;
+  return function (...args) {
+    const now = Date.now();
+    if (now - last &gt;= interval) { last = now; fn.apply(this, args); }
+  };
+}
+
+// pretend each handler call costs real work -- reading layout,
+// re-measuring elements, recomputing positions
+function expensiveLayout() {
+  let x = 0;
+  for (let i = 0; i &lt; 200000; i++) x += Math.sqrt(i);
+  return x;
+}
+
+let rawCalls = 0, throttleCalls = 0, debounceCalls = 0;
+const raw = () =&gt; { rawCalls++; expensiveLayout(); };
+const thr = throttle(() =&gt; { throttleCalls++; expensiveLayout(); }, 100);
+const deb = debounce(() =&gt; { debounceCalls++; expensiveLayout(); }, 100);
+
+// a 600 ms scroll -- browsers fire these roughly every 4 ms
+const EVENTS = 150;
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+let t = performance.now();
+for (let i = 0; i &lt; EVENTS; i++) raw();
+const rawMs = performance.now() - t;
+
+t = performance.now();
+for (let i = 0; i &lt; EVENTS; i++) { thr(); if (i % 25 === 24) await sleep(100); }
+const thrMs = performance.now() - t;
+
+t = performance.now();
+for (let i = 0; i &lt; EVENTS; i++) { deb(); if (i % 25 === 24) await sleep(100); }
+await sleep(150);
+const debMs = performance.now() - t;
+
+const SCROLL_MS = 600;
+const frames = Math.round(SCROLL_MS / 16);
+const budgetMs = frames * 16;
+
+console.log(EVENTS + ' scroll events over ~' + SCROLL_MS + ' ms of scrolling');
+console.log('');
+console.log('  raw      : ' + String(rawCalls).padStart(3) + ' handler runs, ' +
+            rawMs.toFixed(0) + ' ms of work');
+console.log('  throttled: ' + String(throttleCalls).padStart(3) + ' handler runs, ' +
+            (rawMs * throttleCalls / rawCalls).toFixed(0) + ' ms');
+console.log('  debounced: ' + String(debounceCalls).padStart(3) + ' handler runs, ' +
+            (rawMs * debounceCalls / rawCalls).toFixed(0) + ' ms');
+console.log('');
+console.log('At 60 fps, ' + SCROLL_MS + ' ms is about ' + frames +
+            ' frames -- ' + budgetMs + ' ms of total budget,');
+console.log('shared with everything else on the page.');
+console.log('  raw handler used ' + (100 * rawMs / budgetMs).toFixed(0) +
+            '% of it; throttled used ' +
+            (100 * rawMs * throttleCalls / rawCalls / budgetMs).toFixed(0) + '%.');
+console.log('');
+console.log('Numbers vary by machine. What does not vary is the ratio:');
+console.log('rate limiting cut the work by ' +
+            Math.round(rawCalls / Math.max(throttleCalls, 1)) + 'x, and it is');
+console.log('the same ' + Math.round(rawCalls / Math.max(throttleCalls, 1)) +
+            'x whether the handler is cheap or ruinous.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; a closure over the timer</h2>
+
+  <p>Both functions have the same shape: a factory that returns a wrapper, with private state trapped
+  between them.</p>
+
+  <div class="trace">
+<pre>  function debounce(fn, delay) {
+
+      let timer = null;          <-- private state, one per call
+                                     to debounce()
+      return function (...args) {
+          clearTimeout(timer);   <-- cancel the pending run
+          timer = setTimeout(    <-- schedule a new one
+              () => fn(...args),
+              delay
+          );
+      };
+  }
+
+  The returned function OUTLIVES debounce(), but it still sees
+  `timer`. That is a closure: the inner function keeps the
+  variable alive, and each call to debounce() creates a fresh one.
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The two mechanisms, side by side</span>
+    <p><strong>Debounce keeps a timer id and clears it.</strong> Every call cancels the pending run and
+    starts over, so only quiet lets one through.</p>
+    <p><strong>Throttle keeps a timestamp and compares it.</strong> Calls arriving inside the window
+    are simply dropped &mdash; nothing is cancelled, because nothing was scheduled.</p>
+  </div>
+
+  <p>Because the state is per-wrapper, two independently limited functions never interfere:</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">each wrapper gets its own state</span></div>
+<pre><code>function debounce(fn, delay) {
+  let timer = null;
+  console.log('  debounce() called -- new private `timer` created');
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() =&gt; fn.apply(this, args), delay);
+  };
+}
+
+const searchBox = debounce((v) =&gt; console.log('  search  ->', v), 60);
+const filterBox = debounce((v) =&gt; console.log('  filter  ->', v), 60);
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+searchBox('a'); searchBox('ab'); searchBox('abc');
+filterBox('x'); filterBox('xy');
+
+await sleep(150);
+console.log('');
+console.log('Both fired, each with its own last value. A shared flag');
+console.log('would have let only one of them through.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; follow the timer</h2>
+
+  <p>Debounce with a 100&nbsp;ms delay, called at 0, 30, 60 and then again at 300.</p>
+
+  <div class="trace">
+<pre>  t=0    call("j")
+           clearTimeout(null)   -- nothing pending, harmless
+           timer = T1, due at 100
+
+  t=30   call("ja")
+           clearTimeout(T1)     -- T1 CANCELLED, never runs
+           timer = T2, due at 130
+
+  t=60   call("jav")
+           clearTimeout(T2)     -- cancelled
+           timer = T3, due at 160
+
+  t=160  T3 fires  ->  fn("jav")
+
+  t=300  call("java")
+           clearTimeout(T3)     -- already fired; harmless
+           timer = T4, due at 400
+
+  t=400  T4 fires  ->  fn("java")
+
+  4 calls, 2 runs. The gap at t=160..300 was longer than the
+  delay, so it counted as "they stopped".
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the same trace, produced by the code</span></div>
+<pre><code>function debounceLoud(fn, delay) {
+  let timer = null;
+  let seq = 0;
+  const t0 = Date.now();
+
+  return function (...args) {
+    const at = Date.now() - t0;
+    if (timer !== null) {
+      console.log('t=' + String(at).padStart(3) + '  call(' + JSON.stringify(args[0]) +
+                  ')  ->  cancel pending timer, reschedule');
+    } else {
+      console.log('t=' + String(at).padStart(3) + '  call(' + JSON.stringify(args[0]) +
+                  ')  ->  nothing pending, schedule');
+    }
+
+    clearTimeout(timer);
+    const id = ++seq;
+    timer = setTimeout(() =&gt; {
+      timer = null;
+      console.log('t=' + String(Date.now() - t0).padStart(3) +
+                  '  TIMER ' + id + ' FIRES  ->  fn(' + JSON.stringify(args[0]) + ')');
+      fn.apply(this, args);
+    }, delay);
+  };
+}
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+let runs = 0;
+const d = debounceLoud(() =&gt; { runs++; }, 100);
+
+d('j');
+await sleep(30);  d('ja');
+await sleep(30);  d('jav');
+await sleep(240); d('java');
+await sleep(150);
+
+console.log('');
+console.log('4 calls, ' + runs + ' actual runs.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; the plain versions, written out</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; debounce, no arrow functions or rest args</span></div>
+<pre><code>function debounce(fn, delay) {
+  var timer = null;
+
+  return function () {
+    var context = this;                  // remember the receiver
+    var args = arguments;                // and the arguments
+
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      fn.apply(context, args);           // restore both
+    }, delay);
+  };
+}
+
+// Why `context` and `args` are captured into variables:
+// a plain `function () {}` inside setTimeout gets its OWN `this`
+// and its OWN `arguments`. Arrow functions inherit both, which is
+// why the modern version can skip this step.
+
+const log = [];
+const d = debounce(function (v) { log.push(v + ' / this.name=' + this.name); }, 50);
+
+const widget = { name: 'searchBox', run: d };
+widget.run('typed');
+
+const sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+await sleep(120);
+
+console.log(log);
+// ['typed / this.name=searchBox']  -- the receiver survived the timer</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; throttle, two implementations</span></div>
+<pre><code>// (i) timestamp style -- fires IMMEDIATELY on the first call
+function throttleByTime(fn, interval) {
+  var last = 0;
+  return function () {
+    var now = Date.now();
+    if (now - last &gt;= interval) {
+      last = now;
+      fn.apply(this, arguments);
+    }
+  };
+}
+
+// (ii) timer style -- fires on the first call, then blocks until
+//      the timer clears. Equivalent in effect, different in feel.
+function throttleByTimer(fn, interval) {
+  var waiting = false;
+  return function () {
+    if (waiting) return;
+    waiting = true;
+    fn.apply(this, arguments);
+    setTimeout(function () { waiting = false; }, interval);
+  };
+}
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+const a = [], b = [];
+const ta = throttleByTime((v) =&gt; a.push(v), 100);
+const tb = throttleByTimer((v) =&gt; b.push(v), 100);
+
+for (let i = 1; i &lt;= 12; i++) {
+  ta(i); tb(i);
+  await sleep(30);
+}
+await sleep(150);
+
+console.log('12 calls, 30 ms apart, throttled to 100 ms');
+console.log('  by timestamp:', a);
+console.log('  by timer    :', b);
+console.log('');
+console.log('Both keep roughly one call per 100 ms. The timestamp');
+console.log('version is easier to extend with a trailing call, which');
+console.log('is why it is the one to reach for.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the versions worth shipping</h2>
+
+  <p>The eight-line versions are the right first answer. Then the interviewer asks for the options,
+  and this is what they want.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Debounce with leading, trailing, cancel and flush</span></div>
+<pre><code>function debounce(fn, delay, options = {}) {
+  const leading  = options.leading  === true;    // fire on the first call
+  const trailing = options.trailing !== false;   // fire after the quiet period
+
+  let timer = null;
+  let lastArgs = null;
+  let lastThis = null;
+  let calledDuringWait = false;
+
+  function invoke() {
+    const args = lastArgs, ctx = lastThis;
+    lastArgs = lastThis = null;
+    return fn.apply(ctx, args);
+  }
+
+  function wrapped(...args) {
+    lastArgs = args;
+    lastThis = this;
+
+    const isFirst = timer === null;
+
+    if (isFirst &amp;&amp; leading) {
+      invoke();
+    } else {
+      calledDuringWait = true;
+    }
+
+    clearTimeout(timer);
+    timer = setTimeout(() =&gt; {
+      timer = null;
+      if (trailing &amp;&amp; calledDuringWait) invoke();
+      calledDuringWait = false;
+    }, delay);
+  }
+
+  wrapped.cancel = function () {
+    clearTimeout(timer);
+    timer = null;
+    lastArgs = lastThis = null;
+    calledDuringWait = false;
+  };
+
+  wrapped.flush = function () {
+    if (timer !== null &amp;&amp; lastArgs !== null) {
+      clearTimeout(timer);
+      timer = null;
+      calledDuringWait = false;
+      return invoke();
+    }
+  };
+
+  wrapped.pending = function () { return timer !== null; };
+
+  return wrapped;
+}
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// trailing only (the default)
+let out = [];
+let d = debounce((v) =&gt; out.push(v), 60);
+d(1); d(2); d(3);
+await sleep(120);
+console.log('trailing only        :', out);            // [3]
+
+// leading only -- fire at once, then swallow the burst
+out = [];
+d = debounce((v) =&gt; out.push(v), 60, { leading: true, trailing: false });
+d(1); d(2); d(3);
+await sleep(120);
+console.log('leading only         :', out);            // [1]
+
+// both -- fire at the start AND at the end of a burst
+out = [];
+d = debounce((v) =&gt; out.push(v), 60, { leading: true, trailing: true });
+d(1); d(2); d(3);
+await sleep(120);
+console.log('leading and trailing :', out);            // [1, 3]
+
+// cancel -- abandon the pending run
+out = [];
+d = debounce((v) =&gt; out.push(v), 60);
+d('typed'); d('typed more');
+console.log('pending?             :', d.pending());
+d.cancel();
+await sleep(120);
+console.log('after cancel         :', out);            // []
+
+// flush -- run it now instead of waiting
+out = [];
+d = debounce((v) =&gt; out.push(v), 60);
+d('save me');
+d.flush();
+console.log('after flush          :', out);            // ['save me']
+await sleep(120);
+console.log('and nothing extra    :', out);            // still ['save me']</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Throttle that does not drop the last event</span></div>
+<pre><code>// The classic throttle bug: the user stops scrolling mid-window, so
+// the final position never reaches your handler. Fix it by keeping
+// the last arguments and firing them when the window closes.
+function throttle(fn, interval, options = {}) {
+  const leading  = options.leading  !== false;   // default true
+  const trailing = options.trailing !== false;   // default true
+
+  let last = 0;
+  let timer = null;
+  let lastArgs = null;
+  let lastThis = null;
+
+  function wrapped(...args) {
+    const now = Date.now();
+    if (last === 0 &amp;&amp; !leading) last = now;      // pretend we just fired
+
+    const remaining = interval - (now - last);
+
+    if (remaining &lt;= 0) {
+      if (timer) { clearTimeout(timer); timer = null; }
+      last = now;
+      fn.apply(this, args);
+    } else if (trailing &amp;&amp; timer === null) {
+      lastArgs = args;
+      lastThis = this;
+      timer = setTimeout(() =&gt; {
+        last = options.leading === false ? 0 : Date.now();
+        timer = null;
+        fn.apply(lastThis, lastArgs);
+        lastArgs = lastThis = null;
+      }, remaining);
+    } else if (trailing) {
+      lastArgs = args;                            // keep the freshest values
+      lastThis = this;
+    }
+  }
+
+  wrapped.cancel = function () {
+    clearTimeout(timer);
+    timer = null;
+    last = 0;
+    lastArgs = lastThis = null;
+  };
+
+  return wrapped;
+}
+
+function simpleThrottle(fn, interval) {
+  let last = 0;
+  return function (...args) {
+    const now = Date.now();
+    if (now - last &gt;= interval) { last = now; fn.apply(this, args); }
+  };
+}
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// a scroll that stops at position 7, mid-window
+const withTrailing = [], without = [];
+const a = throttle((p) =&gt; withTrailing.push(p), 100);
+const b = simpleThrottle((p) =&gt; without.push(p), 100);
+
+for (let p = 1; p &lt;= 7; p++) { a(p); b(p); await sleep(30); }
+await sleep(150);
+
+console.log('scroll stopped at position 7');
+console.log('  simple throttle  :', without);
+console.log('  with trailing    :', withTrailing);
+console.log('');
+console.log('The simple version never reports 7 -- the final resting');
+console.log('position, and the one the UI actually needs. That is the');
+console.log('bug the trailing call exists to fix.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the browser primitive you should use instead, sometimes</span></div>
+<pre><code>// For anything that ends in a paint -- moving an element, reading
+// layout, drawing -- requestAnimationFrame beats a timer. It runs
+// at most once per frame and is aligned WITH the paint, so you can
+// never queue two updates for one frame.
+function rafThrottle(fn) {
+  let queued = false;
+  let lastArgs = null;
+
+  return function (...args) {
+    lastArgs = args;
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() =&gt; {
+      queued = false;
+      fn.apply(this, lastArgs);
+    });
+  };
+}
+
+// Node has no requestAnimationFrame, so this demo fakes one at
+// 60 fps to show the shape. In a browser, delete the shim.
+const raf = typeof requestAnimationFrame === 'function'
+  ? requestAnimationFrame
+  : (cb) =&gt; setTimeout(() =&gt; cb(Date.now()), 16);
+
+let queued = false, lastPos = null, painted = 0;
+function onScroll(p) {
+  lastPos = p;
+  if (queued) return;
+  queued = true;
+  raf(() =&gt; { queued = false; painted++; });
+}
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+let events = 0;
+for (let i = 0; i &lt; 40; i++) { events++; onScroll(i); await sleep(4); }
+await sleep(60);
+
+console.log(events + ' scroll events in ~160 ms');
+console.log(painted + ' paints scheduled  (about one per 16 ms frame)');
+console.log('final position seen:', lastPos);
+console.log('');
+console.log('Rule of thumb:');
+console.log('  updates the SCREEN      -> requestAnimationFrame');
+console.log('  hits the NETWORK        -> debounce');
+console.log('  reports at a steady rate-> throttle');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <p>Neither one has interesting time complexity &mdash; the wrapper is O(1) per call. What matters is
+  <strong>how many times the wrapped function runs</strong>, and that is what you should quantify.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Over <code>n</code> events in <code>T</code> ms, window <code>d</code></th><th>Runs</th></tr></thead>
+      <tbody>
+        <tr><td>Raw</td><td class="mono">n</td></tr>
+        <tr><td>Throttle</td><td class="mono">about T / d</td></tr>
+        <tr><td>Debounce</td><td class="mono">one per quiet gap &mdash; often 1</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Space is O(1) per wrapper: a timer id, a timestamp, and the last arguments. Note the last of
+  those &mdash; a debounced function <strong>holds a reference to its most recent arguments and
+  receiver</strong> until it fires. Debounce a handler that receives a large object and you are
+  keeping that object alive for the length of the delay.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Both are factories that return a wrapper closing over private state. Debounce keeps a
+    timer id, clears it on every call and reschedules, so it only runs after the calls stop &mdash;
+    right for search-as-you-type or autosave. Throttle keeps a timestamp and drops calls inside the
+    window, so it runs on a steady beat &mdash; right for scroll or mousemove. I would use
+    <code>apply</code> with the saved <code>this</code> and arguments so the wrapper is transparent to
+    the caller, and I would add a trailing call to the throttle, because otherwise the final event of a
+    burst is silently dropped.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Creating the debounced function inside the handler</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; debouncing nothing at all</span></div>
+<pre><code>function debounce(fn, delay) {
+  let timer = null;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() =&gt; fn.apply(this, args), delay);
+  };
+}
+
+let calls = 0;
+function onInput(value) {
+  // a NEW debounced function every time -- bug
+  const debounced = debounce(() =&gt; { calls++; }, 50);
+  debounced(value);
+}
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+for (const v of ['j', 'ja', 'jav', 'java', 'javas']) onInput(v);
+await sleep(150);
+
+console.log('5 inputs ->', calls, 'runs   (expected 1)');
+console.log('');
+console.log('Each call built a fresh wrapper with a fresh, empty');
+console.log('`timer`, so there was never anything to cancel. The');
+console.log('debounced function must be created ONCE, outside the');
+console.log('handler -- in React that means useMemo or useRef, never');
+console.log('the render body.');</code></pre>
+  </div>
+
+  <h3>2. Losing <code>this</code> and the arguments</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; two ways</span></div>
+<pre><code>// (a) calling fn() with nothing
+function debounceNoArgs(fn, delay) {
+  let timer = null;
+  return function () {
+    clearTimeout(timer);
+    timer = setTimeout(fn, delay);       // no args, no receiver -- bug
+  };
+}
+
+// (b) using a plain function, so `this` is wrong
+function debounceLostThis(fn, delay) {
+  let timer = null;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      fn.apply(this, args);              // `this` here is NOT the caller's
+    }, delay);
+  };
+}
+
+function debounceCorrect(fn, delay) {
+  let timer = null;
+  return function (...args) {
+    const ctx = this;
+    clearTimeout(timer);
+    timer = setTimeout(() =&gt; fn.apply(ctx, args), delay);
+  };
+}
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+function report(value) {
+  console.log('    value =', value, '  this.name =',
+              this &amp;&amp; this.name ? this.name : '(lost)');
+}
+
+const widgetA = { name: 'A', send: debounceNoArgs(report, 40) };
+const widgetB = { name: 'B', send: debounceLostThis(report, 40) };
+const widgetC = { name: 'C', send: debounceCorrect(report, 40) };
+
+console.log('no args:');      widgetA.send('hello'); await sleep(80);
+console.log('lost this:');    widgetB.send('hello'); await sleep(80);
+console.log('correct:');      widgetC.send('hello'); await sleep(80);
+
+console.log('');
+console.log('In (b) the inner plain function has its own `this`. Under');
+console.log('setTimeout that is the timer object in Node and `window`');
+console.log('in a browser -- never the object you called the method on.');
+console.log('An arrow function inherits `this`, which is why the fix is');
+console.log('either an arrow or an explicitly captured `ctx`.');</code></pre>
+  </div>
+
+  <h3>3. Reusing one wrapper across independent callers</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; one search box silences the other</span></div>
+<pre><code>function debounce(fn, delay) {
+  let timer = null;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() =&gt; fn.apply(this, args), delay);
+  };
+}
+
+const results = [];
+
+// ONE wrapper shared by two logically separate inputs -- bug
+const shared = debounce((who, value) =&gt; results.push(who + ':' + value), 50);
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+shared('search', 'shoes');
+shared('filter', 'red');
+await sleep(120);
+
+console.log('shared wrapper:', results);
+// ['filter:red']  -- the search call was cancelled by the filter call
+
+// The fix: one wrapper per logical stream
+const perStream = new Map();
+function debouncedFor(key, fn, delay) {
+  if (!perStream.has(key)) perStream.set(key, debounce(fn, delay));
+  return perStream.get(key);
+}
+
+const results2 = [];
+debouncedFor('search', (v) =&gt; results2.push('search:' + v), 50)('shoes');
+debouncedFor('filter', (v) =&gt; results2.push('filter:' + v), 50)('red');
+await sleep(120);
+
+console.log('per-key wrappers:', results2.sort());
+// ['filter:red', 'search:shoes']  -- both survived</code></pre>
+  </div>
+
+  <h3>4. Debouncing something that must not be delayed</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct code, wrong tool</span></div>
+<pre><code>function debounce(fn, delay) {
+  let timer = null;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() =&gt; fn.apply(this, args), delay);
+  };
+}
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// A progress bar debounced at 200 ms. The upload finishes in 180 ms.
+let shown = [];
+const setProgress = debounce((pct) =&gt; shown.push(pct), 200);
+
+for (let pct = 0; pct &lt;= 100; pct += 20) {
+  setProgress(pct);
+  await sleep(30);
+}
+console.log('during the upload the bar showed:', shown);
+// []  -- the user watched an empty bar the whole time
+
+await sleep(250);
+console.log('after it finished  :', shown);
+// [100] -- it jumped straight to done
+
+console.log('');
+console.log('Debounce is exactly wrong here: the intermediate values');
+console.log('ARE the point. Progress needs throttle (or rAF), which');
+console.log('reports on a beat rather than waiting for silence.');
+console.log('');
+console.log('Same trap: a "user is typing" indicator, a live character');
+console.log('count, an infinite-scroll trigger. If the user must see');
+console.log('the middle of the burst, do not debounce it.');</code></pre>
+  </div>
+
+  <h3>5. Forgetting to cancel on teardown</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; a callback that outlives its component</span></div>
+<pre><code>function debounce(fn, delay) {
+  let timer = null;
+  const wrapped = function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() =&gt; fn.apply(this, args), delay);
+  };
+  wrapped.cancel = () =&gt; clearTimeout(timer);
+  return wrapped;
+}
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// pretend this is a component that gets unmounted
+function makeComponent(name, cancelOnUnmount) {
+  let alive = true;
+  const save = debounce((text) =&gt; {
+    if (!alive) {
+      console.log('  [' + name + '] setState on an unmounted component!');
+      return;
+    }
+    console.log('  [' + name + '] saved:', text);
+  }, 80);
+
+  return {
+    type: (text) =&gt; save(text),
+    unmount: () =&gt; {
+      alive = false;
+      if (cancelOnUnmount) save.cancel();
+      console.log('  [' + name + '] unmounted' +
+                  (cancelOnUnmount ? ' (cancelled the pending save)' : ''));
+    },
+  };
+}
+
+const leaky = makeComponent('leaky', false);
+leaky.type('half a sentence');
+leaky.unmount();
+await sleep(150);
+
+const clean = makeComponent('clean', true);
+clean.type('half a sentence');
+clean.unmount();
+await sleep(150);
+
+console.log('');
+console.log('The pending timer holds the callback, which holds the');
+console.log('closure, which holds whatever the component captured.');
+console.log('Always expose cancel(), and always call it on teardown --');
+console.log('in React, the cleanup function of the effect.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write both eight-line versions from memory</strong>, then say which one a search box
+    needs and why. That pair of questions is the actual interview.</li>
+    <li><strong>Add <code>cancel</code> and <code>flush</code> to debounce.</strong> In Step 7 &mdash;
+    and be able to explain when each is needed (teardown; &ldquo;save now&rdquo; buttons).</li>
+    <li><strong>Add a trailing call to throttle.</strong> Also Step 7. Demonstrate the dropped-final-event
+    bug first, then fix it.</li>
+    <li><strong>A debounce that returns a promise</strong> resolving with the eventual result. Harder
+    than it looks: what should the promises from swallowed calls do &mdash; resolve with the
+    later value, or never settle? Pick an answer and defend it.</li>
+    <li><strong>The <code>rafThrottle</code> version.</strong> Step 7. Then say which of the three
+    tools you would use for: an autosave, a scroll-position readout, a drag handler.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>A factory returning a closure is how you give a function private, per-instance
+    state.</strong> The next several pages &mdash; memoize, curry, the counter factory, a custom
+    promise &mdash; are all the same move applied to a different problem. Once you see
+    &ldquo;variables trapped between an outer and an inner function&rdquo;, you have seen most of what
+    JavaScript interviews test.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="../index.html">&larr; All problems</a>
+  <a href="02-deep-clone.html">Next: Deep Clone &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

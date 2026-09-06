@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Binary Search, and First and Last Occurrence</title>
+<meta name="description" content="Halving the search space — plus the two variants that find the boundaries of a run of duplicates.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Searching &amp; sorting &middot; Problem 01</p>
+  <h1>Binary Search, First and Last</h1>
+  <p class="standfirst">Everyone knows the idea. Almost nobody writes it correctly first time.
+  This page is about the three details that decide it: <strong>the loop condition</strong>,
+  <strong>how the bounds move</strong>, and <strong>what to do when you find a match but want the
+  first one</strong>.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Given a <strong>sorted</strong> array and a target, return its index, or <code>-1</code> if it is
+  not there. Then two variants: the index of the <strong>first</strong> occurrence, and of the
+  <strong>last</strong>.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Array</th><th>Target</th><th>any</th><th>first</th><th>last</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[1,3,5,7,9]</td><td class="mono">5</td><td class="mono">2</td><td class="mono">2</td><td class="mono">2</td></tr>
+        <tr><td class="mono">[1,2,2,2,3]</td><td class="mono">2</td><td class="mono">1, 2 or 3</td><td class="mono">1</td><td class="mono">3</td></tr>
+        <tr><td class="mono">[1,3,5]</td><td class="mono">4</td><td class="mono">-1</td><td class="mono">-1</td><td class="mono">-1</td></tr>
+        <tr><td class="mono">[]</td><td class="mono">1</td><td class="mono">-1</td><td class="mono">-1</td><td class="mono">-1</td></tr>
+        <tr><td class="mono">[2,2,2]</td><td class="mono">2</td><td class="mono">any</td><td class="mono">0</td><td class="mono">2</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">The one requirement</span>
+    <p>The array must be <strong>sorted</strong>. That is what lets you look at the middle element and
+    conclude something about an entire half. Run binary search on unsorted data and it returns
+    confidently wrong answers &mdash; no crash, no warning.</p>
+  </div>
+
+  <p>Row two is why the variants exist. With duplicates, &ldquo;find 2&rdquo; has three valid answers,
+  and plain binary search returns whichever it happens to land on. When you need a boundary, you need
+  a different loop.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; just scan it</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; linear search</span></div>
+<pre><code>function linearSearch(nums, target) {
+  for (let i = 0; i &lt; nums.length; i++) {
+    if (nums[i] === target) return i;
+  }
+  return -1;
+}
+
+console.log(linearSearch([1,3,5,7,9], 5));    // 2
+console.log(linearSearch([1,3,5], 4));        // -1
+console.log(linearSearch([1,2,2,2,3], 2));    // 1  -- first, for free
+console.log(linearSearch([], 1));             // -1
+
+// O(n), works on unsorted data, and finds the FIRST occurrence
+// naturally because it scans left to right.
+// For small arrays this is genuinely the right answer.</code></pre>
+  </div>
+
+  <p>Do not skip this. For an array of ten elements, linear search is faster than binary search in
+  real time &mdash; fewer branches, better cache behaviour. Binary search wins when <code>n</code> is
+  large, and it is worth saying so.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why halving wins so dramatically</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Array size</th><th>Linear, worst case</th><th>Binary, worst case</th></tr></thead>
+      <tbody>
+        <tr><td class="num">10</td><td class="num">10</td><td class="num">4</td></tr>
+        <tr><td class="num">1,000</td><td class="num">1,000</td><td class="num">10</td></tr>
+        <tr><td class="num">1,000,000</td><td class="num">1,000,000</td><td class="num">20</td></tr>
+        <tr><td class="num">1,000,000,000</td><td class="num">1,000,000,000</td><td class="num">30</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Each step throws away half of what is left. Doubling the array adds <strong>one</strong> step.
+  That is what O(log n) means, and it is the reason binary search is worth getting right.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 2000000;
+const nums = [];
+for (let i = 0; i &lt; N; i++) nums.push(i * 2);
+
+const targets = [];
+for (let i = 0; i &lt; 2000; i++) targets.push(Math.floor(Math.random() * N) * 2);
+
+function linear(a, t) {
+  for (let i = 0; i &lt; a.length; i++) if (a[i] === t) return i;
+  return -1;
+}
+
+function binary(a, t) {
+  let lo = 0, hi = a.length - 1;
+  while (lo &lt;= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (a[mid] === t) return mid;
+    if (a[mid] &lt; t) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return -1;
+}
+
+let t = performance.now();
+let sum1 = 0;
+for (const x of targets) sum1 += linear(nums, x);
+const linMs = performance.now() - t;
+
+t = performance.now();
+let sum2 = 0;
+for (const x of targets) sum2 += binary(nums, x);
+const binMs = performance.now() - t;
+
+console.log('2000 linear searches :', linMs.toFixed(1) + ' ms');
+console.log('2000 binary searches :', binMs.toFixed(2) + ' ms');
+console.log('same results:', sum1 === sum2);
+console.log('speed-up:', Math.round(linMs / Math.max(binMs, 0.01)) + 'x');
+console.log('');
+console.log('binary needs at most', Math.ceil(Math.log2(N)), 'comparisons per search');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; and the three details</h2>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Look at the middle element. If it is the target, done. If it is <em>too small</em>, the target
+    can only be in the right half. If it is <em>too big</em>, only the left half. Either way, half the
+    array is eliminated in one comparison.</p>
+  </div>
+
+  <h3>Detail one: computing the middle safely</h3>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">two ways, one habit</span></div>
+<pre><code>const mid = Math.floor((lo + hi) / 2);        // fine in JavaScript
+const mid = lo + Math.floor((hi - lo) / 2);   // safe everywhere
+
+// In languages with fixed-width integers, lo + hi can OVERFLOW when
+// both are large -- a famous bug that sat in the Java standard
+// library for nine years. JavaScript numbers are 64-bit floats so it
+// does not happen here, but the second form costs nothing and is
+// the habit to build.</code></pre>
+  </div>
+
+  <h3>Detail two: the loop condition and the bounds</h3>
+
+  <p><code>while (lo &lt;= hi)</code>, with <code>&lt;=</code>. When <code>lo === hi</code> there is
+  still <strong>one element</strong> left to check. Using <code>&lt;</code> skips it, and the bug only
+  appears when the target happens to be that last element.</p>
+
+  <p>And the bounds must move <em>past</em> the middle: <code>lo = mid + 1</code> or
+  <code>hi = mid - 1</code>. Setting <code>lo = mid</code> when <code>lo</code> and <code>hi</code>
+  are adjacent leaves the range unchanged and the loop spins forever.</p>
+
+  <div class="note warn">
+    <span class="t">The two-line rule that prevents infinite loops</span>
+    <p>Every iteration must make the range <strong>strictly smaller</strong>. If
+    <code>mid</code> can equal <code>lo</code> (and with floor division it can), then
+    <code>lo = mid</code> is not progress. Always exclude the middle you just tested.</p>
+  </div>
+
+  <h3>Detail three: first and last occurrence</h3>
+
+  <p>When you find the target and want the <em>first</em> one, do not stop. Record the index and
+  <strong>keep searching the left half</strong> &mdash; there may be an earlier match. For the last
+  occurrence, keep searching the right half.</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the one line that differs</span></div>
+<pre><code>if (nums[mid] === target) {
+  answer = mid;
+  hi = mid - 1;      // FIRST: keep looking to the left
+  // lo = mid + 1;   // LAST:  keep looking to the right
+}</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>nums = [1,3,5,7,9,11,13]</code>, <code>target = 11</code>.</p>
+
+  <div class="trace">
+<pre>indexes:  0  1  2  3  4   5   6
+values:   1  3  5  7  9  11  13
+
+lo=0  hi=6   mid = 0 + (6-0)/2 = 3   nums[3] = 7
+             7 &lt; 11  ->  the target is to the RIGHT
+             lo = 4
+
+lo=4  hi=6   mid = 4 + (6-4)/2 = 5   nums[5] = 11
+             found  ->  return 5
+</pre>
+  </div>
+
+  <p>Two comparisons for seven elements. Now a miss, <code>target = 6</code>:</p>
+
+  <div class="trace">
+<pre>lo=0  hi=6   mid=3  nums[3]=7   7 > 6  ->  go LEFT   hi = 2
+lo=0  hi=2   mid=1  nums[1]=3   3 &lt; 6  ->  go RIGHT  lo = 2
+lo=2  hi=2   mid=2  nums[2]=5   5 &lt; 6  ->  go RIGHT  lo = 3
+
+lo(3) > hi(2)  ->  the range is empty  ->  return -1
+
+Note the third iteration: lo === hi === 2, one element left.
+With `while (lo &lt; hi)` it would never have been checked.
+</pre>
+  </div>
+
+  <p>And now first-occurrence on duplicates, <code>nums = [1,2,2,2,2,3]</code>,
+  <code>target = 2</code>:</p>
+
+  <div class="trace">
+<pre>indexes:  0  1  2  3  4  5
+values:   1  2  2  2  2  3
+
+lo=0 hi=5   mid=2  nums[2]=2   MATCH
+            record answer = 2, but keep looking LEFT:  hi = 1
+
+lo=0 hi=1   mid=0  nums[0]=1   1 &lt; 2  ->  go RIGHT   lo = 1
+
+lo=1 hi=1   mid=1  nums[1]=2   MATCH
+            record answer = 1, keep looking LEFT:  hi = 0
+
+lo=1 hi=0   range empty  ->  stop
+
+answer: 1      the first occurrence
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function searchExplained(nums, target, mode) {
+  console.log('nums =', nums, '  target =', target, '  mode =', mode);
+
+  let lo = 0, hi = nums.length - 1;
+  let answer = -1;
+  let steps = 0;
+
+  while (lo &lt;= hi) {
+    steps++;
+    const mid = lo + Math.floor((hi - lo) / 2);
+
+    if (nums[mid] === target) {
+      answer = mid;
+      if (mode === 'any') {
+        console.log('  lo=' + lo + ' hi=' + hi + ' mid=' + mid +
+                    '  value ' + nums[mid] + '  MATCH -> return ' + mid);
+        console.log('  ' + steps + ' comparisons');
+        console.log('');
+        return mid;
+      }
+      if (mode === 'first') {
+        console.log('  lo=' + lo + ' hi=' + hi + ' mid=' + mid +
+                    '  value ' + nums[mid] + '  match, record ' + mid +
+                    ', keep looking LEFT');
+        hi = mid - 1;
+      } else {
+        console.log('  lo=' + lo + ' hi=' + hi + ' mid=' + mid +
+                    '  value ' + nums[mid] + '  match, record ' + mid +
+                    ', keep looking RIGHT');
+        lo = mid + 1;
+      }
+    } else if (nums[mid] &lt; target) {
+      console.log('  lo=' + lo + ' hi=' + hi + ' mid=' + mid +
+                  '  value ' + nums[mid] + ' &lt; ' + target + '  -> go RIGHT');
+      lo = mid + 1;
+    } else {
+      console.log('  lo=' + lo + ' hi=' + hi + ' mid=' + mid +
+                  '  value ' + nums[mid] + ' &gt; ' + target + '  -> go LEFT');
+      hi = mid - 1;
+    }
+  }
+
+  console.log('  range empty -> answer ' + answer + '   (' + steps + ' comparisons)');
+  console.log('');
+  return answer;
+}
+
+console.log('RESULT:', searchExplained([1,3,5,7,9,11,13], 11, 'any'));
+console.log('==========================================');
+console.log('RESULT:', searchExplained([1,3,5,7,9,11,13], 6, 'any'));
+console.log('==========================================');
+console.log('RESULT:', searchExplained([1,2,2,2,2,3], 2, 'first'));
+console.log('==========================================');
+console.log('RESULT:', searchExplained([1,2,2,2,2,3], 2, 'last'));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; plain binary search</span></div>
+<pre><code>function binarySearchManual(nums, target) {
+  let lo = 0;
+  let hi = nums.length - 1;
+
+  // &lt;= because when lo === hi there is still one element to check
+  while (lo &lt;= hi) {
+    // lo + (hi - lo)/2 instead of (lo + hi)/2 -- overflow-safe habit
+    const mid = lo + ((hi - lo) - ((hi - lo) % 2)) / 2;
+
+    if (nums[mid] === target) {
+      return mid;
+    }
+
+    if (nums[mid] &lt; target) {
+      lo = mid + 1;        // must EXCLUDE mid, or the loop can stall
+    } else {
+      hi = mid - 1;
+    }
+  }
+
+  return -1;
+}
+
+console.log(binarySearchManual([1,3,5,7,9], 5));       // 2
+console.log(binarySearchManual([1,3,5,7,9], 1));       // 0
+console.log(binarySearchManual([1,3,5,7,9], 9));       // 4
+console.log(binarySearchManual([1,3,5,7,9], 4));       // -1
+console.log(binarySearchManual([1,3,5,7,9], 10));      // -1
+console.log(binarySearchManual([1,3,5,7,9], 0));       // -1
+console.log(binarySearchManual([], 1));                // -1
+console.log(binarySearchManual([42], 42));             // 0
+console.log(binarySearchManual([1,2], 2));             // 1</code></pre>
+  </div>
+
+  <p>The <code>mid</code> expression avoids <code>Math.floor</code> by subtracting the remainder
+  &mdash; a way of doing integer division by hand. In real code write
+  <code>lo + Math.floor((hi - lo) / 2)</code>; this is here to show there is no magic in it.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; first and last occurrence</span></div>
+<pre><code>function firstOccurrence(nums, target) {
+  let lo = 0, hi = nums.length - 1;
+  let answer = -1;
+
+  while (lo &lt;= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+
+    if (nums[mid] === target) {
+      answer = mid;         // remember it...
+      hi = mid - 1;         // ...but there may be an earlier one
+    } else if (nums[mid] &lt; target) {
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+
+  return answer;
+}
+
+function lastOccurrence(nums, target) {
+  let lo = 0, hi = nums.length - 1;
+  let answer = -1;
+
+  while (lo &lt;= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+
+    if (nums[mid] === target) {
+      answer = mid;
+      lo = mid + 1;         // ...there may be a later one
+    } else if (nums[mid] &lt; target) {
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+
+  return answer;
+}
+
+const a = [1,2,2,2,2,3,4,4,5];
+console.log(firstOccurrence(a, 2), lastOccurrence(a, 2));   // 1 4
+console.log(firstOccurrence(a, 4), lastOccurrence(a, 4));   // 6 7
+console.log(firstOccurrence(a, 1), lastOccurrence(a, 1));   // 0 0
+console.log(firstOccurrence(a, 9), lastOccurrence(a, 9));   // -1 -1
+console.log(firstOccurrence([2,2,2], 2), lastOccurrence([2,2,2], 2));   // 0 2
+
+// How many times does the target appear? Two searches, O(log n):
+function countOccurrences(nums, target) {
+  const first = firstOccurrence(nums, target);
+  if (first === -1) return 0;
+  return lastOccurrence(nums, target) - first + 1;
+}
+
+console.log(countOccurrences(a, 2));   // 4
+console.log(countOccurrences(a, 4));   // 2
+console.log(countOccurrences(a, 9));   // 0</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function binarySearch(nums, target) {
+  let lo = 0;
+  let hi = nums.length - 1;
+
+  while (lo &lt;= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+
+    if (nums[mid] === target) return mid;
+    if (nums[mid] &lt; target) lo = mid + 1;
+    else hi = mid - 1;
+  }
+
+  return -1;
+}
+
+console.log(binarySearch([1,3,5,7,9], 5));   // 2
+console.log(binarySearch([1,3,5,7,9], 4));   // -1
+console.log(binarySearch([], 1));            // -1
+console.log(binarySearch([42], 42));         // 0</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the two boundary searches, generalised</span></div>
+<pre><code>// lowerBound: the first index where nums[i] >= target
+// (also: where target WOULD be inserted to keep the array sorted)
+function lowerBound(nums, target) {
+  let lo = 0, hi = nums.length;       // note: hi is nums.length, not -1
+  while (lo &lt; hi) {                   // note: &lt; not &lt;=
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] &lt; target) lo = mid + 1;
+    else hi = mid;                    // note: mid, not mid - 1
+  }
+  return lo;
+}
+
+// upperBound: the first index where nums[i] > target
+function upperBound(nums, target) {
+  let lo = 0, hi = nums.length;
+  while (lo &lt; hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] &lt;= target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+const a = [1,2,2,2,2,3,4,4,5];
+console.log('lowerBound(2) =', lowerBound(a, 2));   // 1  -- first 2
+console.log('upperBound(2) =', upperBound(a, 2));   // 5  -- one past the last 2
+console.log('count of 2s   =', upperBound(a, 2) - lowerBound(a, 2));   // 4
+
+console.log('lowerBound(0) =', lowerBound(a, 0));   // 0  -- insert at the front
+console.log('lowerBound(9) =', lowerBound(a, 9));   // 9  -- insert at the end
+console.log('lowerBound(3) =', lowerBound(a, 3));   // 5
+
+// first = lowerBound if that index actually holds the target
+function first(nums, t) {
+  const i = lowerBound(nums, t);
+  return nums[i] === t ? i : -1;
+}
+function last(nums, t) {
+  const i = upperBound(nums, t) - 1;
+  return i &gt;= 0 &amp;&amp; nums[i] === t ? i : -1;
+}
+console.log(first(a, 2), last(a, 2));   // 1 4
+console.log(first(a, 9), last(a, 9));   // -1 -1</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Two different loop shapes &mdash; do not mix them</span>
+    <p><strong>Closed range</strong> <code>[lo, hi]</code>: <code>hi = length - 1</code>,
+    <code>while (lo &lt;= hi)</code>, bounds move to <code>mid &plusmn; 1</code>.</p>
+    <p><strong>Half-open range</strong> <code>[lo, hi)</code>: <code>hi = length</code>,
+    <code>while (lo &lt; hi)</code>, <code>hi = mid</code> (never <code>mid - 1</code>).</p>
+    <p>Both are correct. Mixing them &mdash; <code>hi = length</code> with <code>lo &lt;= hi</code>
+    &mdash; reads past the end or loops forever. Pick one shape and use it every time.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">binary search on the ANSWER, not the array</span></div>
+<pre><code>// The most valuable generalisation: if you can cheaply test
+// "is the answer at least X?", you can binary search the answer.
+function binarySearchAnswer(lo, hi, isGoodEnough) {
+  // finds the smallest value in [lo, hi] where isGoodEnough is true
+  while (lo &lt; hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (isGoodEnough(mid)) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
+}
+
+// integer square root
+console.log(binarySearchAnswer(0, 100, x =&gt; x * x &gt;= 49));      // 7
+console.log(binarySearchAnswer(0, 10000, x =&gt; x * x &gt;= 2500));  // 50
+
+// "How many bags of size c do I need?" -- the minimum capacity
+// that lets me ship these weights in `days` trips.
+function shipWithinDays(weights, days) {
+  const need = (cap) =&gt; {
+    let trips = 1, load = 0;
+    for (const w of weights) {
+      if (load + w &gt; cap) { trips++; load = 0; }
+      load += w;
+    }
+    return trips &lt;= days;
+  };
+
+  const lo = Math.max(...weights);
+  const hi = weights.reduce((a, b) =&gt; a + b, 0);
+  return binarySearchAnswer(lo, hi, need);
+}
+
+console.log(shipWithinDays([1,2,3,4,5,6,7,8,9,10], 5));   // 15
+console.log(shipWithinDays([3,2,2,4,1,4], 3));            // 6
+console.log(shipWithinDays([1,2,3,1,1], 4));              // 3
+
+// Nothing is being searched in an array here. The "array" is the
+// range of possible answers, and the sorted property is that
+// isGoodEnough goes false...false...true...true.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>Needs sorted?</th></tr></thead>
+      <tbody>
+        <tr><td>Linear scan</td><td class="mono">O(n)</td><td class="mono">O(1)</td><td>no</td></tr>
+        <tr><td><strong>Binary search</strong></td><td class="mono">O(log n)</td><td class="mono">O(1)</td><td><strong>yes</strong></td></tr>
+        <tr><td>Recursive binary search</td><td class="mono">O(log n)</td><td class="mono">O(log n)</td><td>yes</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Why log n:</strong> the range halves every iteration. Starting at <code>n</code>, after
+  <code>k</code> steps it is <code>n / 2&#7503;</code>, and the loop ends when that reaches 1
+  &mdash; which happens at <code>k = log&#8322; n</code>. For a billion elements, thirty steps.</p>
+
+  <p>The iterative version is O(1) space. A recursive one uses O(log n) stack frames &mdash; still
+  tiny, but worth mentioning if asked.</p>
+
+  <p>One honest caveat: <strong>sorting first costs O(n log n)</strong>. If you sort an array purely
+  to binary search it once, you have spent more than a linear scan would have. Binary search pays off
+  when the array is <em>already</em> sorted, or when you will search it many times.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;I keep a closed range <code>[lo, hi]</code> and loop while <code>lo &lt;= hi</code>, so
+    the single-element case is still checked. Each step compares the middle and discards half by
+    moving <code>lo</code> to <code>mid + 1</code> or <code>hi</code> to <code>mid - 1</code> &mdash;
+    excluding the middle guarantees the range shrinks and the loop terminates. O(log n) time, O(1)
+    space. For the first occurrence I record the match and continue searching left instead of
+    returning; for the last, I continue right.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. <code>while (lo &lt; hi)</code> with a closed range</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; misses the last element</span></div>
+<pre><code>function broken(nums, target) {
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt; hi) {                     // should be &lt;=
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] === target) return mid;
+    if (nums[mid] &lt; target) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return -1;
+}
+
+console.log(broken([1,3,5,7,9], 5));   // 2    fine
+console.log(broken([1,3,5,7,9], 9));   // -1   WRONG, should be 4
+console.log(broken([42], 42));         // -1   WRONG, should be 0
+console.log(broken([1,2], 2));         // -1   WRONG, should be 1
+
+// When the range narrows to one element, lo === hi and the loop
+// exits without checking it. A single-element array is never
+// searched at all.</code></pre>
+  </div>
+
+  <h3>2. Not excluding the middle &mdash; the infinite loop</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; would spin forever (guarded here)</span></div>
+<pre><code>function broken(nums, target) {
+  let lo = 0, hi = nums.length - 1;
+  let guard = 0;
+
+  while (lo &lt;= hi) {
+    if (++guard &gt; 50) return 'INFINITE LOOP -- bailed out';
+
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] === target) return mid;
+    if (nums[mid] &lt; target) lo = mid;      // should be mid + 1
+    else hi = mid;                          // should be mid - 1
+  }
+  return -1;
+}
+
+console.log(broken([1,3,5,7,9], 5));   // 2   found before it stalls
+console.log(broken([1,3,5,7,9], 4));   // INFINITE LOOP
+
+// With lo=1, hi=2: mid = 1 + floor(1/2) = 1. If nums[1] &lt; target,
+// lo = mid = 1 -- unchanged. The range never shrinks.
+// Every iteration must strictly reduce hi - lo.</code></pre>
+  </div>
+
+  <h3>3. Returning on the first match when you wanted the first occurrence</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; returns an arbitrary match</span></div>
+<pre><code>function broken(nums, target) {
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt;= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] === target) return mid;    // returns whichever it lands on
+    if (nums[mid] &lt; target) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return -1;
+}
+
+console.log(broken([1,2,2,2,2,3], 2));   // 2   -- not the first (which is 1)
+console.log(broken([2,2,2,2], 2));       // 1   -- not the first (which is 0)
+
+// Perfectly correct for "find any occurrence". Completely wrong for
+// "find the first". Record the match and keep narrowing instead of
+// returning.</code></pre>
+  </div>
+
+  <h3>4. Running it on unsorted data</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; silently wrong</span></div>
+<pre><code>function binarySearch(nums, target) {
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt;= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] === target) return mid;
+    if (nums[mid] &lt; target) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return -1;
+}
+
+const unsorted = [5, 1, 9, 3, 7];
+console.log('9 is at index', unsorted.indexOf(9));               // 2
+console.log('binary search says:', binarySearch(unsorted, 9));   // 2  -- lucky
+console.log('1 is at index', unsorted.indexOf(1));               // 1
+console.log('binary search says:', binarySearch(unsorted, 1));   // -1 -- WRONG
+console.log('7 is at index', unsorted.indexOf(7));               // 4
+console.log('binary search says:', binarySearch(unsorted, 7));   // -1 -- WRONG
+
+// It happens to find 9 because 9 is in the middle. Everything else
+// it reports as missing.
+// No crash, no warning -- just a wrong answer. And the classic
+// JavaScript way to end up here:
+const nums = [10, 9, 100, 20];
+console.log('sorted?', [...nums].sort());                    // [10,100,20,9]
+console.log('sorted!', [...nums].sort((a,b) =&gt; a - b));      // [9,10,20,100]</code></pre>
+  </div>
+
+  <h3>5. Mixing the closed and half-open shapes</h3>
+
+  <p><code>hi = nums.length</code> combined with <code>while (lo &lt;= hi)</code> and
+  <code>nums[mid]</code> reads one past the end on the first iteration for some inputs. Choose
+  <code>[lo, hi]</code> with <code>length - 1</code> and <code>&lt;=</code>, <em>or</em>
+  <code>[lo, hi)</code> with <code>length</code> and <code>&lt;</code>. Never half of each.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write plain binary search from memory</strong>, then test it on an empty array, a
+    single element, the first element and the last. Those four catch every boundary bug.</li>
+    <li><strong>First and last occurrence.</strong> In Step 6 &mdash; write both from memory and say
+    which line differs.</li>
+    <li><strong>Search Insert Position.</strong> Where would the target go to keep the array sorted?
+    That is exactly <code>lowerBound</code>, and it needs no special case for &ldquo;not found&rdquo;.</li>
+    <li><strong>Find the square root of an integer</strong> without <code>Math.sqrt</code>. Binary
+    search the answer between 0 and n. It is in Step 7.</li>
+    <li><strong>Koko Eating Bananas / Ship Within Days.</strong> Binary search on the answer, with a
+    feasibility test. Once you have written one of these, the whole class opens up &mdash; and it is
+    the version of binary search that appears most often in senior interviews.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Binary search does not need an array &mdash; it needs monotonicity.</strong> Any time a
+    predicate goes false, false, &hellip;, true, true along some range, you can find the boundary in
+    O(log n) by halving. That range can be array indexes, but it can equally be
+    &ldquo;capacity&rdquo;, &ldquo;speed&rdquo;, &ldquo;number of days&rdquo; or
+    &ldquo;threshold&rdquo;. The question to ask is always: <em>can I cheaply test whether a candidate
+    answer is good enough?</em></p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="../sliding-window/05-max-consecutive-ones-k-flips.html">&larr; Max Consecutive Ones After K Flips</a>
+  <a href="02-search-in-rotated-sorted-array.html">Next: Search in Rotated Sorted Array &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

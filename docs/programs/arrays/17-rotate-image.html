@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rotate Image</title>
+<meta name="description" content="Transpose then reverse: rotating a matrix 90 degrees in place, derived rather than memorised.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Arrays &middot; Problem 17</p>
+  <h1>Rotate Image</h1>
+  <p class="standfirst">Turn a square matrix 90&deg; clockwise, in place. The famous answer is
+  &ldquo;transpose, then reverse each row&rdquo; &mdash; two operations that look nothing like a
+  rotation until you watch them happen.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Rotate an <code>n &times; n</code> matrix 90 degrees <strong>clockwise</strong>, modifying it
+  <strong>in place</strong> &mdash; no second matrix.</p>
+
+  <div class="trace">
+<pre>       before                after
+
+       1  2  3               7  4  1
+       4  5  6      ->       8  5  2
+       7  8  9               9  6  3
+
+The first COLUMN, read bottom to top, becomes the first ROW.
+   column 0 is [1, 4, 7]  ->  bottom-to-top is [7, 4, 1]  ->  new row 0
+   column 1 is [2, 5, 8]  ->  bottom-to-top is [8, 5, 2]  ->  new row 1
+   column 2 is [3, 6, 9]  ->  bottom-to-top is [9, 6, 3]  ->  new row 2
+</pre>
+  </div>
+
+  <p>Where does one cell go? Track the 1 at <code>(0,0)</code>: it ends at <code>(0,2)</code>.
+  The 3 at <code>(0,2)</code> ends at <code>(2,2)</code>. The general rule:</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the mapping</span></div>
+<pre><code>cell (r, c)   ->   cell (c, n - 1 - r)
+
+check it:  (0,0) -> (0, 2)     the 1 moves to the top-right
+           (0,2) -> (2, 2)     the 3 moves to the bottom-right
+           (2,2) -> (2, 0)     the 9 moves to the bottom-left
+           (2,0) -> (0, 0)     the 7 moves to the top-left</code></pre>
+  </div>
+
+  <p>Notice those four cells form a <strong>cycle</strong>: 1 &rarr; 3 &rarr; 9 &rarr; 7 &rarr; 1.
+  Every rotation is made of four-cell cycles like that, which is one of the two ways to solve this.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <p>Build a new matrix, put each value where the formula says it goes, and copy it back.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; a second matrix</span></div>
+<pre><code>function rotateCopy(matrix) {
+  const n = matrix.length;
+  const out = Array.from({ length: n }, () =&gt; new Array(n).fill(0));
+
+  for (let r = 0; r &lt; n; r++) {
+    for (let c = 0; c &lt; n; c++) {
+      out[c][n - 1 - r] = matrix[r][c];    // (r,c) -> (c, n-1-r)
+    }
+  }
+
+  // copy back so the caller's matrix really did change
+  for (let r = 0; r &lt; n; r++) {
+    for (let c = 0; c &lt; n; c++) matrix[r][c] = out[r][c];
+  }
+
+  return matrix;
+}
+
+const show = m =&gt; m.map(r =&gt; r.join(' ')).join('  |  ');
+
+console.log(show(rotateCopy([[1,2,3],[4,5,6],[7,8,9]])));
+// 7 4 1  |  8 5 2  |  9 6 3
+
+console.log(show(rotateCopy([[1,2],[3,4]])));
+// 3 1  |  4 2
+
+console.log(show(rotateCopy([[5]])));
+// 5</code></pre>
+  </div>
+
+  <p>Correct, easy to reason about, and it uses O(n&sup2;) extra memory &mdash; exactly what the
+  problem forbids. Write it first anyway: it establishes the mapping formula, and everything that
+  follows is about achieving the same mapping without the second matrix.</p>
+
+  <div class="note warn">
+    <span class="t">Why <code>Array.from</code> and not <code>fill</code></span>
+    <p><code>new Array(n).fill(new Array(n).fill(0))</code> puts the <em>same</em> row array in every
+    slot, so writing to one row writes to all of them.
+    <code>Array.from({length: n}, () =&gt; new Array(n).fill(0))</code> calls the factory once per row
+    and gives you n independent arrays. This bites people constantly.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why do better?</h2>
+
+  <p>Time cannot improve &mdash; every cell has to move, so O(n&sup2;) is the floor. The target is
+  the memory. For a 4,000&times;4,000 image that second matrix is sixteen million numbers, and if
+  &ldquo;image&rdquo; is literal, that is real megabytes you did not have to spend.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 2000;
+function build() {
+  const m = [];
+  for (let r = 0; r &lt; N; r++) {
+    const row = [];
+    for (let c = 0; c &lt; N; c++) row.push(r * N + c);
+    m.push(row);
+  }
+  return m;
+}
+
+function withCopy(m) {
+  const n = m.length;
+  const out = Array.from({ length: n }, () =&gt; new Array(n).fill(0));
+  for (let r = 0; r &lt; n; r++)
+    for (let c = 0; c &lt; n; c++) out[c][n - 1 - r] = m[r][c];
+  for (let r = 0; r &lt; n; r++)
+    for (let c = 0; c &lt; n; c++) m[r][c] = out[r][c];
+  return m;
+}
+
+function inPlace(m) {
+  const n = m.length;
+  for (let r = 0; r &lt; n; r++)
+    for (let c = r + 1; c &lt; n; c++) {
+      const t = m[r][c]; m[r][c] = m[c][r]; m[c][r] = t;
+    }
+  for (const row of m) row.reverse();
+  return m;
+}
+
+let t = performance.now();
+const a = withCopy(build());
+const copyMs = performance.now() - t;
+
+t = performance.now();
+const b = inPlace(build());
+const placeMs = performance.now() - t;
+
+console.log('with a copy : ' + copyMs.toFixed(1) + ' ms   (plus ' +
+            (N * N) + ' extra numbers)');
+console.log('in place    : ' + placeMs.toFixed(1) + ' ms   (plus 1 temp variable)');
+console.log('same result :', a[0][0] === b[0][0] &amp;&amp; a[N-1][N-1] === b[N-1][N-1]);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; two easy moves instead of one hard one</h2>
+
+  <p>Rotating in place directly is awkward: overwriting a cell destroys a value you still need. So
+  instead, find two <em>simple</em> operations that compose into a rotation.</p>
+
+  <h3>Move one: transpose</h3>
+
+  <p>Transposing means flipping across the main diagonal &mdash; swapping <code>(r,c)</code> with
+  <code>(c,r)</code>. Rows become columns.</p>
+
+  <div class="trace">
+<pre>       1  2  3               1  4  7
+       4  5  6      ->       2  5  8
+       7  8  9               3  6  9
+
+  the diagonal 1, 5, 9 never moves -- it is the mirror line
+</pre>
+  </div>
+
+  <h3>Move two: reverse each row</h3>
+
+  <div class="trace">
+<pre>       1  4  7               7  4  1
+       2  5  8      ->       8  5  2
+       3  6  9               9  6  3
+
+  which is the answer.
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p><strong>Transpose, then reverse each row = rotate 90&deg; clockwise.</strong></p>
+    <p>And both halves are easy in place. Transposing is swapping pairs of cells; reversing a row is
+    two pointers walking towards each other. Neither one needs a spare matrix.</p>
+  </div>
+
+  <h3>Why does that work?</h3>
+
+  <p>Follow a single cell through both moves and compare with the target formula:</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the composition, checked</span></div>
+<pre><code>target:            (r, c)  ->  (c, n-1-r)
+
+transpose:         (r, c)  ->  (c, r)
+reverse row c:     (c, r)  ->  (c, n-1-r)      reversing a row of
+                                                length n sends column
+                                                index k to n-1-k
+
+together:          (r, c)  ->  (c, r)  ->  (c, n-1-r)      matches.</code></pre>
+  </div>
+
+  <p>That is a real derivation, not a memory aid. If an interviewer asks &ldquo;why does that work?&rdquo;
+  &mdash; and they will &mdash; those three lines are the answer.</p>
+
+  <div class="note">
+    <span class="t">The anticlockwise version</span>
+    <p>Transpose, then reverse each <strong>column</strong> (equivalently: reverse the order of the
+    rows) rotates 90&deg; <em>anticlockwise</em>. Same first move, different second move. It is worth
+    deriving that one yourself the same way &mdash; it is the standard follow-up question.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>[[1,2,3],[4,5,6],[7,8,9]]</code>.</p>
+
+  <div class="trace">
+<pre>PHASE 1 -- transpose: swap (r,c) with (c,r), for c > r only
+
+start        1  2  3
+             4  5  6
+             7  8  9
+
+swap (0,1) with (1,0):  2 and 4
+             1  4  3
+             2  5  6
+             7  8  9
+
+swap (0,2) with (2,0):  3 and 7
+             1  4  7
+             2  5  6
+             3  8  9
+
+swap (1,2) with (2,1):  6 and 8
+             1  4  7
+             2  5  8
+             3  6  9
+
+PHASE 2 -- reverse each row
+
+row 0: [1,4,7] -> [7,4,1]
+row 1: [2,5,8] -> [8,5,2]
+row 2: [3,6,9] -> [9,6,3]
+
+             7  4  1
+             8  5  2
+             9  6  3      done
+</pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Why the inner loop starts at <code>c = r + 1</code></span>
+    <p>If it started at <code>c = 0</code>, you would swap <code>(0,1)</code> with <code>(1,0)</code>
+    and then later swap <code>(1,0)</code> with <code>(0,1)</code> &mdash; putting them straight back.
+    Every pair would be swapped twice and the matrix would be unchanged.</p>
+    <p>Starting at <code>r + 1</code> visits only the cells <strong>above</strong> the diagonal, so
+    each pair is swapped exactly once. The diagonal itself (<code>c === r</code>) is skipped, which is
+    correct &mdash; it does not move.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function show(m) { return m.map(r =&gt; r.join(' ')).join('  |  '); }
+
+function rotateExplained(matrix) {
+  const n = matrix.length;
+
+  console.log('start           ' + show(matrix));
+  console.log('');
+  console.log('PHASE 1 -- transpose (swap only above the diagonal)');
+
+  for (let r = 0; r &lt; n; r++) {
+    for (let c = r + 1; c &lt; n; c++) {
+      const tmp = matrix[r][c];
+      matrix[r][c] = matrix[c][r];
+      matrix[c][r] = tmp;
+      console.log('  swap (' + r + ',' + c + ') and (' + c + ',' + r + ')   ' + show(matrix));
+    }
+  }
+
+  console.log('');
+  console.log('PHASE 2 -- reverse each row');
+
+  for (let r = 0; r &lt; n; r++) {
+    let lo = 0, hi = n - 1;
+    while (lo &lt; hi) {
+      const tmp = matrix[r][lo];
+      matrix[r][lo] = matrix[r][hi];
+      matrix[r][hi] = tmp;
+      lo++; hi--;
+    }
+    console.log('  row ' + r + ' reversed        ' + show(matrix));
+  }
+
+  console.log('');
+  return matrix;
+}
+
+rotateExplained([[1,2,3],[4,5,6],[7,8,9]]);
+console.log('==========================================');
+rotateExplained([[1,2],[3,4]]);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; transpose then reverse, by hand</span></div>
+<pre><code>function rotateManual(matrix) {
+  const n = matrix.length;
+
+  // PHASE 1: transpose -- only above the diagonal, or you undo yourself
+  for (let r = 0; r &lt; n; r++) {
+    for (let c = r + 1; c &lt; n; c++) {
+      const tmp = matrix[r][c];
+      matrix[r][c] = matrix[c][r];
+      matrix[c][r] = tmp;
+    }
+  }
+
+  // PHASE 2: reverse each row with two pointers
+  for (let r = 0; r &lt; n; r++) {
+    let lo = 0;
+    let hi = n - 1;
+    while (lo &lt; hi) {
+      const tmp = matrix[r][lo];
+      matrix[r][lo] = matrix[r][hi];
+      matrix[r][hi] = tmp;
+      lo++;
+      hi--;
+    }
+  }
+
+  return matrix;
+}
+
+const show = m =&gt; m.map(r =&gt; r.join(' ')).join('  |  ');
+
+console.log(show(rotateManual([[1,2,3],[4,5,6],[7,8,9]])));
+// 7 4 1  |  8 5 2  |  9 6 3
+console.log(show(rotateManual([[1,2],[3,4]])));
+// 3 1  |  4 2
+console.log(show(rotateManual([[5]])));
+// 5
+console.log(show(rotateManual([[1,2,3,4],[5,6,7,8],[9,10,11,12],[13,14,15,16]])));
+// 13 9 5 1  |  14 10 6 2  |  15 11 7 3  |  16 12 8 4</code></pre>
+  </div>
+
+  <h3>The other in-place method: four-way cycles</h3>
+
+  <p>Remember the cycle from Step 1: <code>1 &rarr; 3 &rarr; 9 &rarr; 7 &rarr; 1</code>. You can rotate
+  each such quartet directly, one temporary variable at a time, working through the layers of the
+  matrix from the outside in.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; rotate four cells at a time</span></div>
+<pre><code>function rotateCycles(matrix) {
+  const n = matrix.length;
+
+  // work through the layers, outermost first
+  for (let layer = 0; layer &lt; Math.floor(n / 2); layer++) {
+    const first = layer;
+    const last = n - 1 - layer;
+
+    for (let i = first; i &lt; last; i++) {
+      const offset = i - first;
+
+      const top = matrix[first][i];                    // save the top
+
+      matrix[first][i]          = matrix[last - offset][first];  // left -> top
+      matrix[last - offset][first] = matrix[last][last - offset];// bottom -> left
+      matrix[last][last - offset] = matrix[i][last];             // right -> bottom
+      matrix[i][last]           = top;                           // top -> right
+    }
+  }
+
+  return matrix;
+}
+
+const show = m =&gt; m.map(r =&gt; r.join(' ')).join('  |  ');
+
+console.log(show(rotateCycles([[1,2,3],[4,5,6],[7,8,9]])));
+// 7 4 1  |  8 5 2  |  9 6 3
+console.log(show(rotateCycles([[1,2],[3,4]])));
+// 3 1  |  4 2
+console.log(show(rotateCycles([[1,2,3,4],[5,6,7,8],[9,10,11,12],[13,14,15,16]])));
+// 13 9 5 1  |  14 10 6 2  |  15 11 7 3  |  16 12 8 4
+
+// Same complexity, one pass instead of two -- and far harder to get
+// right under pressure. Four index expressions, each easy to fumble.
+// Know that it exists; write transpose-then-reverse.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">checking both against the reference</span></div>
+<pre><code>function reference(m) {                       // obviously correct
+  const n = m.length;
+  const out = Array.from({ length: n }, () =&gt; new Array(n).fill(0));
+  for (let r = 0; r &lt; n; r++)
+    for (let c = 0; c &lt; n; c++) out[c][n - 1 - r] = m[r][c];
+  return out;
+}
+
+function transposeReverse(m) {
+  const n = m.length;
+  for (let r = 0; r &lt; n; r++)
+    for (let c = r + 1; c &lt; n; c++) { const t=m[r][c]; m[r][c]=m[c][r]; m[c][r]=t; }
+  for (const row of m) row.reverse();
+  return m;
+}
+
+function cycles(m) {
+  const n = m.length;
+  for (let layer = 0; layer &lt; Math.floor(n / 2); layer++) {
+    const first = layer, last = n - 1 - layer;
+    for (let i = first; i &lt; last; i++) {
+      const off = i - first;
+      const top = m[first][i];
+      m[first][i] = m[last - off][first];
+      m[last - off][first] = m[last][last - off];
+      m[last][last - off] = m[i][last];
+      m[i][last] = top;
+    }
+  }
+  return m;
+}
+
+let ok = true;
+for (let n = 1; n &lt;= 7; n++) {
+  const m = [];
+  let v = 1;
+  for (let r = 0; r &lt; n; r++) {
+    const row = [];
+    for (let c = 0; c &lt; n; c++) row.push(v++);
+    m.push(row);
+  }
+  const expected = JSON.stringify(reference(m));
+  const t1 = JSON.stringify(transposeReverse(m.map(r =&gt; [...r])));
+  const t2 = JSON.stringify(cycles(m.map(r =&gt; [...r])));
+  if (t1 !== expected || t2 !== expected) { ok = false; console.log('FAILED at n=' + n); }
+}
+console.log('sizes 1x1 through 7x7, both methods match the reference:', ok);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function rotate(matrix) {
+  const n = matrix.length;
+
+  // transpose
+  for (let r = 0; r &lt; n; r++) {
+    for (let c = r + 1; c &lt; n; c++) {
+      [matrix[r][c], matrix[c][r]] = [matrix[c][r], matrix[r][c]];
+    }
+  }
+
+  // reverse each row -- Array.prototype.reverse works in place
+  for (const row of matrix) row.reverse();
+
+  return matrix;
+}
+
+const show = m =&gt; m.map(r =&gt; r.join(' ')).join('  |  ');
+
+console.log(show(rotate([[1,2,3],[4,5,6],[7,8,9]])));   // 7 4 1 | 8 5 2 | 9 6 3
+console.log(show(rotate([[1,2],[3,4]])));               // 3 1 | 4 2
+console.log(show(rotate([[5]])));                       // 5</code></pre>
+  </div>
+
+  <p>Five lines of real work. <code>row.reverse()</code> is the right built-in to use here: it reverses
+  in place with no allocation, which is exactly the manual two-pointer loop.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">all four rotations, and the non-mutating version</span></div>
+<pre><code>const show = m =&gt; m.map(r =&gt; r.join(' ')).join('  |  ');
+const m = [[1,2,3],[4,5,6],[7,8,9]];
+
+// Non-mutating, and it works on non-square matrices too.
+function rotatedClockwise(matrix) {
+  const rows = matrix.length, cols = matrix[0].length;
+  return Array.from({ length: cols }, (_, c) =&gt;
+    Array.from({ length: rows }, (_, r) =&gt; matrix[rows - 1 - r][c])
+  );
+}
+
+function rotatedAnticlockwise(matrix) {
+  const rows = matrix.length, cols = matrix[0].length;
+  return Array.from({ length: cols }, (_, c) =&gt;
+    Array.from({ length: rows }, (_, r) =&gt; matrix[r][cols - 1 - c])
+  );
+}
+
+function rotated180(matrix) {
+  return matrix.map(row =&gt; [...row]).reverse().map(row =&gt; row.reverse());
+}
+
+console.log('original      ', show(m));
+console.log('clockwise     ', show(rotatedClockwise(m)));
+console.log('anticlockwise ', show(rotatedAnticlockwise(m)));
+console.log('180 degrees   ', show(rotated180(m)));
+console.log('input untouched', show(m));
+
+// non-square works too, because we are building a new matrix
+console.log('');
+console.log('2x3 input     ', show([[1,2,3],[4,5,6]]));
+console.log('rotated       ', show(rotatedClockwise([[1,2,3],[4,5,6]])));</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">Why in-place rotation needs a square matrix</span>
+    <p>A 2&times;3 matrix rotates into a 3&times;2 one &mdash; the <em>shape</em> changes, so there is
+    nowhere to put the result inside the original. Only a square matrix rotates onto itself. If an
+    interviewer hands you a rectangular one, that is the answer: return a new matrix, and say why.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Extra space</th></tr></thead>
+      <tbody>
+        <tr><td>Second matrix</td><td class="mono">O(n&sup2;)</td><td class="mono">O(n&sup2;)</td></tr>
+        <tr><td>Four-way cycles</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td></tr>
+        <tr><td><strong>Transpose + reverse</strong></td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>All three are O(n&sup2;) time and that is optimal &mdash; every one of the n&sup2; cells has to
+  move, so you cannot do fewer than n&sup2; operations.</p>
+
+  <p>&ldquo;Transpose plus reverse is two passes, so is it 2n&sup2;?&rdquo; Yes, and 2n&sup2; is
+  O(n&sup2;). Sequential passes add; constants drop. The cycle version does it in one pass and is
+  therefore about twice as fast in raw operation count &mdash; which is worth mentioning as a
+  refinement, and not worth risking a fumbled index expression for.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;A rotation sends <code>(r,c)</code> to <code>(c, n-1-r)</code>. I can achieve that with
+    two in-place operations: transpose, which sends <code>(r,c)</code> to <code>(c,r)</code>, then
+    reverse each row, which sends <code>(c,r)</code> to <code>(c, n-1-r)</code>. Transposing swaps
+    only above the diagonal so each pair is swapped once. O(n&sup2;) time, O(1) space. For
+    anticlockwise, transpose and then reverse the order of the rows instead.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Transposing the whole matrix instead of half</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; swaps everything twice</span></div>
+<pre><code>function broken(matrix) {
+  const n = matrix.length;
+  for (let r = 0; r &lt; n; r++) {
+    for (let c = 0; c &lt; n; c++) {          // should be c = r + 1
+      const t = matrix[r][c]; matrix[r][c] = matrix[c][r]; matrix[c][r] = t;
+    }
+  }
+  for (const row of matrix) row.reverse();
+  return matrix;
+}
+
+const show = m =&gt; m.map(r =&gt; r.join(' ')).join('  |  ');
+
+console.log(show(broken([[1,2,3],[4,5,6],[7,8,9]])));
+// 3 2 1  |  6 5 4  |  9 8 7    WRONG -- that is just each row reversed
+
+// Every pair got swapped twice, which is the same as not swapping.
+// The transpose silently did nothing and only the reverse survived.</code></pre>
+  </div>
+
+  <h3>2. Reversing the rows instead of reversing each row</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; wrong reverse</span></div>
+<pre><code>function broken(matrix) {
+  const n = matrix.length;
+  for (let r = 0; r &lt; n; r++)
+    for (let c = r + 1; c &lt; n; c++) {
+      const t = matrix[r][c]; matrix[r][c] = matrix[c][r]; matrix[c][r] = t;
+    }
+  matrix.reverse();          // reverses the ORDER OF THE ROWS -- bug
+  return matrix;
+}
+
+const show = m =&gt; m.map(r =&gt; r.join(' ')).join('  |  ');
+
+console.log(show(broken([[1,2,3],[4,5,6],[7,8,9]])));
+// 3 6 9  |  2 5 8  |  1 4 7
+
+// That is a 90-degree ANTICLOCKWISE rotation. Not wrong code -- wrong
+// direction. matrix.reverse() flips the row order; row.reverse()
+// flips within a row. Which one you want decides the direction.</code></pre>
+  </div>
+
+  <h3>3. Writing into the matrix while still reading the old values</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; no temporary</span></div>
+<pre><code>function broken(matrix) {
+  const n = matrix.length;
+  for (let r = 0; r &lt; n; r++)
+    for (let c = 0; c &lt; n; c++)
+      matrix[c][n - 1 - r] = matrix[r][c];   // straight in place -- bug
+  return matrix;
+}
+
+const show = m =&gt; m.map(r =&gt; r.join(' ')).join('  |  ');
+
+console.log(show(broken([[1,2,3],[4,5,6],[7,8,9]])));
+// 7 4 1  |  2 5 2  |  1 2 1    WRONG -- most values destroyed
+
+// The formula is right; applying it directly is not. Each write
+// destroys a value that a later read still needs. That is exactly
+// why the answer is two reversible operations, not one direct one.</code></pre>
+  </div>
+
+  <h3>4. Mixing up <code>n - 1 - r</code> and <code>n - r</code></h3>
+
+  <p>Indexes run from <code>0</code> to <code>n - 1</code>, so the mirror of index <code>r</code> is
+  <code>n - 1 - r</code>. Using <code>n - r</code> reads one past the end for <code>r = 0</code>,
+  giving <code>undefined</code>. If your rotated matrix has <code>undefined</code> in it, this is
+  almost always why.</p>
+
+  <h3>5. Assuming <code>reverse()</code> returns a copy</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">reverse mutates</span></div>
+<pre><code>const row = [1, 2, 3];
+const r2 = row.reverse();
+console.log(row);            // [3,2,1] -- the original changed
+console.log(row === r2);     // true    -- same array, not a copy
+
+// Here that is exactly what we want (in-place rotation).
+// In application code where you must not touch the input:
+const safe = [...row].reverse();
+console.log(row, safe);
+
+// Newer runtimes also have toReversed(), which never mutates:
+if (Array.prototype.toReversed) {
+  const original = [1, 2, 3];
+  console.log('toReversed:', original.toReversed(), 'original:', original);
+}</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Derive the anticlockwise version</strong> the way Step 4 derived the clockwise one:
+    write the target mapping, then check that transpose followed by reversing the row order composes
+    into it.</li>
+    <li><strong>Rotate 180 degrees in place.</strong> Two reversals, no transpose. Work out which two.</li>
+    <li><strong>Rotate by k &times; 90 degrees.</strong> Take <code>k % 4</code> first &mdash; the same
+    modulo lesson as Rotate Array &mdash; then apply the right number of quarter turns.</li>
+    <li><strong>Write the cycle version from memory.</strong> It is genuinely hard, and getting the
+    four index expressions right once teaches you a lot about reasoning with matrix indexes.</li>
+    <li><strong>Flip a matrix horizontally and vertically.</strong> Then work out which combinations
+    of flips and transposes produce each of the eight symmetries of a square. All of them are
+    compositions of the same two moves.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Decompose a hard transformation into easy reversible ones.</strong> Rotating in place
+    directly is a tangle of overwrites; transposing and reversing are each trivial, and they compose
+    into exactly what you wanted. The same instinct solved Rotate Array (three reversals) and it will
+    solve others: when an operation is awkward to do in one move, look for two simple moves whose
+    composition equals it.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="16-spiral-matrix.html">&larr; Spiral Matrix</a>
+  <a href="../strings/01-longest-substring-without-repeating.html">Next topic: Strings &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

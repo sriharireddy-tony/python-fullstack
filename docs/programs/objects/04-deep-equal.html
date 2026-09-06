@@ -1,0 +1,1202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Equality Check</title>
+<meta name="description" content="NaN, -0, key order, cycles, Dates and Maps — every case JSON.stringify gets wrong.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Object &amp; data shaping &middot; Problem 04</p>
+  <h1>Deep Equality Check</h1>
+  <p class="standfirst">The mirror of deep clone: the same shape recursion, the same cycle problem, and
+  a completely different set of traps. <code>JSON.stringify(a) === JSON.stringify(b)</code> is the
+  wrong answer for <strong>six separate reasons</strong>, and being able to list them is most of the
+  question.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Decide whether two values are &ldquo;the same&rdquo; by <em>structure</em> rather than by
+  identity.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">why === is not enough</span></div>
+<pre><code>const a = { x: 1, nested: { y: 2 } };
+const b = { x: 1, nested: { y: 2 } };
+
+console.log('a === b               :', a === b);
+console.log('a === a               :', a === a);
+console.log('');
+console.log('=== compares IDENTITY for objects: are these the same');
+console.log('object in memory? a and b are two objects that happen to');
+console.log('look alike.');
+console.log('');
+console.log('For primitives it already does what you want:');
+console.log('  1 === 1             :', 1 === 1);
+console.log("  'x' === 'x'         :", 'x' === 'x');
+console.log('');
+console.log('But two exceptions even there:');
+console.log('  NaN === NaN         :', NaN === NaN, ' <- should be true');
+console.log('  0 === -0            :', 0 === -0, ' <- should be false');
+console.log('');
+console.log('Which is why the primitive comparison in a deepEqual is');
+console.log('NOT ===. The right tool is Object.is:');
+console.log('  Object.is(NaN, NaN) :', Object.is(NaN, NaN));
+console.log('  Object.is(0, -0)    :', Object.is(0, -0));
+console.log('');
+console.log('...except that for a structural comparison you usually');
+console.log('WANT 0 and -0 to be equal. So neither operator is right');
+console.log('out of the box -- see Step 4.');</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Three different notions of &ldquo;equal&rdquo;</span>
+    <p><strong><code>==</code></strong> &mdash; loose, with coercion. <code>'1' == 1</code>,
+    <code>null == undefined</code>. Never what you want here.</p>
+    <p><strong><code>===</code></strong> &mdash; strict, no coercion, identity for objects. Two
+    exceptions: <code>NaN</code> and <code>-0</code>.</p>
+    <p><strong><code>Object.is</code></strong> &mdash; SameValue: like <code>===</code> but
+    <code>NaN</code> equals itself and <code>0</code> does not equal <code>-0</code>.</p>
+    <p>A <strong>deep</strong> equal is a fourth thing built on top: recurse into structure, compare
+    leaves with one of the above.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; six reasons the JSON trick fails</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0 &mdash; JSON.stringify comparison</span></div>
+<pre><code>const jsonEqual = (a, b) =&gt; JSON.stringify(a) === JSON.stringify(b);
+
+// 1. key ORDER changes the string
+console.log('1. key order');
+console.log('   { a: 1, b: 2 } vs { b: 2, a: 1 } ->',
+            jsonEqual({ a: 1, b: 2 }, { b: 2, a: 1 }), ' <- should be true');
+
+// 2. undefined and functions disappear -- so unequal things look equal
+console.log('');
+console.log('2. dropped values');
+console.log('   { a: 1, b: undefined } vs { a: 1 } ->',
+            jsonEqual({ a: 1, b: undefined }, { a: 1 }), ' <- should be false');
+console.log('   { f: () => 1 } vs {}               ->',
+            jsonEqual({ f: () =&gt; 1 }, {}), ' <- should be false');
+
+// 3. NaN and Infinity both become null
+console.log('');
+console.log('3. special numbers');
+console.log('   NaN vs null       ->', jsonEqual(NaN, null), ' <- should be false');
+console.log('   Infinity vs null  ->', jsonEqual(Infinity, null), ' <- should be false');
+console.log('   Infinity vs -Infinity ->', jsonEqual(Infinity, -Infinity),
+            ' <- should be false');
+console.log('   0 vs -0           ->', jsonEqual(0, -0));
+
+// 4. Maps and Sets both stringify to {}
+console.log('');
+console.log('4. Maps and Sets');
+console.log('   Map([[a,1]]) vs Map([[b,2]]) ->',
+            jsonEqual(new Map([['a', 1]]), new Map([['b', 2]])),
+            ' <- should be false');
+console.log('   Set([1]) vs Map()            ->',
+            jsonEqual(new Set([1]), new Map()), ' <- should be false');
+
+// 5. prototypes are ignored
+class Dog { constructor(n) { this.name = n; } }
+class Cat { constructor(n) { this.name = n; } }
+console.log('');
+console.log('5. different classes');
+console.log('   new Dog("x") vs new Cat("x") ->',
+            jsonEqual(new Dog('x'), new Cat('x')), ' <- arguably should be false');
+
+// 6. cycles and BigInt throw
+console.log('');
+console.log('6. things that throw');
+const cyclic = {}; cyclic.self = cyclic;
+try { jsonEqual(cyclic, cyclic); }
+catch (e) { console.log('   a cycle   ->', e.message.split('\n')[0]); }
+try { jsonEqual(1n, 1n); }
+catch (e) { console.log('   a BigInt  ->', e.message); }
+
+console.log('');
+console.log('Two false positives, three false negatives and two');
+console.log('crashes. It is fine for comparing two API responses you');
+console.log('control the shape of, and nothing else.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why the JSON trick is also slow, and why it does not matter</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; JSON versus a real comparison</span></div>
+<pre><code>function deepEqual(a, b) {
+  if (a === b) return true;
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
+    return Number.isNaN(a) &amp;&amp; Number.isNaN(b);
+  }
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) {
+    if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
+    if (!deepEqual(a[k], b[k])) return false;
+  }
+  return true;
+}
+const jsonEqual = (a, b) =&gt; JSON.stringify(a) === JSON.stringify(b);
+
+function build(n, differAt) {
+  const rows = [];
+  for (let i = 0; i &lt; n; i++) {
+    rows.push({ id: i, name: 'row' + i, meta: { score: i, tags: ['a', 'b'] } });
+  }
+  if (differAt !== undefined) rows[differAt].name = 'CHANGED';
+  return { rows };
+}
+
+const N = 5000;
+const same1 = build(N), same2 = build(N);
+const early1 = build(N), early2 = build(N, 0);
+const late1 = build(N), late2 = build(N, N - 1);
+
+const bench = (label, fn, a, b) =&gt; {
+  const t = performance.now();
+  let r;
+  for (let i = 0; i &lt; 20; i++) r = fn(a, b);
+  console.log('  ' + label.padEnd(28) + (performance.now() - t).toFixed(1) +
+              ' ms   result ' + r);
+};
+
+console.log('identical objects (worst case for both):');
+bench('deepEqual', deepEqual, same1, same2);
+bench('JSON.stringify', jsonEqual, same1, same2);
+
+console.log('');
+console.log('differ at the FIRST row:');
+bench('deepEqual', deepEqual, early1, early2);
+bench('JSON.stringify', jsonEqual, early1, early2);
+
+console.log('');
+console.log('differ at the LAST row:');
+bench('deepEqual', deepEqual, late1, late2);
+bench('JSON.stringify', jsonEqual, late1, late2);
+
+console.log('');
+console.log('The interesting row is the middle one. deepEqual returns');
+console.log('false at the first difference; JSON.stringify serialises');
+console.log('BOTH objects completely before comparing a single');
+console.log('character.');
+console.log('');
+console.log('That said: speed is not the reason to avoid the JSON');
+console.log('trick. Correctness is. It is on this page because a');
+console.log('recursive compare short-circuits and that is worth');
+console.log('knowing, not because the milliseconds matter.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; the checks in order</h2>
+
+  <div class="trace">
+<pre>  deepEqual(a, b, seen):
+
+   1. a === b                      ->  true
+      (fast path: same object, or equal primitives)
+
+   2. either is null, or either is not an object
+      ->  they are primitives, and step 1 already said no.
+          The only remaining true case is NaN vs NaN.
+
+   3. different prototypes          ->  false
+      (an array is not a plain object; a Dog is not a Cat)
+
+   4. already comparing this pair?  ->  true
+      (the cycle guard: assume equal, let the rest decide)
+
+   5. the built-ins that need their own comparison:
+          Date      getTime()
+          RegExp    source and flags
+          Map       same size, every key present with an equal value
+          Set       same size, every member present
+          typed arrays / ArrayBuffer   byte by byte
+
+   6. arrays        same length, every index deep-equal
+
+   7. plain objects  same key COUNT, and every key of `a` present
+                     in `b` with a deep-equal value
+
+  Order matters. Step 1 before anything (it is the common case),
+  step 3 before step 5 (so a Date is never compared to an object),
+  step 4 before any recursion (or a cycle never terminates).
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why step 2 reduces to a NaN check</span>
+    <p>If <code>a === b</code> was false and neither is an object, they are two different primitives
+    &mdash; with exactly one exception, because <code>NaN !== NaN</code>. So the whole primitive branch
+    is <code>Number.isNaN(a) &amp;&amp; Number.isNaN(b)</code>.</p>
+    <p>Note this makes <code>deepEqual(0, -0)</code> true, because <code>0 === -0</code>. That is
+    almost always what you want structurally &mdash; but say it out loud, because
+    <code>Object.is</code> disagrees.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the key-count check, and why it is not enough on its own</span></div>
+<pre><code>// comparing only a's keys, without checking the count
+function missingCountCheck(a, b) {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || !a || !b) return false;
+  for (const k of Object.keys(a)) {
+    if (!missingCountCheck(a[k], b[k])) return false;
+  }
+  return true;                           // b may have EXTRA keys
+}
+
+// comparing counts but using undefined for missing keys
+function countOnly(a, b) {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || !a || !b) return false;
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) if (!countOnly(a[k], b[k])) return false;
+  return true;
+}
+
+// counts AND membership
+function correct(a, b) {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || !a || !b) {
+    return Number.isNaN(a) &amp;&amp; Number.isNaN(b);
+  }
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) {
+    if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
+    if (!correct(a[k], b[k])) return false;
+  }
+  return true;
+}
+
+const cases = [
+  ['b has an extra key      ', { a: 1 }, { a: 1, b: 2 }, false],
+  ['different key names     ', { a: undefined }, { b: undefined }, false],
+  ['a missing vs undefined  ', { a: 1, b: undefined }, { a: 1, c: undefined }, false],
+  ['genuinely equal         ', { a: 1, b: 2 }, { b: 2, a: 1 }, true],
+];
+
+console.log('case                       no count  count only  correct  expected');
+for (const [label, x, y, expected] of cases) {
+  console.log('  ' + label +
+              String(missingCountCheck(x, y)).padStart(9) +
+              String(countOnly(x, y)).padStart(12) +
+              String(correct(x, y)).padStart(9) +
+              String(expected).padStart(10));
+}
+
+console.log('');
+console.log('Row 1: without the count check, b can carry extra keys');
+console.log('  and still be "equal".');
+console.log('Row 3: with the count check but no membership check,');
+console.log('  { b: undefined } and { c: undefined } both have one key,');
+console.log('  and b.b reads as undefined -- so they compare equal.');
+console.log('');
+console.log('You need both: the same NUMBER of keys, and every key of');
+console.log('a actually PRESENT in b.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; the cycle case</h2>
+
+  <div class="trace">
+<pre>  const a = { name: 'a' };  a.self = a;
+  const b = { name: 'a' };  b.self = b;
+
+  deepEqual(a, b, seen = new Map())
+
+    a !== b
+    both objects, same prototype
+    seen does not have a -> record  seen: { a -> b }
+
+    key 'name'  ->  deepEqual('a', 'a')  ->  true
+
+    key 'self'  ->  deepEqual(a.self, b.self)  =  deepEqual(a, b)
+                    seen HAS a, and seen.get(a) === b
+                    ->  true            <-- recursion stops here
+
+    all keys equal  ->  true
+
+
+  Why "assume true" is correct:
+
+  If the two graphs really differ, some OTHER comparison will
+  find it -- the cycle guard only says "we are already checking
+  this pair, do not go round again". Assuming false would make
+  two identical cyclic structures compare unequal.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function deepEqualLoud(a, b, seen = new Map(), path = 'root', depth = 0) {
+  const pad = '  '.repeat(depth);
+  const show = (v) =&gt; (typeof v === 'object' &amp;&amp; v !== null ? '{...}' : JSON.stringify(v));
+
+  console.log(pad + path + ': ' + show(a) + ' vs ' + show(b));
+
+  if (a === b) { console.log(pad + '  === -> true'); return true; }
+
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
+    const both = Number.isNaN(a) &amp;&amp; Number.isNaN(b);
+    console.log(pad + '  primitives, not === -> ' + both +
+                (both ? ' (both NaN)' : ''));
+    return both;
+  }
+
+  if (seen.has(a)) {
+    const known = seen.get(a) === b;
+    console.log(pad + '  ALREADY COMPARING this pair -> ' + known);
+    return known;
+  }
+  seen.set(a, b);
+  console.log(pad + '  recorded the pair, descending');
+
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) {
+    console.log(pad + '  key counts differ (' + ka.length + ' vs ' + kb.length + ') -> false');
+    return false;
+  }
+
+  for (const k of ka) {
+    if (!Object.prototype.hasOwnProperty.call(b, k)) {
+      console.log(pad + '  b has no key "' + k + '" -> false');
+      return false;
+    }
+    if (!deepEqualLoud(a[k], b[k], seen, k, depth + 1)) return false;
+  }
+
+  console.log(pad + '  all keys matched -> true');
+  return true;
+}
+
+const a = { name: 'a' }; a.self = a;
+const b = { name: 'a' }; b.self = b;
+
+console.log('=== two identical self-referencing objects ===');
+console.log('RESULT:', deepEqualLoud(a, b));
+
+console.log('');
+console.log('=== the same, but one differs deeper ===');
+const c = { name: 'a', extra: { x: 1 } }; c.self = c;
+const d = { name: 'a', extra: { x: 2 } }; d.self = d;
+console.log('RESULT:', deepEqualLoud(c, d));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; the plain version</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; objects and arrays, no built-in helpers</span></div>
+<pre><code>function deepEqualBasic(a, b) {
+  // 1. identical, or equal primitives
+  if (a === b) return true;
+
+  // 2. primitives that are not ===: only NaN survives
+  if (a === null || b === null ||
+      typeof a !== 'object' || typeof b !== 'object') {
+    return a !== a &amp;&amp; b !== b;              // the classic NaN test
+  }
+
+  // 3. one array, one object
+  const aIsArray = Object.prototype.toString.call(a) === '[object Array]';
+  const bIsArray = Object.prototype.toString.call(b) === '[object Array]';
+  if (aIsArray !== bIsArray) return false;
+
+  if (aIsArray) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i &lt; a.length; i++) {
+      if (!deepEqualBasic(a[i], b[i])) return false;
+    }
+    return true;
+  }
+
+  // 4. plain objects: same key count, every key present and equal
+  let countA = 0;
+  for (const k in a) {
+    if (!Object.prototype.hasOwnProperty.call(a, k)) continue;
+    countA++;
+    if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
+    if (!deepEqualBasic(a[k], b[k])) return false;
+  }
+
+  let countB = 0;
+  for (const k in b) {
+    if (Object.prototype.hasOwnProperty.call(b, k)) countB++;
+  }
+
+  return countA === countB;
+}
+
+const cases = [
+  [1, 1, true],
+  [1, '1', false],
+  [NaN, NaN, true],
+  [0, -0, true],
+  [null, null, true],
+  [null, undefined, false],
+  [null, {}, false],
+  [[], {}, false],
+  [[1, 2], [1, 2], true],
+  [[1, 2], [2, 1], false],
+  [[1, [2, [3]]], [1, [2, [3]]], true],
+  [[1, 2], [1, 2, 3], false],
+  [{ a: 1 }, { a: 1 }, true],
+  [{ a: 1, b: 2 }, { b: 2, a: 1 }, true],
+  [{ a: 1 }, { a: 1, b: 2 }, false],
+  [{ a: 1, b: undefined }, { a: 1 }, false],
+  [{ a: { b: { c: 1 } } }, { a: { b: { c: 1 } } }, true],
+  [{ a: { b: { c: 1 } } }, { a: { b: { c: 2 } } }, false],
+  [{}, {}, true],
+  [[], [], true],
+];
+
+let pass = 0;
+for (const [x, y, expected] of cases) {
+  const got = deepEqualBasic(x, y);
+  if (got === expected) pass++;
+  else console.log('WRONG: ' + JSON.stringify(x) + ' vs ' + JSON.stringify(y) +
+                   ' -> ' + got + ', expected ' + expected);
+}
+console.log(pass + '/' + cases.length + ' basic cases correct');
+
+console.log('');
+console.log('and where it still falls short:');
+console.log('  Date vs equal Date  :', deepEqualBasic(new Date(0), new Date(0)),
+            '  right answer, by luck');
+console.log('  Date vs DIFFERENT   :', deepEqualBasic(new Date(0), new Date(999)),
+            '  should be FALSE');
+console.log('  Date vs {}          :', deepEqualBasic(new Date(0), {}),
+            '  should be FALSE');
+console.log('  Map vs equal Map    :', deepEqualBasic(new Map([['a', 1]]), new Map([['a', 1]])),
+            '  right answer, by luck');
+console.log('  Map vs DIFFERENT    :',
+            deepEqualBasic(new Map([['a', 1]]), new Map([['b', 2]])),
+            '  should be FALSE');
+console.log('  Map vs Set          :', deepEqualBasic(new Map(), new Set()),
+            '  should be FALSE');
+console.log('');
+console.log('  Every one of those is "true" for the same reason: none of');
+console.log('  these has own enumerable keys, so the key loop compares');
+console.log('  nothing and falls through to 0 === 0.');
+console.log('   Object.keys(new Date(0)) :', JSON.stringify(Object.keys(new Date(0))));
+console.log('   Object.keys(new Map([["a",1]])) :',
+            JSON.stringify(Object.keys(new Map([['a', 1]]))));
+console.log('');
+console.log('  The two that LOOK right are the dangerous kind of bug:');
+console.log('  passing tests that prove nothing. Step 7 handles these');
+console.log('  types explicitly.');
+const cyc1 = {}; cyc1.self = cyc1;
+const cyc2 = {}; cyc2.self = cyc2;
+console.log('');
+try {
+  deepEqualBasic(cyc1, cyc2);
+  console.log('  a cycle             : survived');
+} catch (e) {
+  console.log('  a cycle             :', e.message);
+  console.log('  -- no guard, so it walks self.self.self forever.');
+}</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the complete one</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function deepEqual(a, b, seen = new Map()) {
+  // 1. fast path
+  if (a === b) return true;
+
+  // 2. primitives
+  if (a === null || b === null ||
+      typeof a !== 'object' || typeof b !== 'object') {
+    return Number.isNaN(a) &amp;&amp; Number.isNaN(b);
+  }
+
+  // 3. same kind of thing?
+  if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
+
+  // 4. cycle guard, BEFORE any recursion
+  if (seen.get(a) === b) return true;
+  seen.set(a, b);
+
+  // 5. the built-ins
+  if (a instanceof Date) return a.getTime() === b.getTime() ||
+                                (Number.isNaN(a.getTime()) &amp;&amp; Number.isNaN(b.getTime()));
+  if (a instanceof RegExp) return a.source === b.source &amp;&amp; a.flags === b.flags;
+
+  if (a instanceof Map) {
+    if (a.size !== b.size) return false;
+    for (const [key, value] of a) {
+      // an object key needs a structural search, not a lookup
+      if (key !== null &amp;&amp; typeof key === 'object') {
+        let found = false;
+        for (const [k2, v2] of b) {
+          if (deepEqual(key, k2, seen) &amp;&amp; deepEqual(value, v2, seen)) { found = true; break; }
+        }
+        if (!found) return false;
+      } else {
+        if (!b.has(key)) return false;
+        if (!deepEqual(value, b.get(key), seen)) return false;
+      }
+    }
+    return true;
+  }
+
+  if (a instanceof Set) {
+    if (a.size !== b.size) return false;
+    for (const value of a) {
+      if (b.has(value)) continue;
+      if (value === null || typeof value !== 'object') return false;
+      let found = false;
+      for (const other of b) if (deepEqual(value, other, seen)) { found = true; break; }
+      if (!found) return false;
+    }
+    return true;
+  }
+
+  if (ArrayBuffer.isView(a) &amp;&amp; !(a instanceof DataView)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i &lt; a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
+  // 6. arrays
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i &lt; a.length; i++) {
+      if (!deepEqual(a[i], b[i], seen)) return false;
+    }
+    return true;
+  }
+
+  // 7. plain objects and class instances
+  const ka = Reflect.ownKeys(a).filter((k) =&gt;
+    Object.getOwnPropertyDescriptor(a, k).enumerable);
+  const kb = Reflect.ownKeys(b).filter((k) =&gt;
+    Object.getOwnPropertyDescriptor(b, k).enumerable);
+  if (ka.length !== kb.length) return false;
+
+  for (const key of ka) {
+    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+    if (!deepEqual(a[key], b[key], seen)) return false;
+  }
+
+  return true;
+}
+
+// --- everything the JSON version got wrong ----------------------
+class Dog { constructor(n) { this.name = n; } }
+class Cat { constructor(n) { this.name = n; } }
+
+const sym = Symbol('tag');
+const cyc1 = { name: 'x' }; cyc1.self = cyc1;
+const cyc2 = { name: 'x' }; cyc2.self = cyc2;
+const objKey = { id: 1 };
+
+const cases = [
+  ['key order            ', { a: 1, b: 2 }, { b: 2, a: 1 }, true],
+  ['undefined vs missing ', { a: 1, b: undefined }, { a: 1 }, false],
+  ['NaN                  ', NaN, NaN, true],
+  ['NaN in an object     ', { x: NaN }, { x: NaN }, true],
+  ['0 vs -0              ', 0, -0, true],
+  ['Infinity vs -Infinity', Infinity, -Infinity, false],
+  ['Date equal           ', new Date(0), new Date(0), true],
+  ['Date differing       ', new Date(0), new Date(1), false],
+  ['Invalid Dates        ', new Date('x'), new Date('y'), true],
+  ['RegExp equal         ', /ab+c/gi, /ab+c/gi, true],
+  ['RegExp flags differ  ', /ab+c/g, /ab+c/i, false],
+  ['Map equal            ', new Map([['a', 1]]), new Map([['a', 1]]), true],
+  ['Map differing        ', new Map([['a', 1]]), new Map([['b', 2]]), false],
+  ['Map object keys      ', new Map([[{ id: 1 }, 'x']]), new Map([[{ id: 1 }, 'x']]), true],
+  ['Set equal            ', new Set([1, 2]), new Set([2, 1]), true],
+  ['Set of objects       ', new Set([{ a: 1 }]), new Set([{ a: 1 }]), true],
+  ['Set differing        ', new Set([1]), new Set([2]), false],
+  ['Set vs Map           ', new Set([1]), new Map(), false],
+  ['array vs object      ', [], {}, false],
+  ['nested arrays        ', [1, [2, [3]]], [1, [2, [3]]], true],
+  ['Dog vs Cat           ', new Dog('x'), new Cat('x'), false],
+  ['Dog vs Dog           ', new Dog('x'), new Dog('x'), true],
+  ['typed arrays         ', new Uint8Array([1, 2]), new Uint8Array([1, 2]), true],
+  ['typed differing      ', new Uint8Array([1, 2]), new Uint8Array([1, 3]), false],
+  ['cyclic, equal        ', cyc1, cyc2, true],
+  ['BigInt               ', 1n, 1n, true],
+  ['BigInt differing     ', 1n, 2n, false],
+  ['BigInt vs Number     ', 1n, 1, false],
+  ['symbol keys          ', { [sym]: 1 }, { [sym]: 1 }, true],
+  ['symbol keys differ   ', { [sym]: 1 }, { [sym]: 2 }, false],
+  ['shared object key    ', new Map([[objKey, 1]]), new Map([[objKey, 1]]), true],
+];
+
+let pass = 0;
+for (const [label, x, y, expected] of cases) {
+  let got;
+  try { got = deepEqual(x, y); } catch (e) { got = 'threw: ' + e.message; }
+  const ok = got === expected;
+  if (ok) pass++;
+  console.log((ok ? '  ok   ' : '  WRONG') + ' ' + label +
+              (ok ? '' : '  got ' + got + ', expected ' + expected));
+}
+console.log('');
+console.log(pass + '/' + cases.length + ' cases correct');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">the variations you get asked for</span></div>
+<pre><code>function deepEqual(a, b, seen = new Map()) {
+  if (a === b) return true;
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
+    return Number.isNaN(a) &amp;&amp; Number.isNaN(b);
+  }
+  if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
+  if (seen.get(a) === b) return true;
+  seen.set(a, b);
+  if (a instanceof Date) return a.getTime() === b.getTime();
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    return a.every((v, i) =&gt; deepEqual(v, b[i], seen));
+  }
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) =&gt;
+    Object.prototype.hasOwnProperty.call(b, k) &amp;&amp; deepEqual(a[k], b[k], seen));
+}
+
+// 1. WHERE do they differ? Far more useful than a boolean.
+function deepDiff(a, b, path = '') {
+  const diffs = [];
+
+  (function walk(x, y, p) {
+    if (deepEqual(x, y)) return;
+
+    const bothPlain = x !== null &amp;&amp; y !== null &amp;&amp;
+      typeof x === 'object' &amp;&amp; typeof y === 'object' &amp;&amp;
+      Array.isArray(x) === Array.isArray(y) &amp;&amp;
+      !(x instanceof Date) &amp;&amp; !(y instanceof Date);
+
+    if (!bothPlain) { diffs.push({ path: p || 'root', a: x, b: y }); return; }
+
+    const keys = new Set([...Object.keys(x), ...Object.keys(y)]);
+    for (const k of keys) {
+      const next = p ? p + '.' + k : k;
+      const inA = Object.prototype.hasOwnProperty.call(x, k);
+      const inB = Object.prototype.hasOwnProperty.call(y, k);
+      if (!inA) diffs.push({ path: next, a: '(missing)', b: y[k] });
+      else if (!inB) diffs.push({ path: next, a: x[k], b: '(missing)' });
+      else walk(x[k], y[k], next);
+    }
+  })(a, b, path);
+
+  return diffs;
+}
+
+const before = { user: { name: 'Ada', age: 36, tags: ['a', 'b'] }, active: true };
+const after = { user: { name: 'Ada', age: 37, tags: ['a', 'c'] }, verified: true };
+
+console.log('deepEqual :', deepEqual(before, after));
+console.log('deepDiff  :');
+for (const d of deepDiff(before, after)) {
+  console.log('  ' + d.path.padEnd(14) + JSON.stringify(d.a) + '  ->  ' + JSON.stringify(d.b));
+}
+
+// 2. a SHALLOW equal -- what React uses for props
+function shallowEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) =&gt; Object.prototype.hasOwnProperty.call(b, k) &amp;&amp; a[k] === b[k]);
+}
+
+console.log('');
+const shared = { nested: 1 };
+console.log('shallowEqual:');
+console.log('  same primitives      :', shallowEqual({ a: 1 }, { a: 1 }));
+console.log('  same nested REFERENCE:', shallowEqual({ n: shared }, { n: shared }));
+console.log('  equal-looking nested :', shallowEqual({ n: { x: 1 } }, { n: { x: 1 } }),
+            ' <- false, and that is the point');
+console.log('  deepEqual would say  :', deepEqual({ n: { x: 1 } }, { n: { x: 1 } }));
+console.log('');
+console.log('React compares props shallowly because a deep compare on');
+console.log('every render would cost more than the re-render it');
+console.log('prevents. That is why you memoise the OBJECT, not just');
+console.log('its contents.');
+
+// 3. a partial / subset match -- for assertions
+function matches(actual, expected) {
+  if (expected === null || typeof expected !== 'object') return deepEqual(actual, expected);
+  if (actual === null || typeof actual !== 'object') return false;
+  if (Array.isArray(expected)) {
+    return Array.isArray(actual) &amp;&amp; expected.length === actual.length &amp;&amp;
+           expected.every((v, i) =&gt; matches(actual[i], v));
+  }
+  return Object.keys(expected).every((k) =&gt;
+    Object.prototype.hasOwnProperty.call(actual, k) &amp;&amp; matches(actual[k], expected[k]));
+}
+
+const response = { id: 7, user: { name: 'Ada', email: 'a@b.c' }, createdAt: '...' };
+console.log('');
+console.log('matches (subset):');
+console.log('  { id: 7 }                    ->', matches(response, { id: 7 }));
+console.log('  { user: { name: "Ada" } }    ->', matches(response, { user: { name: 'Ada' } }));
+console.log('  { id: 8 }                    ->', matches(response, { id: 8 }));
+console.log('  { missing: 1 }               ->', matches(response, { missing: 1 }));
+console.log('');
+console.log('This is what expect().toMatchObject() does, and it is the');
+console.log('right tool for asserting on a response with fields you do');
+console.log('not care about.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the two hard cases: unordered collections</span></div>
+<pre><code>function deepEqual(a, b, seen = new Map()) {
+  if (a === b) return true;
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
+    return Number.isNaN(a) &amp;&amp; Number.isNaN(b);
+  }
+  if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
+  if (seen.get(a) === b) return true;
+  seen.set(a, b);
+  if (Array.isArray(a)) {
+    return a.length === b.length &amp;&amp; a.every((v, i) =&gt; deepEqual(v, b[i], seen));
+  }
+  const ka = Object.keys(a), kb = Object.keys(b);
+  return ka.length === kb.length &amp;&amp;
+         ka.every((k) =&gt; k in b &amp;&amp; deepEqual(a[k], b[k], seen));
+}
+
+// A Set of OBJECTS cannot use .has() -- it compares by identity.
+// So you have to search, and searching is O(n^2).
+function setsEqual(a, b) {
+  if (a.size !== b.size) return false;
+  const remaining = [...b];
+  for (const value of a) {
+    const i = remaining.findIndex((other) =&gt; deepEqual(value, other));
+    if (i === -1) return false;
+    remaining.splice(i, 1);          // consume it, so duplicates are handled
+  }
+  return true;
+}
+
+console.log('sets of objects:');
+console.log('  same, different order:',
+            setsEqual(new Set([{ a: 1 }, { b: 2 }]), new Set([{ b: 2 }, { a: 1 }])));
+console.log('  genuinely different  :',
+            setsEqual(new Set([{ a: 1 }]), new Set([{ a: 2 }])));
+console.log('  different sizes      :',
+            setsEqual(new Set([{ a: 1 }]), new Set([{ a: 1 }, { b: 2 }])));
+
+// the same problem for arrays, when order should not matter
+function arraysEqualUnordered(a, b) {
+  if (a.length !== b.length) return false;
+  const remaining = [...b];
+  for (const value of a) {
+    const i = remaining.findIndex((other) =&gt; deepEqual(value, other));
+    if (i === -1) return false;
+    remaining.splice(i, 1);
+  }
+  return true;
+}
+
+console.log('');
+console.log('arrays, order-insensitive:');
+console.log('  [1,2,2] vs [2,1,2] :', arraysEqualUnordered([1, 2, 2], [2, 1, 2]));
+console.log('  [1,2,2] vs [1,1,2] :', arraysEqualUnordered([1, 2, 2], [1, 1, 2]),
+            ' <- multiplicity respected');
+console.log('  ordered compare    :', deepEqual([1, 2, 2], [2, 1, 2]));
+
+// the cost
+const N = 800;
+const makeSet = (shuffle) =&gt; {
+  const items = Array.from({ length: N }, (_, i) =&gt; ({ id: i }));
+  if (shuffle) items.reverse();
+  return new Set(items);
+};
+const s1 = makeSet(false), s2 = makeSet(true);
+
+let t = performance.now();
+console.log('');
+console.log(N + ' objects, reversed order, unordered compare:',
+            setsEqual(s1, s2), ' ' + (performance.now() - t).toFixed(0) + ' ms');
+
+// the fix when the elements have a natural key
+function setsEqualByKey(a, b, keyOf) {
+  if (a.size !== b.size) return false;
+  const index = new Map();
+  for (const v of b) index.set(keyOf(v), v);
+  for (const v of a) {
+    const other = index.get(keyOf(v));
+    if (other === undefined || !deepEqual(v, other)) return false;
+  }
+  return true;
+}
+t = performance.now();
+console.log('same, indexed by id                       :',
+            setsEqualByKey(s1, s2, (x) =&gt; x.id),
+            ' ' + (performance.now() - t).toFixed(1) + ' ms');
+
+console.log('');
+console.log('Unordered structural comparison is O(n^2) in general --');
+console.log('it is a bipartite matching problem. If the elements have');
+console.log('a key, index by it and it collapses to O(n). If they do');
+console.log('not, sort by a canonical serialisation. Do not do the');
+console.log('quadratic version on real data.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Case</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td><strong>equal objects</strong></td><td class="mono">O(n)</td><td class="mono">O(n) seen map + O(d) stack</td></tr>
+        <tr><td>differ early</td><td class="mono">O(1) &mdash; short-circuits</td><td class="mono">O(d)</td></tr>
+        <tr><td>JSON.stringify comparison</td><td class="mono">O(n) always, both serialised</td><td class="mono">O(n) two strings</td></tr>
+        <tr><td>unordered sets of objects</td><td class="mono">O(n<sup>2</sup>)</td><td class="mono">O(n)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The recursive version's advantage is <strong>short-circuiting</strong>: it returns false at the
+  first difference and never looks at the rest. For &ldquo;are these two large objects equal?&rdquo;
+  where they usually are not, that is the whole game.</p>
+
+  <p>The last row is the one to flag. Comparing unordered collections of objects is genuinely quadratic
+  because there is no lookup key &mdash; you have to search for a match, and consume it so
+  multiplicity is respected. If the elements have an id, index by it.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Start with <code>a === b</code>, which covers identical references and equal primitives.
+    If either is not an object, the only remaining true case is <code>NaN</code> against
+    <code>NaN</code>. Then compare prototypes, so an array is never equal to an object and a Date is
+    never compared key-by-key. Then the cycle guard &mdash; a <code>Map</code> from a to b, set
+    <em>before</em> recursing, and if the pair is already being compared, return true. Then the
+    built-ins: Date by <code>getTime</code>, RegExp by source and flags, Map and Set by size and
+    membership. Then arrays by index, and plain objects by key count plus <code>hasOwnProperty</code>
+    &mdash; both, because otherwise <code>{a: undefined}</code> and <code>{b: undefined}</code> compare
+    equal. And <code>JSON.stringify</code> comparison is wrong on key order, dropped undefined, NaN,
+    Maps and Sets, prototypes, and it throws on cycles.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Forgetting the cycle guard</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; infinite recursion</span></div>
+<pre><code>function noGuard(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) =&gt; k in b &amp;&amp; noGuard(a[k], b[k]));
+}
+
+function withGuard(a, b, seen = new Map()) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') {
+    return Number.isNaN(a) &amp;&amp; Number.isNaN(b);
+  }
+  if (seen.get(a) === b) return true;
+  seen.set(a, b);
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) =&gt; k in b &amp;&amp; withGuard(a[k], b[k], seen));
+}
+
+const a = { name: 'x' }; a.self = a;
+const b = { name: 'x' }; b.self = b;
+
+try { noGuard(a, b); }
+catch (e) { console.log('without a guard:', e.message); }
+
+console.log('with a guard   :', withGuard(a, b));
+
+// and a case where the guard must not hide a real difference
+const c = { name: 'x', extra: 1 }; c.self = c;
+const d = { name: 'x', extra: 2 }; d.self = d;
+console.log('genuinely different, still cyclic:', withGuard(c, d));
+
+// mutual references, two levels
+const p1 = { name: 'p' }, q1 = { name: 'q' };
+p1.other = q1; q1.other = p1;
+const p2 = { name: 'p' }, q2 = { name: 'q' };
+p2.other = q2; q2.other = p2;
+console.log('mutual references, equal        :', withGuard(p1, p2));
+
+const p3 = { name: 'p' }, q3 = { name: 'DIFFERENT' };
+p3.other = q3; q3.other = p3;
+console.log('mutual references, different    :', withGuard(p1, p3));
+
+console.log('');
+console.log('Cyclic data is not exotic: a parent pointer in a tree, a');
+console.log('doubly-linked list, a React fibre node, anything with');
+console.log('back-references. Without the guard the function is a');
+console.log('crash waiting for the right input.');</code></pre>
+  </div>
+
+  <h3>2. Comparing key counts without checking membership</h3>
+
+  <p>Step 4. <code>{ a: undefined }</code> and <code>{ b: undefined }</code> both have one key, and
+  reading the missing key gives <code>undefined</code> either way.</p>
+
+  <h3>3. Skipping the prototype check</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; an array equals an object, a Date equals {}</span></div>
+<pre><code>function noProtoCheck(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') {
+    return Number.isNaN(a) &amp;&amp; Number.isNaN(b);
+  }
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) =&gt; k in b &amp;&amp; noProtoCheck(a[k], b[k]));
+}
+
+function withProtoCheck(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') {
+    return Number.isNaN(a) &amp;&amp; Number.isNaN(b);
+  }
+  if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
+  if (a instanceof Date) return a.getTime() === b.getTime();
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) =&gt; k in b &amp;&amp; withProtoCheck(a[k], b[k]));
+}
+
+class Dog { constructor(n) { this.name = n; } speak() { return 'woof'; } }
+class Cat { constructor(n) { this.name = n; } speak() { return 'meow'; } }
+
+const cases = [
+  ['[1,2] vs {0:1,1:2}      ', [1, 2], { 0: 1, 1: 2 }],
+  ['new Date(0) vs {}       ', new Date(0), {}],
+  ['new Date(0) vs Date(999)', new Date(0), new Date(999)],
+  ['new Map() vs new Set()  ', new Map(), new Set()],
+  ['Dog vs Cat              ', new Dog('rex'), new Cat('rex')],
+  ['/a/g vs /b/i            ', /a/g, /b/i],
+];
+
+console.log('case                       no check   with check');
+for (const [label, x, y] of cases) {
+  console.log('  ' + label +
+              String(noProtoCheck(x, y)).padStart(9) +
+              String(withProtoCheck(x, y)).padStart(13));
+}
+
+console.log('');
+console.log('Every one of those is true without the check, because');
+console.log('Object.keys of a Date, a Map, a Set and a RegExp is all');
+console.log('empty -- so they compare equal to each other and to {}.');
+console.log('');
+console.log('  Object.keys(new Date(0)) :', JSON.stringify(Object.keys(new Date(0))));
+console.log('  Object.keys(new Map())   :', JSON.stringify(Object.keys(new Map())));
+console.log('  Object.keys(/a/g)        :', JSON.stringify(Object.keys(/a/g)));
+console.log('');
+console.log('The array-vs-object case is the one that catches people:');
+console.log('  Object.keys([1,2]) :', JSON.stringify(Object.keys([1, 2])));
+console.log('  Object.keys({0:1,1:2}) :', JSON.stringify(Object.keys({ 0: 1, 1: 2 })));
+console.log('  identical. Only the prototype tells them apart.');</code></pre>
+  </div>
+
+  <h3>4. Using <code>===</code> or <code>Object.is</code> for leaves without thinking</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">two defensible answers for -0, and one wrong one for NaN</span></div>
+<pre><code>const withStrict = (a, b) =&gt; a === b;
+const withIs = (a, b) =&gt; Object.is(a, b);
+const structural = (a, b) =&gt; a === b || (Number.isNaN(a) &amp;&amp; Number.isNaN(b));
+
+const pairs = [
+  [1, 1], [1, 2], ['a', 'a'], [NaN, NaN], [0, -0], [-0, -0],
+  [null, undefined], [Infinity, Infinity], [1, '1'], [1n, 1n], [1n, 1],
+];
+
+console.log('pair                  ===      Object.is   structural');
+for (const [x, y] of pairs) {
+  const label = String(typeof x === 'bigint' ? x + 'n' : JSON.stringify(x)) + ' vs ' +
+                String(typeof y === 'bigint' ? y + 'n' : JSON.stringify(y));
+  console.log('  ' + label.padEnd(20) +
+              String(withStrict(x, y)).padStart(7) +
+              String(withIs(x, y)).padStart(12) +
+              String(structural(x, y)).padStart(12));
+}
+
+console.log('');
+console.log('Read the two interesting rows:');
+console.log('  NaN vs NaN : === says FALSE, which is always wrong for');
+console.log('    a structural comparison. Two objects containing NaN in');
+console.log('    the same slot are structurally the same object.');
+console.log('  0 vs -0    : === says true, Object.is says false. Both');
+console.log('    are defensible. Node assert.deepStrictEqual treats');
+console.log('    them as DIFFERENT; lodash isEqual treats them as the');
+console.log('    SAME.');
+console.log('');
+console.log('  Node    :', 0 === -0 ? '' : '', 'deepStrictEqual(0, -0) throws');
+console.log('  lodash  : isEqual(0, -0) is true');
+console.log('');
+console.log('So `a === b || bothNaN` is the pragmatic default, and if');
+console.log('-0 matters to your domain -- and in numerical code it can');
+console.log('-- use Object.is and say so.');
+console.log('');
+console.log('Why -0 is not just trivia:');
+console.log('  1 / 0  =', 1 / 0);
+console.log('  1 / -0 =', 1 / -0);
+console.log('  Math.round(-0.4) =', Math.round(-0.4), ' (it is -0)');
+console.log('  and it survives arithmetic:', -0 + 0, Object.is(-0 + 0, 0));</code></pre>
+  </div>
+
+  <h3>5. Reaching for deep equal where shallow is correct</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct, and the wrong tool</span></div>
+<pre><code>function deepEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') {
+    return Number.isNaN(a) &amp;&amp; Number.isNaN(b);
+  }
+  if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
+  if (Array.isArray(a)) {
+    return a.length === b.length &amp;&amp; a.every((v, i) =&gt; deepEqual(v, b[i]));
+  }
+  const ka = Object.keys(a), kb = Object.keys(b);
+  return ka.length === kb.length &amp;&amp; ka.every((k) =&gt; k in b &amp;&amp; deepEqual(a[k], b[k]));
+}
+function shallowEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  const ka = Object.keys(a), kb = Object.keys(b);
+  return ka.length === kb.length &amp;&amp; ka.every((k) =&gt; k in b &amp;&amp; a[k] === b[k]);
+}
+
+// props for a big table component
+const rows = Array.from({ length: 5000 }, (_, i) =&gt;
+  ({ id: i, name: 'row' + i, meta: { tags: ['a', 'b'], score: i } }));
+const props1 = { rows, sortBy: 'name', page: 1 };
+const props2 = { rows, sortBy: 'name', page: 1 };          // same rows REFERENCE
+const props3 = { rows: rows.map((r) =&gt; ({ ...r })), sortBy: 'name', page: 1 };
+
+const bench = (label, fn, a, b) =&gt; {
+  const t = performance.now();
+  let r;
+  for (let i = 0; i &lt; 100; i++) r = fn(a, b);
+  console.log('  ' + label.padEnd(34) + (performance.now() - t).toFixed(1) +
+              ' ms   ' + r);
+};
+
+console.log('100 comparisons of props with 5,000 rows:');
+bench('shallow, same rows reference', shallowEqual, props1, props2);
+bench('deep,    same rows reference', deepEqual, props1, props2);
+console.log('  -- deep is fast here too, because a === b short-circuits');
+console.log('     on the rows array immediately.');
+
+console.log('');
+console.log('now with a new-but-equal rows array:');
+bench('shallow, new rows array', shallowEqual, props1, props3);
+bench('deep,    new rows array', deepEqual, props1, props3);
+console.log('  -- shallow says false instantly. deep walked 5,000 rows');
+console.log('     and 15,000 nested values to reach the same practical');
+console.log('     conclusion: re-render.');
+
+console.log('');
+console.log('The lesson is not "shallow is faster". It is:');
+console.log('  if you re-create the data on every render, a deep');
+console.log('  compare costs a full traversal to tell you what you');
+console.log('  already know;');
+console.log('  if you PRESERVE the reference when nothing changed,');
+console.log('  a shallow compare is enough and costs nothing.');
+console.log('');
+console.log('Fix the reference stability, not the comparison. That is');
+console.log('what useMemo is for.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>List the six JSON failures.</strong> Key order, dropped undefined and functions, NaN
+    and Infinity, Maps and Sets, prototypes, cycles and BigInt throwing.</li>
+    <li><strong>Write the seven checks in order</strong> from memory, and say why each comes where it
+    does.</li>
+    <li><strong>Write the cycle guard</strong> and explain why it returns <em>true</em> for a pair
+    already in progress.</li>
+    <li><strong>Write <code>deepDiff</code>.</strong> Step 7 &mdash; in real debugging you want to know
+    <em>where</em>, not <em>whether</em>.</li>
+    <li><strong>Write the unordered set comparison</strong> and explain why it is O(n&sup2;) and how an
+    id collapses it to O(n).</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>&ldquo;Equal&rdquo; is a decision, not a fact.</strong> Is <code>-0</code> equal to
+    <code>0</code>? Is a missing key equal to an <code>undefined</code> one? Is a <code>Dog</code> with
+    the same fields equal to a <code>Cat</code>? Is <code>[1,2]</code> equal to <code>[2,1]</code>?
+    Every library answers those differently, and the reason this question is asked is to see whether
+    you know they are questions.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="03-deep-merge.html">&larr; Deep Merge</a>
+  <a href="05-list-to-tree.html">Next: Flat List &rarr; Nested Tree &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

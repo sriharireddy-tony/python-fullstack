@@ -1,0 +1,795 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minimum Window Substring</title>
+<meta name="description" content="Grow until valid, then shrink while still valid — the hardest sliding window, with the have/need counter explained.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Strings &middot; Problem 09 &middot; stretch</p>
+  <h1>Minimum Window Substring</h1>
+  <p class="standfirst">The hard sibling of the sliding window. Same two pointers, opposite goal:
+  <strong>grow until the window is valid, then shrink while it stays valid</strong>. The trick that
+  makes it O(n) is a single counter that tracks how many characters are fully satisfied.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Given a string <code>s</code> and a pattern <code>t</code>, find the <strong>shortest</strong>
+  substring of <code>s</code> that contains every character of <code>t</code>, including duplicates.
+  Return <code>""</code> if there is none.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th class="mono">s</th><th class="mono">t</th><th>Answer</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">"ADOBECODEBANC"</td><td class="mono">"ABC"</td><td class="mono">"BANC"</td><td>shortest window holding A, B and C</td></tr>
+        <tr><td class="mono">"a"</td><td class="mono">"a"</td><td class="mono">"a"</td><td></td></tr>
+        <tr><td class="mono">"a"</td><td class="mono">"aa"</td><td class="mono">""</td><td>only one <code>a</code> available</td></tr>
+        <tr><td class="mono">"ab"</td><td class="mono">"b"</td><td class="mono">"b"</td><td></td></tr>
+        <tr><td class="mono">"aaflslflsldkalskaaa"</td><td class="mono">"aaa"</td><td class="mono">"kaaa"</td><td>three <code>a</code>s needed</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Three rules that shape the whole solution:</p>
+
+  <ul>
+    <li><strong>Duplicates count.</strong> <code>t = "aa"</code> needs <em>two</em> a&rsquo;s in the
+    window, not one. This is why the answer uses counts, never a Set.</li>
+    <li><strong>Order does not matter.</strong> The window may contain the characters of
+    <code>t</code> in any arrangement, and may contain extra characters in between.</li>
+    <li><strong>The window is contiguous.</strong> A substring, as always.</li>
+  </ul>
+
+  <div class="trace">
+<pre>  s = A D O B E C O D E B A N C
+      0 1 2 3 4 5 6 7 8 9 ...
+
+  t = "ABC"
+
+  windows that contain A, B and C:
+     "ADOBEC"       indexes 0..5    length 6
+     "ADOBECODEBA"  indexes 0..10   length 11
+     "BECODEBA"     indexes 3..10   length 8
+     "CODEBA"       indexes 5..10   length 6
+     "BANC"         indexes 9..12   length 4    <- shortest
+
+  answer: "BANC"
+</pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <p>Try every substring; keep the shortest one that contains everything.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; every substring</span></div>
+<pre><code>function contains(window, t) {
+  // does `window` contain every character of `t`, with counts?
+  const budget = new Map();
+  for (const ch of window) budget.set(ch, (budget.get(ch) || 0) + 1);
+
+  for (const ch of t) {
+    const left = budget.get(ch);
+    if (!left) return false;
+    budget.set(ch, left - 1);
+  }
+  return true;
+}
+
+function minWindowBrute(s, t) {
+  if (t.length === 0 || s.length &lt; t.length) return '';
+
+  let best = '';
+
+  for (let start = 0; start &lt; s.length; start++) {
+    for (let end = start + t.length; end &lt;= s.length; end++) {
+      const window = s.slice(start, end);
+
+      if ((best === '' || window.length &lt; best.length) &amp;&amp; contains(window, t)) {
+        best = window;
+        break;              // longer windows from this start cannot be shorter
+      }
+    }
+  }
+
+  return best;
+}
+
+console.log(minWindowBrute('ADOBECODEBANC', 'ABC'));   // 'BANC'
+console.log(minWindowBrute('a', 'a'));                 // 'a'
+console.log(minWindowBrute('a', 'aa'));                // ''
+console.log(minWindowBrute('ab', 'b'));                // 'b'
+console.log(minWindowBrute('aaflslflsldkalskaaa', 'aaa'));  // 'kaaa'</code></pre>
+  </div>
+
+  <p>The <code>contains</code> helper is the budget-and-spend from Valid Anagram, with the length
+  check dropped &mdash; extra characters in the window are allowed.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>There are about <code>n&sup2;/2</code> substrings, and checking each one builds a fresh frequency
+  map over its characters: <strong>O(n&sup3;)</strong> in the worst case.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// Kept small on purpose -- O(n^3) is genuinely unusable, and a
+// bigger N would lock the browser tab up for a full minute.
+const N = 350;
+let s = '';
+for (let i = 0; i &lt; N; i++) s += 'XYZ'[i % 3];
+s = s + 'ABC';                      // the only valid window is at the very end
+const t = 'ABC';
+
+function contains(w, pat) {
+  const b = new Map();
+  for (const ch of w) b.set(ch, (b.get(ch) || 0) + 1);
+  for (const ch of pat) { const n = b.get(ch); if (!n) return false; b.set(ch, n - 1); }
+  return true;
+}
+
+function brute(str, pat) {
+  let best = '';
+  for (let i = 0; i &lt; str.length; i++)
+    for (let j = i + pat.length; j &lt;= str.length; j++) {
+      const w = str.slice(i, j);
+      if ((best === '' || w.length &lt; best.length) &amp;&amp; contains(w, pat)) { best = w; break; }
+    }
+  return best;
+}
+
+function windowed(str, pat) {
+  if (!pat) return '';
+  const need = new Map();
+  for (const ch of pat) need.set(ch, (need.get(ch) || 0) + 1);
+
+  let required = need.size, formed = 0;
+  const have = new Map();
+  let left = 0, bestLen = Infinity, bestStart = 0;
+
+  for (let right = 0; right &lt; str.length; right++) {
+    const c = str[right];
+    have.set(c, (have.get(c) || 0) + 1);
+    if (need.has(c) &amp;&amp; have.get(c) === need.get(c)) formed++;
+
+    while (formed === required) {
+      if (right - left + 1 &lt; bestLen) { bestLen = right - left + 1; bestStart = left; }
+      const l = str[left];
+      have.set(l, have.get(l) - 1);
+      if (need.has(l) &amp;&amp; have.get(l) &lt; need.get(l)) formed--;
+      left++;
+    }
+  }
+
+  return bestLen === Infinity ? '' : str.slice(bestStart, bestStart + bestLen);
+}
+
+let x = performance.now();
+const a = brute(s, t);
+const bruteMs = performance.now() - x;
+
+x = performance.now();
+const b = windowed(s, t);
+const fastMs = performance.now() - x;
+
+console.log('every substring :', JSON.stringify(a), 'in', bruteMs.toFixed(1) + ' ms');
+console.log('sliding window  :', JSON.stringify(b), 'in', fastMs.toFixed(2) + ' ms');
+console.log('same answer:', a === b);
+console.log('speed-up:', Math.round(bruteMs / Math.max(fastMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; grow, then shrink</h2>
+
+  <p>Compare this with Longest Substring Without Repeating Characters. There, growing the window
+  could <em>break</em> it, so you shrank until it was valid again. Here it is the opposite: growing
+  the window can only <strong>help</strong> it become valid, and shrinking is what you do once it
+  already is.</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p><strong>Expand the right edge until the window is valid. Then contract the left edge for as
+    long as it stays valid, recording the size each time.</strong> When it stops being valid, go back
+    to expanding.</p>
+  </div>
+
+  <p>Every position is a candidate right edge, and for each one you find the furthest-right left edge
+  that still works. That gives the shortest window ending at every position, and the best of those is
+  the answer.</p>
+
+  <h3>Checking validity in O(1) &mdash; the <code>formed</code> counter</h3>
+
+  <p>The naive check is &ldquo;does the window&rsquo;s count map cover the pattern&rsquo;s?&rdquo;,
+  which costs O(k) every step. Instead keep one integer.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Name</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">need</td><td>character &rarr; how many the pattern requires</td></tr>
+        <tr><td class="mono">have</td><td>character &rarr; how many the window currently holds</td></tr>
+        <tr><td class="mono">required</td><td><code>need.size</code> &mdash; how many <em>distinct</em> characters must be satisfied</td></tr>
+        <tr><td class="mono">formed</td><td>how many of those are currently satisfied <em>exactly or more</em></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The window is valid exactly when <code>formed === required</code>. And <code>formed</code> is
+  maintained in O(1):</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the two lines that keep <code>formed</code> honest</span></div>
+<pre><code>// after adding character c on the right:
+if (need.has(c) &amp;&amp; have.get(c) === need.get(c)) formed++;
+
+// after removing character l on the left:
+if (need.has(l) &amp;&amp; have.get(l) &lt; need.get(l)) formed--;</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Why <code>===</code> when adding but <code>&lt;</code> when removing</span>
+    <p>When you add a character, it becomes newly satisfied at the <em>exact moment</em> its count
+    reaches the requirement. Using <code>&gt;=</code> would increment <code>formed</code> again on
+    every extra copy, and <code>formed</code> would overshoot <code>required</code>.</p>
+    <p>When you remove one, it stops being satisfied as soon as the count drops
+    <strong>below</strong> the requirement. Extra copies leaving change nothing, and
+    <code>&lt;</code> fires only on the transition.</p>
+    <p>Each character therefore contributes to <code>formed</code> exactly once, on the way in, and
+    subtracts exactly once, on the way out. Get either comparison wrong and the counter drifts.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>s = "ADOBECODEBANC"</code>, <code>t = "ABC"</code>. So
+  <code>need = {A:1, B:1, C:1}</code> and <code>required = 3</code>.</p>
+
+  <div class="trace">
+<pre>right=0  'A'   have{A:1}  A reached 1 = need  ->  formed=1
+right=1  'D'   have{A:1,D:1}                      formed=1
+right=2  'O'                                      formed=1
+right=3  'B'   have{...B:1}  B satisfied      ->  formed=2
+right=4  'E'                                      formed=2
+right=5  'C'   have{...C:1}  C satisfied      ->  formed=3   VALID
+
+   shrink while valid:
+     window is s[0..5] = "ADOBEC", length 6  ->  best = "ADOBEC"
+     remove 'A' at left=0   have{A:0}  0 &lt; 1  ->  formed=2   left=1
+     no longer valid, stop shrinking
+
+right=6  'O'                                      formed=2
+right=7  'D'                                      formed=2
+right=8  'E'                                      formed=2
+right=9  'B'   have{B:2}   B was already satisfied, 2 !== 1, no change
+                                                  formed=2
+right=10 'A'   have{A:1}   A satisfied again  ->  formed=3   VALID
+
+   shrink while valid:
+     window s[1..10] = "DOBECODEBA", length 10 -- not better than 6
+     remove 'D'  not in need                      left=2
+     window s[2..10] = "OBECODEBA", length 9      left=3
+     remove 'O'  not in need
+     window s[3..10] = "BECODEBA", length 8       left=4
+     remove 'B'  have{B:1}  1 is not &lt; 1, still satisfied
+     window s[4..10] = "ECODEBA", length 7        left=5
+     remove 'E'  not in need
+     window s[5..10] = "CODEBA", length 6 -- ties, not better
+     remove 'C'  have{C:0}  0 &lt; 1  ->  formed=2   left=6
+     stop shrinking
+
+right=11 'N'                                      formed=2
+right=12 'C'   have{C:1}  C satisfied         ->  formed=3   VALID
+
+   shrink while valid:
+     window s[6..12] = "ODEBANC", length 7 -- not better
+     remove 'O'  not in need                      left=7
+     window s[7..12] = "DEBANC", length 6 -- ties, not better
+     remove 'D'  not in need                      left=8
+     window s[8..12] = "EBANC", length 5   ->  NEW BEST
+     remove 'E'  not in need                      left=9
+     window s[9..12] = "BANC", length 4    ->  NEW BEST
+     remove 'B'  have{B:0}  0 &lt; 1  ->  formed=2   left=10
+     stop shrinking
+
+end of string.  answer: "BANC"
+</pre>
+  </div>
+
+  <p>Notice the shrink at <code>right=10</code>: removing the second <code>B</code> did
+  <strong>not</strong> break validity, because one was still left. That is exactly what the
+  <code>&lt;</code> comparison is protecting.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function minWindowExplained(s, t) {
+  if (!t || !s || s.length &lt; t.length) return '';
+
+  const need = new Map();
+  for (const ch of t) need.set(ch, (need.get(ch) || 0) + 1);
+
+  const required = need.size;
+  const have = new Map();
+  let formed = 0;
+  let left = 0, bestLen = Infinity, bestStart = 0;
+
+  console.log('s = "' + s + '"   t = "' + t + '"');
+  console.log('need =', need, '  required =', required);
+  console.log('');
+
+  for (let right = 0; right &lt; s.length; right++) {
+    const c = s[right];
+    have.set(c, (have.get(c) || 0) + 1);
+
+    if (need.has(c) &amp;&amp; have.get(c) === need.get(c)) {
+      formed++;
+      console.log('right=' + right + " '" + c + "'  satisfied -> formed=" + formed);
+    } else {
+      console.log('right=' + right + " '" + c + "'  formed=" + formed);
+    }
+
+    while (formed === required) {
+      const len = right - left + 1;
+      const text = s.slice(left, right + 1);
+
+      if (len &lt; bestLen) {
+        bestLen = len;
+        bestStart = left;
+        console.log('     VALID "' + text + '" length ' + len + '   NEW BEST');
+      } else {
+        console.log('     VALID "' + text + '" length ' + len + '   not better');
+      }
+
+      const l = s[left];
+      have.set(l, have.get(l) - 1);
+      if (need.has(l) &amp;&amp; have.get(l) &lt; need.get(l)) {
+        formed--;
+        console.log("     removed '" + l + "' -> formed=" + formed + ', stop shrinking');
+      } else {
+        console.log("     removed '" + l + "' -> still valid");
+      }
+      left++;
+    }
+  }
+
+  console.log('');
+  return bestLen === Infinity ? '' : s.slice(bestStart, bestStart + bestLen);
+}
+
+console.log('ANSWER:', JSON.stringify(minWindowExplained('ADOBECODEBANC', 'ABC')));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; plain objects, loops only</span></div>
+<pre><code>function minWindowManual(s, t) {
+  if (s.length === 0 || t.length === 0 || s.length &lt; t.length) return '';
+
+  // how many of each character the pattern needs
+  const need = {};
+  let required = 0;
+
+  for (let i = 0; i &lt; t.length; i++) {
+    const ch = t[i];
+    if (need[ch] === undefined) {
+      need[ch] = 0;
+      required = required + 1;     // a new distinct character to satisfy
+    }
+    need[ch] = need[ch] + 1;
+  }
+
+  const have = {};
+  let formed = 0;
+  let left = 0;
+  let bestLength = -1;
+  let bestStart = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    const c = s[right];
+
+    if (have[c] === undefined) have[c] = 0;
+    have[c] = have[c] + 1;
+
+    // newly satisfied, exactly at the moment the count reaches need
+    if (need[c] !== undefined &amp;&amp; have[c] === need[c]) {
+      formed = formed + 1;
+    }
+
+    // shrink from the left while the window is still valid
+    while (formed === required) {
+      const length = right - left + 1;
+
+      if (bestLength === -1 || length &lt; bestLength) {
+        bestLength = length;
+        bestStart = left;
+      }
+
+      const l = s[left];
+      have[l] = have[l] - 1;
+
+      // it stops being satisfied only when it drops BELOW need
+      if (need[l] !== undefined &amp;&amp; have[l] &lt; need[l]) {
+        formed = formed - 1;
+      }
+
+      left = left + 1;
+    }
+  }
+
+  if (bestLength === -1) return '';
+
+  let result = '';
+  for (let k = bestStart; k &lt; bestStart + bestLength; k++) {
+    result = result + s[k];
+  }
+  return result;
+}
+
+console.log(minWindowManual('ADOBECODEBANC', 'ABC'));        // 'BANC'
+console.log(minWindowManual('a', 'a'));                      // 'a'
+console.log(minWindowManual('a', 'aa'));                     // ''
+console.log(minWindowManual('ab', 'b'));                     // 'b'
+console.log(minWindowManual('aaflslflsldkalskaaa', 'aaa'));  // 'kaaa'
+console.log(minWindowManual('ab', 'A'));                     // ''  case matters
+console.log(minWindowManual('', 'a'));                       // ''
+console.log(minWindowManual('abc', ''));                     // ''
+console.log(minWindowManual('bba', 'ab'));                   // 'ba'</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">Why <code>required</code> counts distinct characters</span>
+    <p>For <code>t = "AABC"</code>, <code>need</code> is <code>{A:2, B:1, C:1}</code> and
+    <code>required</code> is <strong>3</strong>, not 4. <code>formed</code> counts satisfied
+    <em>characters</em>, not satisfied <em>copies</em> &mdash; the A entry contributes 1 to
+    <code>formed</code> once its count reaches 2. Counting copies instead would make
+    <code>formed === required</code> unreachable.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function minWindow(s, t) {
+  if (!s || !t || s.length &lt; t.length) return '';
+
+  const need = new Map();
+  for (const ch of t) need.set(ch, (need.get(ch) || 0) + 1);
+
+  const have = new Map();
+  const required = need.size;
+  let formed = 0;
+
+  let left = 0;
+  let bestLen = Infinity;
+  let bestStart = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    const c = s[right];
+    have.set(c, (have.get(c) || 0) + 1);
+
+    if (need.has(c) &amp;&amp; have.get(c) === need.get(c)) formed++;
+
+    while (formed === required) {
+      if (right - left + 1 &lt; bestLen) {
+        bestLen = right - left + 1;
+        bestStart = left;
+      }
+
+      const l = s[left];
+      have.set(l, have.get(l) - 1);
+      if (need.has(l) &amp;&amp; have.get(l) &lt; need.get(l)) formed--;
+      left++;
+    }
+  }
+
+  return bestLen === Infinity ? '' : s.slice(bestStart, bestStart + bestLen);
+}
+
+console.log(minWindow('ADOBECODEBANC', 'ABC'));        // 'BANC'
+console.log(minWindow('a', 'a'));                      // 'a'
+console.log(minWindow('a', 'aa'));                     // ''
+console.log(minWindow('aaflslflsldkalskaaa', 'aaa'));  // 'kaaa'
+console.log(minWindow('cabwefgewcwaefgcf', 'cae'));    // 'cwae'
+console.log(minWindow('abc', 'cba'));                  // 'abc'</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the family this belongs to</span></div>
+<pre><code>// The same grow/shrink skeleton solves several problems. Only the
+// "is the window valid?" test and the goal change.
+
+// 1. LONGEST window with at most K distinct characters
+function longestWithKDistinct(s, k) {
+  const count = new Map();
+  let left = 0, best = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    count.set(s[right], (count.get(s[right]) || 0) + 1);
+
+    while (count.size &gt; k) {                 // INVALID -> shrink
+      const l = s[left];
+      count.set(l, count.get(l) - 1);
+      if (count.get(l) === 0) count.delete(l);
+      left++;
+    }
+
+    best = Math.max(best, right - left + 1);  // record while VALID
+  }
+
+  return best;
+}
+
+console.log(longestWithKDistinct('eceba', 2));    // 3  -> "ece"
+console.log(longestWithKDistinct('aa', 1));       // 2
+
+// 2. SHORTEST subarray with sum at least target (positives only)
+function minSubarrayLen(target, nums) {
+  let left = 0, sum = 0, best = Infinity;
+
+  for (let right = 0; right &lt; nums.length; right++) {
+    sum += nums[right];
+
+    while (sum &gt;= target) {                   // VALID -> record, then shrink
+      best = Math.min(best, right - left + 1);
+      sum -= nums[left];
+      left++;
+    }
+  }
+
+  return best === Infinity ? 0 : best;
+}
+
+console.log(minSubarrayLen(7, [2,3,1,2,4,3]));   // 2  -> [4,3]
+console.log(minSubarrayLen(11, [1,1,1,1,1,1]));  // 0
+
+// Notice the difference:
+//   LONGEST problems shrink while INVALID, record after.
+//   SHORTEST problems shrink while VALID, recording as they go.
+// That single distinction is the whole family.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Every substring</td><td class="mono">O(n&sup3;)</td><td class="mono">O(k)</td></tr>
+        <tr><td><strong>Sliding window</strong></td><td class="mono">O(n + m)</td><td class="mono">O(k)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>where <code>n = s.length</code>, <code>m = t.length</code>, and <code>k</code> is the number of
+  distinct characters.</p>
+
+  <p><strong>Why O(n) with a <code>while</code> inside a <code>for</code>.</strong> The inner loop only
+  ever advances <code>left</code>, and <code>left</code> travels from 0 to n <em>once across the
+  entire run</em> &mdash; it never resets. So the two pointers do at most 2n moves in total. Each move
+  does constant work: one map read, one map write, one comparison. Same argument as every sliding
+  window, and this is the problem where interviewers most often probe it.</p>
+
+  <p>Space is O(k) for the two maps &mdash; bounded by the alphabet, so effectively constant for
+  ASCII.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;I count what the pattern needs, then expand the right edge until every required
+    character is present in sufficient quantity, tracked by a <code>formed</code> counter against
+    <code>required = need.size</code>. Once valid, I shrink from the left while it stays valid,
+    recording the smallest window each time. A character increments <code>formed</code> only when its
+    count reaches exactly what is needed, and decrements it only when it drops below &mdash; so each
+    contributes once. Both pointers only move forward: O(n + m) time, O(k) space.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Using <code>&gt;=</code> when incrementing <code>formed</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; formed overshoots</span></div>
+<pre><code>function broken(s, t) {
+  if (!s || !t) return '';
+  const need = new Map();
+  for (const ch of t) need.set(ch, (need.get(ch) || 0) + 1);
+  const have = new Map();
+  const required = need.size;
+  let formed = 0, left = 0, bestLen = Infinity, bestStart = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    const c = s[right];
+    have.set(c, (have.get(c) || 0) + 1);
+    if (need.has(c) &amp;&amp; have.get(c) &gt;= need.get(c)) formed++;   // >= -- bug
+
+    while (formed === required) {
+      if (right - left + 1 &lt; bestLen) { bestLen = right - left + 1; bestStart = left; }
+      const l = s[left];
+      have.set(l, have.get(l) - 1);
+      if (need.has(l) &amp;&amp; have.get(l) &lt; need.get(l)) formed--;
+      left++;
+    }
+  }
+  return bestLen === Infinity ? '' : s.slice(bestStart, bestStart + bestLen);
+}
+
+console.log(JSON.stringify(broken('ADOBECODEBANC', 'ABC')));   // 'BANC'  right, by luck
+console.log(JSON.stringify(broken('aaab', 'ab')));             // ''  WRONG, should be 'ab'
+
+// Every extra 'a' bumps formed again, so formed races past required
+// and `formed === required` is never true at the right moment.
+// Increment only on the exact transition:  === need.get(c)</code></pre>
+  </div>
+
+  <h3>2. Counting copies instead of distinct characters in <code>required</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; required is too big</span></div>
+<pre><code>function broken(s, t) {
+  const need = new Map();
+  for (const ch of t) need.set(ch, (need.get(ch) || 0) + 1);
+  const have = new Map();
+  const required = t.length;          // should be need.size -- bug
+  let formed = 0, left = 0, bestLen = Infinity, bestStart = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    const c = s[right];
+    have.set(c, (have.get(c) || 0) + 1);
+    if (need.has(c) &amp;&amp; have.get(c) === need.get(c)) formed++;
+    while (formed === required) {
+      if (right - left + 1 &lt; bestLen) { bestLen = right - left + 1; bestStart = left; }
+      const l = s[left];
+      have.set(l, have.get(l) - 1);
+      if (need.has(l) &amp;&amp; have.get(l) &lt; need.get(l)) formed--;
+      left++;
+    }
+  }
+  return bestLen === Infinity ? '' : s.slice(bestStart, bestStart + bestLen);
+}
+
+console.log(JSON.stringify(broken('ADOBECODEBANC', 'ABC')));   // 'BANC'  right -- ABC is all distinct
+console.log(JSON.stringify(broken('aaflslflsldkalskaaa', 'aaa')));  // ''  WRONG, should be 'kaaa'
+
+// For t = "aaa", need is {a:3} -- ONE distinct character. But
+// required was set to 3, and formed can only ever reach 1.</code></pre>
+  </div>
+
+  <h3>3. Recording the answer after shrinking instead of before</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; measures an invalid window</span></div>
+<pre><code>function broken(s, t) {
+  const need = new Map();
+  for (const ch of t) need.set(ch, (need.get(ch) || 0) + 1);
+  const have = new Map();
+  const required = need.size;
+  let formed = 0, left = 0, bestLen = Infinity, bestStart = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    const c = s[right];
+    have.set(c, (have.get(c) || 0) + 1);
+    if (need.has(c) &amp;&amp; have.get(c) === need.get(c)) formed++;
+
+    while (formed === required) {
+      const l = s[left];
+      have.set(l, have.get(l) - 1);
+      if (need.has(l) &amp;&amp; have.get(l) &lt; need.get(l)) formed--;
+      left++;
+      // recorded AFTER shrinking -- the window may no longer be valid
+      if (right - left + 1 &lt; bestLen) { bestLen = right - left + 1; bestStart = left; }
+    }
+  }
+  return bestLen === Infinity ? '' : s.slice(bestStart, bestStart + bestLen);
+}
+
+console.log(JSON.stringify(broken('ADOBECODEBANC', 'ABC')));   // 'ANC'  WRONG, should be 'BANC'
+
+// It measures the window one character too small -- after the left
+// pointer already moved past a character it still needed.
+// Record FIRST, while the window is known valid, THEN shrink.</code></pre>
+  </div>
+
+  <h3>4. Using a Set instead of counts</h3>
+
+  <p><code>t = "aa"</code> needs two a&rsquo;s. A Set records only that <code>a</code> is wanted, so a
+  window with a single <code>a</code> looks valid. Same lesson as Valid Anagram: the moment duplicates
+  matter, you need a Map of counts.</p>
+
+  <h3>5. Not handling &ldquo;no window exists&rdquo;</h3>
+
+  <p>Initialise <code>bestLen</code> to <code>Infinity</code> (or use a <code>-1</code> sentinel) and
+  return <code>""</code> if it never changed. Returning <code>s.slice(0, Infinity)</code> gives the
+  whole string, which is confidently wrong.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write it from memory</strong>, then check the two comparisons: <code>===</code> going
+    in, <code>&lt;</code> coming out. Those two characters are the algorithm.</li>
+    <li><strong>Permutation in String.</strong> Is any permutation of <code>t</code> a substring of
+    <code>s</code>? A <em>fixed-size</em> window of length <code>t.length</code>, with the same
+    counting. Much easier, and it is in the sliding-window topic here.</li>
+    <li><strong>Find all anagram start indexes.</strong> The same fixed window, collecting every
+    match instead of stopping at the first.</li>
+    <li><strong>Longest substring with at most K distinct characters.</strong> In Step 7 &mdash; write
+    it from memory and note that it shrinks while <em>invalid</em>, the opposite of this page.</li>
+    <li><strong>Minimum window subsequence.</strong> The characters of <code>t</code> must now appear
+    <em>in order</em>. The sliding window no longer applies; this one needs a different technique.
+    A good exercise in recognising when a familiar tool does not fit.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p>Two things. First, <strong>the two shapes of sliding window</strong>: for a
+    <em>longest</em> valid window you shrink while invalid and record afterwards; for a
+    <em>shortest</em> valid window you shrink while valid and record as you go. Ask which one you are
+    solving before you write a line.</p>
+    <p>Second, <strong>collapse an expensive validity check into a counter</strong>. Comparing two
+    maps each step would be O(k) and would make this O(n&middot;k). Maintaining a single
+    <code>formed</code> integer on the transitions makes it O(1). That is a general move: when a
+    predicate is checked in a loop, look for an incremental way to maintain its answer.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="08-string-rotations.html">&larr; Check if Strings Are Rotations</a>
+  <a href="10-first-non-repeating-character.html">Next: First Non-Repeating Character &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

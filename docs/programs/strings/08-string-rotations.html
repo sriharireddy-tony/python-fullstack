@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Check if Strings Are Rotations</title>
+<meta name="description" content="The (a+a).includes(b) trick, proved rather than memorised — and the length check that makes it correct.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Strings &middot; Problem 08</p>
+  <h1>Check if Strings Are Rotations</h1>
+  <p class="standfirst">The answer is one line: <code>(a + a).includes(b)</code>. Interviewers ask
+  this problem precisely to see whether you can <em>explain</em> that line. So this page derives it
+  rather than handing it to you.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Is string <code>b</code> a rotation of string <code>a</code>? A rotation means cutting
+  <code>a</code> at some point and swapping the two pieces.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th class="mono">a</th><th class="mono">b</th><th>Rotation?</th><th>Cut point</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">"waterbottle"</td><td class="mono">"erbottlewat"</td><td class="mono">true</td><td>after "wat"</td></tr>
+        <tr><td class="mono">"abcde"</td><td class="mono">"cdeab"</td><td class="mono">true</td><td>after "ab"</td></tr>
+        <tr><td class="mono">"abcde"</td><td class="mono">"abced"</td><td class="mono">false</td><td>not a rotation, just scrambled</td></tr>
+        <tr><td class="mono">"abc"</td><td class="mono">"abc"</td><td class="mono">true</td><td>cut at 0 &mdash; a zero rotation counts</td></tr>
+        <tr><td class="mono">"aa"</td><td class="mono">"aaa"</td><td class="mono">false</td><td>different lengths</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Row three is the important one. <code>"abced"</code> has exactly the same letters as
+  <code>"abcde"</code>, so it is an <em>anagram</em> &mdash; but it is not a rotation. A rotation
+  preserves the cyclic order; an anagram does not.</p>
+
+  <div class="trace">
+<pre>  a = "abcde"
+
+  cut after 0:  "" + "abcde"   =  "abcde"
+  cut after 1:  "a" + "bcde"   ->  "bcdea"
+  cut after 2:  "ab" + "cde"   ->  "cdeab"
+  cut after 3:  "abc" + "de"   ->  "deabc"
+  cut after 4:  "abcd" + "e"   ->  "eabcd"
+
+  those five strings are the ONLY rotations of "abcde".
+  "abced" is not among them.
+</pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; try every cut</h2>
+
+  <p>There are only <code>n</code> possible rotations. Generate each one and compare.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; try all n rotations</span></div>
+<pre><code>function isRotationBrute(a, b) {
+  if (a.length !== b.length) return false;
+  if (a.length === 0) return true;
+
+  for (let cut = 0; cut &lt; a.length; cut++) {
+    const rotated = a.slice(cut) + a.slice(0, cut);
+    if (rotated === b) return true;
+  }
+
+  return false;
+}
+
+console.log(isRotationBrute('waterbottle', 'erbottlewat'));   // true
+console.log(isRotationBrute('abcde', 'cdeab'));               // true
+console.log(isRotationBrute('abcde', 'abced'));               // false
+console.log(isRotationBrute('abc', 'abc'));                   // true
+console.log(isRotationBrute('aa', 'aaa'));                    // false
+console.log(isRotationBrute('', ''));                         // true</code></pre>
+  </div>
+
+  <p>Completely correct and easy to explain. It builds <code>n</code> strings of length
+  <code>n</code> and compares each: O(n&sup2;) time and O(n) space per attempt.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it does more work than it needs to</h2>
+
+  <p>Every cut allocates a whole new string. For a 100,000-character string that is 100,000
+  allocations of 100,000 characters each &mdash; ten billion characters copied.</p>
+
+  <p>Press Run below. The honest result may surprise you: on this <em>adversarial</em> input the two
+  are about the same speed, because both are O(n&sup2;) in the worst case and JavaScript&rsquo;s
+  string concatenation is lazier than it looks. What the doubled version really buys is
+  <strong>one allocation instead of n</strong>, and a native search routine instead of a hand-written
+  comparison loop &mdash; which matters enormously on typical inputs and not at all on this one.</p>
+
+  <p>That is worth internalising: an elegant one-liner is not automatically a faster one-liner.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// A long run of identical characters is the worst case: every
+// candidate rotation agrees with the target for thousands of
+// characters before finally disagreeing.
+const N = 40000;
+const a = 'a'.repeat(N - 1) + 'b';
+const cut = Math.floor(N / 2);
+const b = a.slice(cut) + a.slice(0, cut);
+
+function brute(x, y) {
+  if (x.length !== y.length) return false;
+  for (let c = 0; c &lt; x.length; c++) {
+    if (x.slice(c) + x.slice(0, c) === y) return true;
+  }
+  return false;
+}
+
+function doubled(x, y) {
+  if (x.length !== y.length) return false;
+  return (x + x).includes(y);
+}
+
+let t = performance.now();
+const r1 = brute(a, b);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const r2 = doubled(a, b);
+const fastMs = performance.now() - t;
+
+console.log('try every cut :', r1, 'in', bruteMs.toFixed(1) + ' ms');
+console.log('doubled string:', r2, 'in', fastMs.toFixed(2) + ' ms');
+console.log('speed-up:', Math.round(bruteMs / Math.max(fastMs, 0.01)) + 'x');
+console.log('');
+console.log('Note: both are O(n^2) in the worst case. The win here is');
+console.log('that the doubled version allocates ONE extra string and');
+console.log('hands the search to a heavily optimised native routine,');
+console.log('instead of building n separate rotations.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; write it twice</h2>
+
+  <p>Think of the string as written around a circle. A rotation is just choosing a different starting
+  point on the same circle &mdash; the letters and their cyclic order never change.</p>
+
+  <p>Now: how do you lay a circle out flat so that <em>every</em> starting point is visible?
+  <strong>Write it twice.</strong></p>
+
+  <div class="trace">
+<pre>  a = "abcde"
+
+  a + a  =  "abcdeabcde"
+             |||||
+             abcde        cut 0
+              |||||
+              bcdea       cut 1
+               |||||
+               cdeab      cut 2
+                |||||
+                deabc     cut 3
+                 |||||
+                 eabcd    cut 4
+
+  Every rotation of "abcde" is a window of length 5 inside
+  "abcdeabcde". So "is b a rotation of a?" becomes
+  "does b appear inside a + a?"
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p><code>(a + a).includes(b)</code></p>
+    <p>Doubling the string lays out every rotation, side by side, in one place. A substring search
+    then checks all <code>n</code> of them at once.</p>
+  </div>
+
+  <h3>Why the length check is not optional</h3>
+
+  <p>The doubled trick alone is <strong>wrong</strong> without it:</p>
+
+  <div class="trace">
+<pre>  a = "abcde"     b = "abc"
+
+  a + a  =  "abcdeabcde"
+  does it contain "abc"?   YES, at position 0.
+
+  But "abc" is obviously not a rotation of "abcde" -- it is not even
+  the same length. `includes` finds any substring, not just the
+  full-length windows we care about.
+
+  So:  a.length === b.length  AND  (a + a).includes(b)
+</pre>
+  </div>
+
+  <p>The length equality is what restricts <code>includes</code> to exactly the <code>n</code> windows
+  of length <code>n</code> &mdash; which are precisely the rotations. That is the full proof, and it
+  is what an interviewer is fishing for.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>a = "waterbottle"</code>, <code>b = "erbottlewat"</code>.</p>
+
+  <div class="trace">
+<pre>lengths: 11 and 11   ->  equal, carry on
+
+a + a = "waterbottlewaterbottle"
+         0123456789...
+
+search for "erbottlewat":
+
+  position 0:  "waterbottle"   no
+  position 1:  "aterbottlew"   no
+  position 2:  "terbottlewa"   no
+  position 3:  "erbottlewat"   MATCH
+
+found at index 3  ->  TRUE
+
+And index 3 is meaningful: it tells you b is a rotated by 3, i.e.
+b = a.slice(3) + a.slice(0, 3) = "erbottle" + "wat".
+</pre>
+  </div>
+
+  <p>Now a non-rotation, <code>a = "abcde"</code>, <code>b = "abced"</code>:</p>
+
+  <div class="trace">
+<pre>lengths equal, carry on
+
+a + a = "abcdeabcde"
+
+  position 0: "abcde"   no ('e' vs 'd' at index 3)
+  position 1: "bcdea"   no
+  position 2: "cdeab"   no
+  position 3: "deabc"   no
+  position 4: "eabcd"   no
+  position 5: "abcde"   no  (the same as position 0 -- the circle repeats)
+
+not found  ->  FALSE
+
+Note we only ever need to check positions 0 to n-1. Position n
+onwards repeats what we have already seen.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function rotationExplained(a, b) {
+  console.log('a = "' + a + '"   b = "' + b + '"');
+
+  if (a.length !== b.length) {
+    console.log('lengths differ (' + a.length + ' vs ' + b.length + ') -> FALSE');
+    console.log('');
+    return false;
+  }
+
+  const doubled = a + a;
+  console.log('a + a = "' + doubled + '"');
+  console.log('looking for "' + b + '":');
+
+  for (let pos = 0; pos &lt; a.length; pos++) {
+    const window = doubled.slice(pos, pos + b.length);
+    const hit = window === b;
+    console.log('  position ' + pos + ': "' + window + '"   ' + (hit ? 'MATCH' : 'no'));
+    if (hit) {
+      console.log('  -> b is a rotated left by ' + pos);
+      console.log('');
+      return true;
+    }
+  }
+
+  console.log('  not found -> FALSE');
+  console.log('');
+  return false;
+}
+
+console.log('ANSWER:', rotationExplained('waterbottle', 'erbottlewat'));
+console.log('==========================================');
+console.log('ANSWER:', rotationExplained('abcde', 'abced'));
+console.log('==========================================');
+console.log('ANSWER:', rotationExplained('abcde', 'abc'));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <p>No <code>includes</code>, no <code>slice</code>, no <code>+</code> on whole strings. Instead:
+  compare <code>b</code> against the doubled string using <strong>modular indexing</strong>, which
+  avoids building the doubled string at all.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; modular indexing, no allocation</span></div>
+<pre><code>function isRotationManual(a, b) {
+  if (a.length !== b.length) return false;
+  if (a.length === 0) return true;
+
+  const n = a.length;
+
+  // try every possible starting offset in a
+  for (let offset = 0; offset &lt; n; offset++) {
+
+    let matches = true;
+
+    for (let i = 0; i &lt; n; i++) {
+      // (offset + i) % n walks around the circle -- this IS the
+      // doubled string, without building it
+      if (a[(offset + i) % n] !== b[i]) {
+        matches = false;
+        break;
+      }
+    }
+
+    if (matches) return true;
+  }
+
+  return false;
+}
+
+console.log(isRotationManual('waterbottle', 'erbottlewat'));   // true
+console.log(isRotationManual('abcde', 'cdeab'));               // true
+console.log(isRotationManual('abcde', 'abced'));               // false
+console.log(isRotationManual('abc', 'abc'));                   // true
+console.log(isRotationManual('aa', 'aaa'));                    // false
+console.log(isRotationManual('', ''));                         // true
+console.log(isRotationManual('aab', 'aba'));                   // true
+console.log(isRotationManual('aab', 'baa'));                   // true
+console.log(isRotationManual('abab', 'abab'));                 // true</code></pre>
+  </div>
+
+  <p><code>(offset + i) % n</code> is the same wrap-around modulo from Rotate Array. It makes the
+  circle idea literal: index past the end and you come back to the start. This version is
+  <strong>O(1) extra space</strong> &mdash; better than the one-liner on memory, worse on elegance.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">and the one that also tells you the offset</span></div>
+<pre><code>function rotationOffset(a, b) {
+  if (a.length !== b.length) return -1;
+  if (a.length === 0) return 0;
+
+  const n = a.length;
+
+  for (let offset = 0; offset &lt; n; offset++) {
+    let ok = true;
+    for (let i = 0; i &lt; n; i++) {
+      if (a[(offset + i) % n] !== b[i]) { ok = false; break; }
+    }
+    if (ok) return offset;
+  }
+
+  return -1;
+}
+
+console.log(rotationOffset('waterbottle', 'erbottlewat'));   // 3
+console.log(rotationOffset('abcde', 'cdeab'));               // 2
+console.log(rotationOffset('abcde', 'abcde'));               // 0
+console.log(rotationOffset('abcde', 'abced'));               // -1
+
+// A useful check: rebuilding a with that offset must give b.
+const off = rotationOffset('abcde', 'cdeab');
+console.log('rebuilt:', 'abcde'.slice(off) + 'abcde'.slice(0, off));   // 'cdeab'</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the one-liner, with its guard</span></div>
+<pre><code>function isRotation(a, b) {
+  return a.length === b.length &amp;&amp; (a + a).includes(b);
+}
+
+console.log(isRotation('waterbottle', 'erbottlewat'));   // true
+console.log(isRotation('abcde', 'cdeab'));               // true
+console.log(isRotation('abcde', 'abced'));               // false
+console.log(isRotation('abc', 'abc'));                   // true
+console.log(isRotation('abcde', 'abc'));                 // false  -- the guard earns its keep
+console.log(isRotation('', ''));                         // true
+console.log(isRotation('a', 'a'));                       // true
+console.log(isRotation('ab', 'ba'));                     // true
+
+// Watch what happens WITHOUT the length check:
+const noGuard = (a, b) =&gt; (a + a).includes(b);
+console.log('no guard, "abcde" vs "abc":', noGuard('abcde', 'abc'));   // TRUE -- wrong
+console.log('no guard, "abcde" vs "":',   noGuard('abcde', ''));       // TRUE -- wrong</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the array version, and the number version</span></div>
+<pre><code>// The same idea works on arrays.
+function isArrayRotation(a, b) {
+  if (a.length !== b.length) return false;
+  const doubled = [...a, ...a];
+  // find b inside doubled
+  outer:
+  for (let start = 0; start &lt; a.length; start++) {
+    for (let i = 0; i &lt; b.length; i++) {
+      if (doubled[start + i] !== b[i]) continue outer;
+    }
+    return true;
+  }
+  return false;
+}
+
+console.log(isArrayRotation([1,2,3,4,5], [3,4,5,1,2]));   // true
+console.log(isArrayRotation([1,2,3,4,5], [3,4,5,2,1]));   // false
+console.log(isArrayRotation([1,1,2], [1,2,1]));           // true
+
+// And on numbers, via their digits:
+function isDigitRotation(x, y) {
+  const a = String(x), b = String(y);
+  return a.length === b.length &amp;&amp; (a + a).includes(b);
+}
+
+console.log(isDigitRotation(12345, 34512));   // true
+console.log(isDigitRotation(12345, 34521));   // false</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">What <code>includes</code> costs</span>
+    <p><code>(a + a).includes(b)</code> reads like O(n) but substring search is O(n&middot;m) in the
+    naive case &mdash; here O(n&sup2;), the same as trying every cut. In practice JavaScript engines
+    use a fast search (Boyer&ndash;Moore-style) so it is dramatically quicker in real terms, as the
+    Step 3 demo shows. If an interviewer asks for a guaranteed O(n), the answer is
+    <strong>KMP</strong> &mdash; a linear-time substring search &mdash; applied to the doubled string.
+    Naming it is usually enough.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">O(n) for real: KMP on the doubled string</span></div>
+<pre><code>// Knuth-Morris-Pratt: find pattern inside text in O(text + pattern).
+// The "failure table" says, after a mismatch, how far back in the
+// PATTERN we can resume without re-reading the text.
+function buildFailure(pattern) {
+  const fail = new Array(pattern.length).fill(0);
+  let len = 0;
+
+  for (let i = 1; i &lt; pattern.length; ) {
+    if (pattern[i] === pattern[len]) {
+      len++;
+      fail[i] = len;
+      i++;
+    } else if (len &gt; 0) {
+      len = fail[len - 1];         // fall back, do not restart
+    } else {
+      fail[i] = 0;
+      i++;
+    }
+  }
+
+  return fail;
+}
+
+function kmpContains(text, pattern) {
+  if (pattern.length === 0) return true;
+  const fail = buildFailure(pattern);
+  let j = 0;
+
+  for (let i = 0; i &lt; text.length; i++) {
+    while (j &gt; 0 &amp;&amp; text[i] !== pattern[j]) j = fail[j - 1];
+    if (text[i] === pattern[j]) j++;
+    if (j === pattern.length) return true;
+  }
+
+  return false;
+}
+
+function isRotationKMP(a, b) {
+  return a.length === b.length &amp;&amp; kmpContains(a + a, b);
+}
+
+console.log(buildFailure('abcabd'));                     // [0,0,0,1,2,0]
+console.log(isRotationKMP('waterbottle', 'erbottlewat'));// true
+console.log(isRotationKMP('abcde', 'cdeab'));            // true
+console.log(isRotationKMP('abcde', 'abced'));            // false
+console.log(isRotationKMP('abcde', 'abc'));              // false
+
+// Genuinely O(n) -- the text pointer i never moves backwards.
+// Worth being able to name; rarely worth writing under time pressure.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Build every rotation</td><td class="mono">O(n&sup2;)</td><td class="mono">O(n)</td></tr>
+        <tr><td>Modular indexing</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td></tr>
+        <tr><td><strong>(a+a).includes(b)</strong></td><td class="mono">O(n&sup2;) worst, fast in practice</td><td class="mono">O(n)</td></tr>
+        <tr><td>KMP on the doubled string</td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The honest summary: the one-liner is not asymptotically better than trying every cut. What it
+  avoids is <strong>allocating n strings</strong>, and it hands the search to a heavily optimised
+  native routine. That is why it wins by orders of magnitude in the demo while having the same
+  worst-case Big-O.</p>
+
+  <p>The modular-indexing version is the memory winner &mdash; O(1) extra space, no doubled string,
+  no allocations at all.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Every rotation of <code>a</code> appears as a window of length n inside
+    <code>a + a</code>, because doubling lays the circle out flat. So <code>b</code> is a rotation
+    exactly when the lengths match and <code>a + a</code> contains <code>b</code>. The length check
+    is essential &mdash; without it any substring, like <code>"abc"</code> in <code>"abcde"</code>,
+    passes. Substring search is O(n&sup2;) worst case; with KMP it is O(n).&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. The one-liner without the length check</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; any substring passes</span></div>
+<pre><code>const broken = (a, b) =&gt; (a + a).includes(b);
+
+console.log(broken('waterbottle', 'erbottlewat'));   // true   fine
+console.log(broken('abcde', 'cdeab'));               // true   fine
+console.log(broken('abcde', 'abc'));                 // TRUE   WRONG
+console.log(broken('abcde', 'de'));                  // TRUE   WRONG
+console.log(broken('abcde', ''));                    // TRUE   WRONG
+console.log(broken('abcde', 'ea'));                  // TRUE   WRONG -- spans the join
+
+// includes finds ANY substring. The length equality is what limits
+// it to the n full-length windows, which are the rotations.</code></pre>
+  </div>
+
+  <h3>2. Confusing rotation with anagram</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; sorting checks the wrong thing</span></div>
+<pre><code>function broken(a, b) {
+  return [...a].sort().join('') === [...b].sort().join('');
+}
+
+console.log(broken('abcde', 'cdeab'));   // true   -- correct, it IS a rotation
+console.log(broken('abcde', 'abced'));   // TRUE   -- WRONG, that is only an anagram
+console.log(broken('abc', 'cba'));       // TRUE   -- WRONG, 'cba' is not a rotation of 'abc'
+
+// Every rotation is an anagram, but not every anagram is a rotation.
+// Sorting throws away order, and order is the whole question here.
+// Rotations of "abc" are exactly: "abc", "bca", "cab".</code></pre>
+  </div>
+
+  <h3>3. Only checking one specific cut</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; assumes where the cut is</span></div>
+<pre><code>function broken(a, b) {
+  if (a.length !== b.length) return false;
+  // guess the cut point from where a[0] appears in b
+  const cut = b.indexOf(a[0]);
+  if (cut === -1) return false;
+  return b.slice(cut) + b.slice(0, cut) === a;
+}
+
+console.log(broken('abcde', 'cdeab'));   // true   fine
+console.log(broken('aab', 'aba'));       // false  WRONG, should be true
+
+// With "aab" and "aba": a[0] is 'a', and indexOf finds the FIRST 'a'
+// in "aba" at index 0. Rotating by 0 gives "aba" !== "aab", so it
+// reports false. The correct cut was index 2.
+// Repeated characters make "find the cut" ambiguous -- you would
+// have to try every occurrence, which is the brute force again.</code></pre>
+  </div>
+
+  <h3>4. Forgetting that a zero rotation counts</h3>
+
+  <p><code>isRotation("abc", "abc")</code> is <code>true</code> &mdash; cutting at position 0 is a
+  valid rotation. The one-liner gets this right for free (<code>"abcabc"</code> contains
+  <code>"abc"</code>). A hand-written loop that starts at <code>offset = 1</code> does not. Confirm
+  the expected answer if the problem statement is ambiguous.</p>
+
+  <h3>5. Building the doubled string inside a loop</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">correct but wasteful</span></div>
+<pre><code>const N = 30000;
+let a = '';
+for (let i = 0; i &lt; N; i++) a += String.fromCharCode(97 + (i % 26));
+const b = a.slice(1000) + a.slice(0, 1000);
+
+function insideLoop(x, y) {
+  if (x.length !== y.length) return false;
+  for (let i = 0; i &lt; x.length; i++) {
+    const doubled = x + x;              // rebuilt every iteration -- bug
+    if (doubled.slice(i, i + y.length) === y) return true;
+  }
+  return false;
+}
+
+function outsideLoop(x, y) {
+  if (x.length !== y.length) return false;
+  const doubled = x + x;                // built once
+  for (let i = 0; i &lt; x.length; i++) {
+    if (doubled.slice(i, i + y.length) === y) return true;
+  }
+  return false;
+}
+
+let t = performance.now();
+const r1 = insideLoop(a, b);
+const inMs = performance.now() - t;
+
+t = performance.now();
+const r2 = outsideLoop(a, b);
+const outMs = performance.now() - t;
+
+console.log('doubled inside the loop  :', r1, 'in', inMs.toFixed(1) + ' ms');
+console.log('doubled once, outside    :', r2, 'in', outMs.toFixed(1) + ' ms');
+
+// Anything that does not change between iterations belongs OUTSIDE
+// the loop. This is not a rotation-specific lesson.</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Say the proof out loud</strong> in two sentences: why doubling exposes every rotation,
+    and why the length check is required. That is the entire interview answer.</li>
+    <li><strong>Return the rotation offset</strong> rather than a boolean. It is in Step 6 &mdash;
+    write it from memory, and check it on a string with repeated characters.</li>
+    <li><strong>Rotate a string by k.</strong> Combine with Rotate Array: which is
+    <code>s.slice(k) + s.slice(0, k)</code>, and take <code>k % n</code> first.</li>
+    <li><strong>Search in a rotated sorted array.</strong> A different problem with the same circular
+    idea, and it appears in the searching topic in this collection.</li>
+    <li><strong>The smallest rotation.</strong> Which rotation of a string is alphabetically first?
+    Brute force is O(n&sup2;); Booth&rsquo;s algorithm does it in O(n). Try the brute force, then look
+    up why the fast version is hard.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Doubling turns a circular problem into a linear one.</strong> Whenever something wraps
+    around &mdash; rotations, circular arrays, ring buffers, a round table &mdash; concatenating the
+    structure with itself lets you use ordinary linear tools on it. Circular Maximum Subarray, circular
+    queues and cyclic string matching all use the same move. The companion trick, when you cannot
+    afford the copy, is modular indexing: <code>(i + offset) % n</code> walks the circle without
+    building it.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="07-longest-common-prefix.html">&larr; Longest Common Prefix</a>
+  <a href="09-minimum-window-substring.html">Next: Minimum Window Substring &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

@@ -1,0 +1,997 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Merge Sort and Quick Sort</title>
+<meta name="description" content="Divide and conquer twice: split-then-merge, and partition-then-recurse — plus the honest trade-offs between them.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Searching &amp; sorting &middot; Problem 06</p>
+  <h1>Merge Sort &amp; Quick Sort</h1>
+  <p class="standfirst">Two divide-and-conquer sorts that split the work in opposite orders.
+  <strong>Merge sort splits blindly and does the work while combining. Quick sort does the work
+  while splitting and combines for free.</strong> That one sentence explains every difference
+  between them.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Sort an array, from scratch, in O(n log n). Two classic algorithms, both recursive, both
+  divide and conquer.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th></th><th>Merge sort</th><th>Quick sort</th></tr></thead>
+      <tbody>
+        <tr><td>Split</td><td>always down the middle</td><td>around a pivot value</td></tr>
+        <tr><td>Combine</td><td>merge two sorted halves</td><td>nothing to do</td></tr>
+        <tr><td>Time</td><td class="mono">O(n log n) always</td><td class="mono">O(n log n) average, O(n&sup2;) worst</td></tr>
+        <tr><td>Space</td><td class="mono">O(n)</td><td class="mono">O(log n) stack</td></tr>
+        <tr><td>Stable</td><td><strong>yes</strong></td><td>no</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">The one-sentence difference</span>
+    <p><strong>Merge sort</strong> splits the array in half without looking at the values &mdash; so
+    the split is free, and all the real work happens in the <em>merge</em>.</p>
+    <p><strong>Quick sort</strong> partitions so that everything on the left is smaller than
+    everything on the right &mdash; so the split does all the work, and once both sides are sorted
+    there is nothing left to combine.</p>
+    <p>Every trade-off in the table follows from that.</p>
+  </div>
+
+  <p>Why write them by hand when <code>.sort()</code> exists? Because the two <em>techniques</em>
+  &mdash; recursive halving, and partitioning &mdash; reappear constantly. Quickselect is quick
+  sort&rsquo;s partition. Counting inversions is merge sort&rsquo;s merge. The sorts are the clearest
+  place to learn both.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the sorts you can derive yourself</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; the O(n&sup2;) sorts</span></div>
+<pre><code>// Bubble sort: repeatedly swap neighbours that are out of order.
+function bubbleSort(a) {
+  const arr = [...a];
+  for (let pass = 0; pass &lt; arr.length - 1; pass++) {
+    let swapped = false;
+    // after `pass` rounds the last `pass` elements are settled
+    for (let i = 0; i &lt; arr.length - 1 - pass; i++) {
+      if (arr[i] &gt; arr[i + 1]) {
+        [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]];
+        swapped = true;
+      }
+    }
+    if (!swapped) break;          // already sorted -- stop early
+  }
+  return arr;
+}
+
+// Selection sort: find the smallest remaining, swap it into place.
+function selectionSort(a) {
+  const arr = [...a];
+  for (let i = 0; i &lt; arr.length - 1; i++) {
+    let min = i;
+    for (let j = i + 1; j &lt; arr.length; j++) {
+      if (arr[j] &lt; arr[min]) min = j;
+    }
+    if (min !== i) [arr[i], arr[min]] = [arr[min], arr[i]];
+  }
+  return arr;
+}
+
+// Insertion sort: take each element and slide it back into place.
+function insertionSort(a) {
+  const arr = [...a];
+  for (let i = 1; i &lt; arr.length; i++) {
+    const value = arr[i];
+    let j = i - 1;
+    while (j &gt;= 0 &amp;&amp; arr[j] &gt; value) {
+      arr[j + 1] = arr[j];
+      j--;
+    }
+    arr[j + 1] = value;
+  }
+  return arr;
+}
+
+const test = [5, 2, 9, 1, 5, 6];
+console.log('bubble   :', bubbleSort(test));
+console.log('selection:', selectionSort(test));
+console.log('insertion:', insertionSort(test));
+console.log('original untouched:', test);</code></pre>
+  </div>
+
+  <p>All three are O(n&sup2;), and insertion sort deserves respect: it is O(n) on
+  <em>already-sorted</em> input, and it is genuinely the fastest option for small arrays. Real
+  library sorts use it for subarrays under about sixteen elements.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why O(n&sup2;) collapses</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Size</th><th>O(n&sup2;) comparisons</th><th>O(n log n) comparisons</th></tr></thead>
+      <tbody>
+        <tr><td class="num">100</td><td class="num">10,000</td><td class="num">664</td></tr>
+        <tr><td class="num">10,000</td><td class="num">100,000,000</td><td class="num">132,877</td></tr>
+        <tr><td class="num">1,000,000</td><td class="num">10<sup>12</sup></td><td class="num">19,931,569</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 30000;
+const base = [];
+for (let i = 0; i &lt; N; i++) base.push(Math.floor(Math.random() * 1000000));
+
+function insertionSort(a) {
+  const arr = [...a];
+  for (let i = 1; i &lt; arr.length; i++) {
+    const v = arr[i];
+    let j = i - 1;
+    while (j &gt;= 0 &amp;&amp; arr[j] &gt; v) { arr[j + 1] = arr[j]; j--; }
+    arr[j + 1] = v;
+  }
+  return arr;
+}
+
+function mergeSort(a) {
+  if (a.length &lt;= 1) return a;
+  const mid = a.length &gt;&gt; 1;
+  const left = mergeSort(a.slice(0, mid));
+  const right = mergeSort(a.slice(mid));
+  const out = [];
+  let i = 0, j = 0;
+  while (i &lt; left.length &amp;&amp; j &lt; right.length) {
+    out.push(left[i] &lt;= right[j] ? left[i++] : right[j++]);
+  }
+  while (i &lt; left.length) out.push(left[i++]);
+  while (j &lt; right.length) out.push(right[j++]);
+  return out;
+}
+
+function quickSort(a, lo = 0, hi = a.length - 1) {
+  if (lo &gt;= hi) return a;
+  const pivot = a[lo + ((Math.random() * (hi - lo + 1)) | 0)];
+  let i = lo, m = lo, j = hi;
+  while (m &lt;= j) {
+    if (a[m] &lt; pivot) { [a[i], a[m]] = [a[m], a[i]]; i++; m++; }
+    else if (a[m] &gt; pivot) { [a[j], a[m]] = [a[m], a[j]]; j--; }
+    else m++;
+  }
+  quickSort(a, lo, i - 1);
+  quickSort(a, j + 1, hi);
+  return a;
+}
+
+let t = performance.now();
+const r1 = insertionSort(base);
+const insMs = performance.now() - t;
+
+t = performance.now();
+const r2 = mergeSort([...base]);
+const mrgMs = performance.now() - t;
+
+t = performance.now();
+const r3 = quickSort([...base]);
+const qckMs = performance.now() - t;
+
+t = performance.now();
+const r4 = [...base].sort((x, y) =&gt; x - y);
+const libMs = performance.now() - t;
+
+console.log('insertion sort : ' + insMs.toFixed(1) + ' ms');
+console.log('merge sort     : ' + mrgMs.toFixed(1) + ' ms');
+console.log('quick sort     : ' + qckMs.toFixed(1) + ' ms');
+console.log('built-in sort  : ' + libMs.toFixed(1) + ' ms');
+console.log('all agree:',
+  JSON.stringify(r1) === JSON.stringify(r2) &amp;&amp;
+  JSON.stringify(r2) === JSON.stringify(r3) &amp;&amp;
+  JSON.stringify(r3) === JSON.stringify(r4));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better ideas &mdash; two shapes of divide and conquer</h2>
+
+  <h3>Merge sort: split blindly, work on the way up</h3>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>An array of one element is already sorted. So: split in half, sort each half
+    <em>recursively</em>, then <strong>merge</strong> the two sorted halves &mdash; which is the
+    linear two-pointer merge from the previous page.</p>
+  </div>
+
+  <div class="trace">
+<pre>              [5, 2, 9, 1]
+             /            \
+        [5, 2]            [9, 1]        split -- no comparisons
+        /    \            /    \
+     [5]     [2]       [9]     [1]      base case: length 1
+        \    /            \    /
+        [2, 5]            [1, 9]        merge
+             \            /
+              [1, 2, 5, 9]              merge
+
+  log n levels of splitting, and each level merges n elements.
+  n per level x log n levels = O(n log n).
+</pre>
+  </div>
+
+  <h3>Quick sort: work on the way down, nothing on the way up</h3>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Pick a pivot and <strong>partition</strong>: rearrange so everything smaller sits left of it
+    and everything larger sits right. The pivot is now in its final position. Sort each side
+    recursively &mdash; and there is no combine step, because the sides are already in the right
+    places.</p>
+  </div>
+
+  <div class="trace">
+<pre>  [5, 2, 9, 1]     pivot 5
+
+  partition:  [2, 1 | 5 | 9]
+               \___/       \_/
+             sort these   sort this
+             recursively  recursively
+
+  [2, 1]  pivot 2  ->  [1 | 2]
+  [9]     already done
+
+  result: [1, 2, 5, 9]     no merging anywhere
+</pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The pivot decides everything</span>
+    <p>A pivot near the median splits the array in half: log n levels, O(n log n).</p>
+    <p>A pivot that is the smallest or largest element peels off <em>one</em> element per level:
+    n levels, O(n&sup2;). And with a fixed pivot such as &ldquo;the last element&rdquo;, an
+    <strong>already-sorted array</strong> hits that worst case every single time &mdash; which is the
+    input you are most likely to be handed in practice.</p>
+    <p>Pick the pivot at random. It is not an optimisation.</p>
+  </div>
+
+  <h3>The trade-off, stated plainly</h3>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th></th><th>Merge sort</th><th>Quick sort</th></tr></thead>
+      <tbody>
+        <tr><td>Worst case</td><td>O(n log n) &mdash; guaranteed</td><td>O(n&sup2;) &mdash; rare with a random pivot</td></tr>
+        <tr><td>Extra memory</td><td>O(n) for the merge buffers</td><td>O(log n) for the call stack</td></tr>
+        <tr><td>Stability</td><td>stable &mdash; ties keep their order</td><td>not stable &mdash; swaps move ties</td></tr>
+        <tr><td>Cache behaviour</td><td>worse &mdash; copies between arrays</td><td>better &mdash; swaps in place</td></tr>
+        <tr><td>Good for</td><td>linked lists, external sorting, stability</td><td>arrays in memory, speed</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace both</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">merge sort, narrating itself</span></div>
+<pre><code>function mergeSortExplained(a, depth = 0) {
+  const pad = '  '.repeat(depth);
+
+  if (a.length &lt;= 1) {
+    console.log(pad + 'base [' + a.join(',') + ']  already sorted');
+    return a;
+  }
+
+  const mid = Math.floor(a.length / 2);
+  console.log(pad + 'split [' + a.join(',') + ']  ->  [' +
+              a.slice(0, mid).join(',') + '] and [' + a.slice(mid).join(',') + ']');
+
+  const left = mergeSortExplained(a.slice(0, mid), depth + 1);
+  const right = mergeSortExplained(a.slice(mid), depth + 1);
+
+  const out = [];
+  let i = 0, j = 0;
+  while (i &lt; left.length &amp;&amp; j &lt; right.length) {
+    out.push(left[i] &lt;= right[j] ? left[i++] : right[j++]);
+  }
+  while (i &lt; left.length) out.push(left[i++]);
+  while (j &lt; right.length) out.push(right[j++]);
+
+  console.log(pad + 'merge [' + left.join(',') + '] + [' + right.join(',') +
+              ']  ->  [' + out.join(',') + ']');
+  return out;
+}
+
+console.log('ANSWER:', mergeSortExplained([5, 2, 9, 1, 5, 6]));</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">quick sort, narrating itself</span></div>
+<pre><code>function quickSortExplained(a, lo = 0, hi = a.length - 1, depth = 0) {
+  const pad = '  '.repeat(depth);
+
+  if (lo &gt;= hi) {
+    if (lo === hi) console.log(pad + 'range [' + lo + '..' + hi + '] is one element, done');
+    return a;
+  }
+
+  // a deterministic pivot here, so the trace is reproducible
+  const pivot = a[Math.floor((lo + hi) / 2)];
+  console.log(pad + 'range [' + lo + '..' + hi + '] = [' +
+              a.slice(lo, hi + 1).join(',') + ']   pivot ' + pivot);
+
+  let i = lo, m = lo, j = hi;
+  while (m &lt;= j) {
+    if (a[m] &lt; pivot) { [a[i], a[m]] = [a[m], a[i]]; i++; m++; }
+    else if (a[m] &gt; pivot) { [a[j], a[m]] = [a[m], a[j]]; j--; }
+    else m++;
+  }
+
+  console.log(pad + '  partitioned -> [' + a.slice(lo, i).join(',') + ' | ' +
+              a.slice(i, j + 1).join(',') + ' | ' + a.slice(j + 1, hi + 1).join(',') + ']');
+  console.log(pad + '  the middle block is in its FINAL position');
+
+  quickSortExplained(a, lo, i - 1, depth + 1);
+  quickSortExplained(a, j + 1, hi, depth + 1);
+  return a;
+}
+
+console.log('ANSWER:', quickSortExplained([5, 2, 9, 1, 5, 6]));</code></pre>
+  </div>
+
+  <p>Compare the two traces. Merge sort prints its splits on the way down and its
+  <em>merges</em> on the way up. Quick sort prints its partitions on the way down and nothing on the
+  way up &mdash; because by then the work is done.</p>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; merge sort, no slice, no push</span></div>
+<pre><code>function mergeSortManual(input) {
+  // copy so the caller's array is untouched
+  const a = [];
+  for (let i = 0; i &lt; input.length; i++) a[i] = input[i];
+
+  // a scratch buffer, allocated ONCE and reused at every level
+  const buffer = [];
+  for (let i = 0; i &lt; a.length; i++) buffer[i] = 0;
+
+  function sortRange(lo, hi) {
+    if (hi - lo &lt; 1) return;                 // 0 or 1 element: sorted
+
+    const mid = lo + ((hi - lo) - ((hi - lo) % 2)) / 2;
+
+    sortRange(lo, mid);
+    sortRange(mid + 1, hi);
+    mergeRange(lo, mid, hi);
+  }
+
+  function mergeRange(lo, mid, hi) {
+    let i = lo;          // walks the left half
+    let j = mid + 1;     // walks the right half
+    let k = lo;          // walks the buffer
+
+    while (i &lt;= mid &amp;&amp; j &lt;= hi) {
+      if (a[i] &lt;= a[j]) {        // &lt;= keeps it STABLE
+        buffer[k] = a[i];
+        i = i + 1;
+      } else {
+        buffer[k] = a[j];
+        j = j + 1;
+      }
+      k = k + 1;
+    }
+
+    while (i &lt;= mid) { buffer[k] = a[i]; i = i + 1; k = k + 1; }
+    while (j &lt;= hi)  { buffer[k] = a[j]; j = j + 1; k = k + 1; }
+
+    // copy the merged range back
+    for (let x = lo; x &lt;= hi; x++) a[x] = buffer[x];
+  }
+
+  sortRange(0, a.length - 1);
+  return a;
+}
+
+console.log(mergeSortManual([5, 2, 9, 1, 5, 6]));       // [1,2,5,5,6,9]
+console.log(mergeSortManual([]));                        // []
+console.log(mergeSortManual([1]));                       // [1]
+console.log(mergeSortManual([2, 1]));                    // [1,2]
+console.log(mergeSortManual([3, 3, 3]));                 // [3,3,3]
+console.log(mergeSortManual([5, 4, 3, 2, 1]));           // [1,2,3,4,5]
+console.log(mergeSortManual([1, 2, 3, 4, 5]));           // [1,2,3,4,5]
+console.log(mergeSortManual([-3, 0, -7, 2]));            // [-7,-3,0,2]
+
+const original = [3, 1, 2];
+mergeSortManual(original);
+console.log('input untouched:', original);               // [3,1,2]</code></pre>
+  </div>
+
+  <p>Allocating the buffer <strong>once</strong> matters. The slice-based version at the top of Step 3
+  allocates fresh arrays at every level of recursion &mdash; O(n log n) allocations instead of one.
+  Same complexity, very different constant.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; quick sort, in place</span></div>
+<pre><code>function quickSortManual(input) {
+  const a = [];
+  for (let i = 0; i &lt; input.length; i++) a[i] = input[i];
+
+  function swap(x, y) {
+    const t = a[x]; a[x] = a[y]; a[y] = t;
+  }
+
+  function sortRange(lo, hi) {
+    // insertion sort is faster on tiny ranges -- what real
+    // libraries do, and it also caps the recursion depth
+    if (hi - lo &lt; 10) {
+      for (let i = lo + 1; i &lt;= hi; i++) {
+        const v = a[i];
+        let j = i - 1;
+        while (j &gt;= lo &amp;&amp; a[j] &gt; v) { a[j + 1] = a[j]; j = j - 1; }
+        a[j + 1] = v;
+      }
+      return;
+    }
+
+    // RANDOM pivot -- a fixed one is O(n^2) on sorted input
+    const pivotIndex = lo + ((Math.random() * (hi - lo + 1)) | 0);
+    const pivot = a[pivotIndex];
+
+    // three-way partition: less | equal | greater
+    let i = lo;      // end of the "less" block
+    let m = lo;      // the scanner
+    let j = hi;      // start of the "greater" block
+
+    while (m &lt;= j) {
+      if (a[m] &lt; pivot)      { swap(i, m); i = i + 1; m = m + 1; }
+      else if (a[m] &gt; pivot) { swap(j, m); j = j - 1; }
+      else                   { m = m + 1; }
+    }
+
+    // [lo..i-1] &lt; pivot,  [i..j] === pivot,  [j+1..hi] > pivot
+    // the equal block is already final -- never recurse into it
+    sortRange(lo, i - 1);
+    sortRange(j + 1, hi);
+  }
+
+  sortRange(0, a.length - 1);
+  return a;
+}
+
+console.log(quickSortManual([5, 2, 9, 1, 5, 6]));        // [1,2,5,5,6,9]
+console.log(quickSortManual([]));                         // []
+console.log(quickSortManual([1]));                        // [1]
+console.log(quickSortManual([5, 4, 3, 2, 1]));            // [1,2,3,4,5]
+console.log(quickSortManual([1, 2, 3, 4, 5]));            // [1,2,3,4,5]
+console.log(quickSortManual([-3, 0, -7, 2]));             // [-7,-3,0,2]
+
+// the case a two-way partition hates: everything identical
+const same = new Array(100000).fill(7);
+const t0 = performance.now();
+const r = quickSortManual(same);
+console.log('100k identical values sorted in ' +
+            (performance.now() - t0).toFixed(1) + ' ms,  first/last: ' +
+            r[0] + '/' + r[r.length - 1]);</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">both against the built-in, on many random inputs</span></div>
+<pre><code>function mergeSort(a) {
+  if (a.length &lt;= 1) return a;
+  const mid = a.length &gt;&gt; 1;
+  const l = mergeSort(a.slice(0, mid)), r = mergeSort(a.slice(mid));
+  const out = [];
+  let i = 0, j = 0;
+  while (i &lt; l.length &amp;&amp; j &lt; r.length) out.push(l[i] &lt;= r[j] ? l[i++] : r[j++]);
+  while (i &lt; l.length) out.push(l[i++]);
+  while (j &lt; r.length) out.push(r[j++]);
+  return out;
+}
+
+function quickSort(input) {
+  const a = [...input];
+  const go = (lo, hi) =&gt; {
+    if (lo &gt;= hi) return;
+    const pivot = a[lo + ((Math.random() * (hi - lo + 1)) | 0)];
+    let i = lo, m = lo, j = hi;
+    while (m &lt;= j) {
+      if (a[m] &lt; pivot) { [a[i],a[m]]=[a[m],a[i]]; i++; m++; }
+      else if (a[m] &gt; pivot) { [a[j],a[m]]=[a[m],a[j]]; j--; }
+      else m++;
+    }
+    go(lo, i - 1);
+    go(j + 1, hi);
+  };
+  go(0, a.length - 1);
+  return a;
+}
+
+let checked = 0, failed = 0;
+for (let trial = 0; trial &lt; 3000; trial++) {
+  const n = Math.floor(Math.random() * 20);
+  const a = [];
+  for (let i = 0; i &lt; n; i++) a.push(Math.floor(Math.random() * 10) - 4);
+
+  const expected = JSON.stringify([...a].sort((x, y) =&gt; x - y));
+  checked++;
+
+  if (JSON.stringify(mergeSort([...a])) !== expected ||
+      JSON.stringify(quickSort(a)) !== expected) {
+    failed++;
+    if (failed &lt; 4) console.log('FAIL', JSON.stringify(a));
+  }
+}
+console.log(checked + ' random arrays,  ' + failed + ' failures');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answers</span></div>
+<pre><code>// Merge sort: the shortest correct version.
+function mergeSort(a) {
+  if (a.length &lt;= 1) return a;
+
+  const mid = Math.floor(a.length / 2);
+  const left = mergeSort(a.slice(0, mid));
+  const right = mergeSort(a.slice(mid));
+
+  const out = [];
+  let i = 0, j = 0;
+  while (i &lt; left.length &amp;&amp; j &lt; right.length) {
+    out.push(left[i] &lt;= right[j] ? left[i++] : right[j++]);
+  }
+
+  return out.concat(left.slice(i), right.slice(j));
+}
+
+console.log(mergeSort([5, 2, 9, 1, 5, 6]));   // [1,2,5,5,6,9]
+console.log(mergeSort([]));                    // []
+
+// Quick sort: in place, three-way, random pivot.
+function quickSort(a, lo = 0, hi = a.length - 1) {
+  if (lo &gt;= hi) return a;
+
+  const pivot = a[lo + Math.floor(Math.random() * (hi - lo + 1))];
+  let i = lo, m = lo, j = hi;
+
+  while (m &lt;= j) {
+    if (a[m] &lt; pivot)      { [a[i], a[m]] = [a[m], a[i]]; i++; m++; }
+    else if (a[m] &gt; pivot) { [a[j], a[m]] = [a[m], a[j]]; j--; }
+    else                   { m++; }
+  }
+
+  quickSort(a, lo, i - 1);
+  quickSort(a, j + 1, hi);
+  return a;
+}
+
+console.log(quickSort([5, 2, 9, 1, 5, 6]));   // [1,2,5,5,6,9]
+console.log(quickSort([3, 3, 3]));            // [3,3,3]</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">stability, demonstrated</span></div>
+<pre><code>// A stable sort keeps equal elements in their original order.
+const people = [
+  { name: 'ana', team: 'red' },
+  { name: 'bo',  team: 'blue' },
+  { name: 'cy',  team: 'red' },
+  { name: 'di',  team: 'blue' },
+  { name: 'ed',  team: 'red' }
+];
+
+function mergeSortBy(a, keyOf) {
+  if (a.length &lt;= 1) return a;
+  const mid = a.length &gt;&gt; 1;
+  const l = mergeSortBy(a.slice(0, mid), keyOf);
+  const r = mergeSortBy(a.slice(mid), keyOf);
+  const out = [];
+  let i = 0, j = 0;
+  while (i &lt; l.length &amp;&amp; j &lt; r.length) {
+    out.push(keyOf(l[i]) &lt;= keyOf(r[j]) ? l[i++] : r[j++]);
+  }
+  return out.concat(l.slice(i), r.slice(j));
+}
+
+function quickSortBy(input, keyOf) {
+  const a = [...input];
+  const go = (lo, hi) =&gt; {
+    if (lo &gt;= hi) return;
+    const p = keyOf(a[lo + ((Math.random() * (hi - lo + 1)) | 0)]);
+    let i = lo, m = lo, j = hi;
+    while (m &lt;= j) {
+      const k = keyOf(a[m]);
+      if (k &lt; p) { [a[i],a[m]]=[a[m],a[i]]; i++; m++; }
+      else if (k &gt; p) { [a[j],a[m]]=[a[m],a[j]]; j--; }
+      else m++;
+    }
+    go(lo, i - 1); go(j + 1, hi);
+  };
+  go(0, a.length - 1);
+  return a;
+}
+
+const byTeam = p =&gt; p.team;
+
+console.log('merge sort (stable)  :',
+  mergeSortBy(people, byTeam).map(p =&gt; p.name).join(' '));
+// blue: bo, di   then red: ana, cy, ed   -- original order within each team
+
+console.log('quick sort (unstable):',
+  quickSortBy(people, byTeam).map(p =&gt; p.name).join(' '));
+// the same teams, but the order WITHIN a team may be scrambled
+
+console.log('');
+console.log('Array.prototype.sort is required to be stable since ES2019:');
+console.log([...people].sort((a, b) =&gt; a.team &lt; b.team ? -1 : a.team &gt; b.team ? 1 : 0)
+  .map(p =&gt; p.name).join(' '));</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">what the merge step buys you elsewhere</span></div>
+<pre><code>// Counting inversions: how many pairs are out of order?
+// Brute force is O(n^2). Merge sort counts them for free, because
+// every time you take from the RIGHT half, it jumps over everything
+// left in the LEFT half -- and each of those is an inversion.
+function countInversions(a) {
+  let inversions = 0;
+
+  function sort(arr) {
+    if (arr.length &lt;= 1) return arr;
+    const mid = arr.length &gt;&gt; 1;
+    const l = sort(arr.slice(0, mid));
+    const r = sort(arr.slice(mid));
+
+    const out = [];
+    let i = 0, j = 0;
+    while (i &lt; l.length &amp;&amp; j &lt; r.length) {
+      if (l[i] &lt;= r[j]) {
+        out.push(l[i++]);
+      } else {
+        inversions += l.length - i;      // the whole rest of the left half
+        out.push(r[j++]);
+      }
+    }
+    return out.concat(l.slice(i), r.slice(j));
+  }
+
+  sort(a);
+  return inversions;
+}
+
+function countBrute(a) {
+  let n = 0;
+  for (let i = 0; i &lt; a.length; i++)
+    for (let j = i + 1; j &lt; a.length; j++)
+      if (a[i] &gt; a[j]) n++;
+  return n;
+}
+
+const t = [2, 4, 1, 3, 5];
+console.log('inversions (merge):', countInversions(t));   // 3
+console.log('inversions (brute):', countBrute(t));        // 3
+
+const sortedAsc = [1,2,3,4,5];
+console.log('sorted ascending  :', countInversions(sortedAsc));    // 0
+const reversed = [5,4,3,2,1];
+console.log('fully reversed    :', countInversions(reversed));     // 10
+
+// O(n log n) instead of O(n^2), and the only change is one line
+// inside an ordinary merge. That is why the merge step is worth
+// knowing by heart.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Algorithm</th><th>Best</th><th>Average</th><th>Worst</th><th>Space</th><th>Stable</th></tr></thead>
+      <tbody>
+        <tr><td>Bubble</td><td class="mono">O(n)</td><td class="mono">O(n&sup2;)</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td><td>yes</td></tr>
+        <tr><td>Selection</td><td class="mono">O(n&sup2;)</td><td class="mono">O(n&sup2;)</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td><td>no</td></tr>
+        <tr><td>Insertion</td><td class="mono">O(n)</td><td class="mono">O(n&sup2;)</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td><td>yes</td></tr>
+        <tr><td><strong>Merge</strong></td><td class="mono">O(n log n)</td><td class="mono">O(n log n)</td><td class="mono">O(n log n)</td><td class="mono">O(n)</td><td><strong>yes</strong></td></tr>
+        <tr><td><strong>Quick</strong></td><td class="mono">O(n log n)</td><td class="mono">O(n log n)</td><td class="mono">O(n&sup2;)</td><td class="mono">O(log n)</td><td>no</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Why merge sort is always O(n log n):</strong> the split is blind, so the depth is always
+  exactly log n regardless of the data, and each level merges every element once. There is no bad
+  input.</p>
+
+  <p><strong>Why quick sort can be O(n&sup2;):</strong> the depth depends on the pivots. Good pivots
+  halve the range and give log n levels; a worst-case pivot removes one element and gives n levels.
+  Random pivoting makes a bad run astronomically unlikely, but the bound is still there.</p>
+
+  <p><strong>The O(n log n) floor.</strong> Any sort that only <em>compares</em> elements needs at
+  least about <code>n log n</code> comparisons &mdash; there are <code>n!</code> possible orderings
+  and each comparison at best halves the possibilities. That is why counting sort and bucket sort can
+  beat it: they do not compare, they index.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Merge sort splits blindly in half, recurses, then merges two sorted halves with two
+    pointers &mdash; guaranteed O(n log n) and stable, at the cost of O(n) buffer space. Quick sort
+    partitions around a pivot so the pivot lands in its final position, then recurses into each side
+    with nothing to combine &mdash; O(n log n) average, in place, but O(n&sup2;) if the pivots are
+    consistently bad, so I choose the pivot randomly. I would use a three-way partition so
+    duplicate-heavy input does not degrade, and switch to insertion sort on small subarrays.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Quick sort with a fixed pivot</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; O(n&sup2;) on sorted input</span></div>
+<pre><code>let depth = 0, maxDepth = 0;
+
+function fixedPivotQuickSort(a, lo = 0, hi = a.length - 1) {
+  if (lo &gt;= hi) return a;
+
+  depth++;
+  if (depth &gt; maxDepth) maxDepth = depth;
+
+  const pivot = a[hi];                 // ALWAYS the last element
+  let i = lo;
+  for (let j = lo; j &lt; hi; j++) {
+    if (a[j] &lt; pivot) { [a[i], a[j]] = [a[j], a[i]]; i++; }
+  }
+  [a[i], a[hi]] = [a[hi], a[i]];
+
+  fixedPivotQuickSort(a, lo, i - 1);
+  fixedPivotQuickSort(a, i + 1, hi);
+  depth--;
+  return a;
+}
+
+const N = 3000;
+
+const sorted = [];
+for (let i = 0; i &lt; N; i++) sorted.push(i);
+depth = 0; maxDepth = 0;
+let t = performance.now();
+fixedPivotQuickSort([...sorted]);
+console.log('already sorted : ' + (performance.now() - t).toFixed(1) +
+            ' ms,  recursion depth ' + maxDepth);
+
+const shuffled = [...sorted];
+for (let i = shuffled.length - 1; i &gt; 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+}
+depth = 0; maxDepth = 0;
+t = performance.now();
+fixedPivotQuickSort([...shuffled]);
+console.log('shuffled       : ' + (performance.now() - t).toFixed(1) +
+            ' ms,  recursion depth ' + maxDepth);
+
+console.log('');
+console.log('Depth ' + N + ' vs about ' + Math.ceil(Math.log2(N) * 2) + '.');
+console.log('On a large enough sorted array this also blows the stack.');</code></pre>
+  </div>
+
+  <h3>2. Forgetting the base case, or getting it wrong</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; infinite recursion</span></div>
+<pre><code>function broken(a) {
+  const mid = Math.floor(a.length / 2);      // no base case -- bug
+  const left = broken(a.slice(0, mid));
+  const right = broken(a.slice(mid));
+  return [...left, ...right];
+}
+
+try {
+  console.log(broken([3, 1, 2]));
+} catch (err) {
+  console.log('threw:', err.constructor.name, '-', err.message);
+}
+
+// With a.length === 1, mid is 0, so slice(0,0) is [] and slice(0)
+// is the whole array again -- the recursion never shrinks.
+// Every recursive function needs a base case that is REACHABLE
+// from every input. Here: if (a.length &lt;= 1) return a;</code></pre>
+  </div>
+
+  <h3>3. Losing stability in merge sort with <code>&lt;</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; one character breaks stability</span></div>
+<pre><code>function stableMerge(a, keyOf) {
+  if (a.length &lt;= 1) return a;
+  const mid = a.length &gt;&gt; 1;
+  const l = stableMerge(a.slice(0, mid), keyOf), r = stableMerge(a.slice(mid), keyOf);
+  const out = [];
+  let i = 0, j = 0;
+  while (i &lt; l.length &amp;&amp; j &lt; r.length) {
+    out.push(keyOf(l[i]) &lt;= keyOf(r[j]) ? l[i++] : r[j++]);   // <=
+  }
+  return out.concat(l.slice(i), r.slice(j));
+}
+
+function unstableMerge(a, keyOf) {
+  if (a.length &lt;= 1) return a;
+  const mid = a.length &gt;&gt; 1;
+  const l = unstableMerge(a.slice(0, mid), keyOf), r = unstableMerge(a.slice(mid), keyOf);
+  const out = [];
+  let i = 0, j = 0;
+  while (i &lt; l.length &amp;&amp; j &lt; r.length) {
+    out.push(keyOf(l[i]) &lt; keyOf(r[j]) ? l[i++] : r[j++]);    // &lt;  -- bug
+  }
+  return out.concat(l.slice(i), r.slice(j));
+}
+
+const items = [
+  {id: 1, g: 'b'}, {id: 2, g: 'a'}, {id: 3, g: 'b'},
+  {id: 4, g: 'a'}, {id: 5, g: 'b'}, {id: 6, g: 'a'}
+];
+const key = x =&gt; x.g;
+
+console.log('stable  :', stableMerge(items, key).map(x =&gt; x.g + x.id).join(' '));
+console.log('unstable:', unstableMerge(items, key).map(x =&gt; x.g + x.id).join(' '));
+
+// Both group correctly. Only the stable one keeps a2 before a4
+// before a6. If you have already sorted by a second field, an
+// unstable sort throws that ordering away.</code></pre>
+  </div>
+
+  <h3>4. Two-way partition on duplicate-heavy data</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; all-equal values degrade</span></div>
+<pre><code>let twoWayDepth = 0, twoWayMax = 0;
+
+function twoWayQuickSort(a, lo = 0, hi = a.length - 1) {
+  if (lo &gt;= hi) return a;
+  twoWayDepth++;
+  if (twoWayDepth &gt; twoWayMax) twoWayMax = twoWayDepth;
+
+  const pivot = a[lo + ((Math.random() * (hi - lo + 1)) | 0)];
+  let i = lo, j = hi;
+  while (i &lt;= j) {
+    while (a[i] &lt; pivot) i++;
+    while (a[j] &gt; pivot) j--;
+    if (i &lt;= j) { [a[i], a[j]] = [a[j], a[i]]; i++; j--; }
+  }
+  twoWayQuickSort(a, lo, j);
+  twoWayQuickSort(a, i, hi);
+  twoWayDepth--;
+  return a;
+}
+
+function threeWayQuickSort(a, lo = 0, hi = a.length - 1) {
+  if (lo &gt;= hi) return a;
+  const pivot = a[lo + ((Math.random() * (hi - lo + 1)) | 0)];
+  let i = lo, m = lo, j = hi;
+  while (m &lt;= j) {
+    if (a[m] &lt; pivot) { [a[i],a[m]]=[a[m],a[i]]; i++; m++; }
+    else if (a[m] &gt; pivot) { [a[j],a[m]]=[a[m],a[j]]; j--; }
+    else m++;
+  }
+  threeWayQuickSort(a, lo, i - 1);
+  threeWayQuickSort(a, j + 1, hi);
+  return a;
+}
+
+// only THREE distinct values, repeated many times
+const N = 200000;
+const dup = [];
+for (let i = 0; i &lt; N; i++) dup.push(i % 3);
+
+twoWayDepth = 0; twoWayMax = 0;
+let t = performance.now();
+twoWayQuickSort([...dup]);
+console.log('two-way   : ' + (performance.now() - t).toFixed(1) +
+            ' ms,  depth ' + twoWayMax);
+
+t = performance.now();
+threeWayQuickSort([...dup]);
+console.log('three-way : ' + (performance.now() - t).toFixed(1) + ' ms');
+
+console.log('');
+console.log('A two-way partition keeps splitting blocks of identical');
+console.log('values. Three-way puts them all in the middle and never');
+console.log('recurses into them again.');</code></pre>
+  </div>
+
+  <h3>5. Claiming merge sort is O(1) space</h3>
+
+  <p>It is not. The merge needs somewhere to build the combined result, and that is O(n). There
+  <em>are</em> in-place merge sorts, but they are complicated and slower in practice &mdash; nobody
+  uses them. If you are asked for a sort with O(1) extra space and a guaranteed O(n log n), the answer
+  is <strong>heap sort</strong>, not merge sort.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write merge sort from memory</strong>, base case first. Then say why it is always
+    O(n log n) and always stable.</li>
+    <li><strong>Write quick sort from memory</strong> with a <em>random</em> pivot and a three-way
+    partition. Then say what happens with a fixed pivot on sorted input.</li>
+    <li><strong>Count inversions.</strong> In Step 7 &mdash; one extra line inside the merge, and it
+    turns an O(n&sup2;) problem into O(n log n).</li>
+    <li><strong>Heap sort.</strong> The third O(n log n) sort: build a max-heap, then repeatedly swap
+    the root to the end and sift down. O(1) extra space, not stable. You already wrote the heap in
+    the Kth Largest page.</li>
+    <li><strong>Sort a linked list.</strong> Merge sort is the natural choice, because splitting and
+    merging need no random access &mdash; and quick sort&rsquo;s partition does. That is the clearest
+    illustration of why both algorithms still exist.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Divide and conquer has two shapes, and you choose where the work goes.</strong> Split
+    cheaply and pay on the way up (merge sort), or pay on the way down and get the combine for free
+    (quick sort). Recognising which shape a problem wants is worth more than either algorithm: the
+    merge step gives you inversion counting and k-way merging, and the partition step gives you
+    quickselect and the Dutch national flag.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="05-merge-sorted-arrays.html">&larr; Merge Sorted Arrays</a>
+  <a href="07-custom-comparator-sorting.html">Next: Custom Comparator Sorting &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

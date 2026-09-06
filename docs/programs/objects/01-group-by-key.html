@@ -1,0 +1,1016 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Group an Array by Key</title>
+<meta name="description" content="The reduce you write weekly — plus the object-key traps and the quadratic version to avoid.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Object &amp; data shaping &middot; Problem 01</p>
+  <h1>Group an Array of Objects by Key</h1>
+  <p class="standfirst">Four lines, and you will write it every week of your working life. The
+  interesting parts are the ones that bite in production: keys that are not strings, the spread that
+  turns it quadratic, and the built-in that finally landed.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; the four-line answer</span></div>
+<pre><code>function groupBy(items, keyOf) {
+  return items.reduce((acc, item) =&gt; {
+    const key = typeof keyOf === 'function' ? keyOf(item) : item[keyOf];
+    (acc[key] ||= []).push(item);
+    return acc;
+  }, {});
+}
+
+const people = [
+  { name: 'Ada', city: 'London', age: 36 },
+  { name: 'Grace', city: 'New York', age: 45 },
+  { name: 'Alan', city: 'London', age: 41 },
+  { name: 'Edsger', city: 'Amsterdam', age: 42 },
+];
+
+console.log('by a property name:');
+const byCity = groupBy(people, 'city');
+for (const [city, group] of Object.entries(byCity)) {
+  console.log('  ' + city.padEnd(10) + group.map((p) =&gt; p.name).join(', '));
+}
+
+console.log('');
+console.log('by a computed key:');
+const byDecade = groupBy(people, (p) =&gt; Math.floor(p.age / 10) * 10 + 's');
+for (const [decade, group] of Object.entries(byDecade)) {
+  console.log('  ' + decade.padEnd(10) + group.map((p) =&gt; p.name).join(', '));
+}
+
+console.log('');
+console.log('`(acc[key] ||= []).push(item)` is the whole trick:');
+console.log('  create the bucket if it does not exist, then push.');
+console.log('');
+console.log('Written out, it is:');
+console.log('  if (!acc[key]) acc[key] = [];');
+console.log('  acc[key].push(item);');</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">One thing that version gets wrong</span>
+    <p><code>(acc[key] ||= [])</code> reads <code>acc[key]</code> first &mdash; and a plain
+    <code>{}</code> inherits <code>toString</code>, <code>constructor</code>,
+    <code>valueOf</code> and the rest from <code>Object.prototype</code>. Group by a key called
+    <code>"toString"</code> and the read finds a function, <code>||=</code> leaves it alone, and
+    <code>.push</code> throws.</p>
+    <p>Fine when the keys are yours. A real bug when they come from data. Step 9 shows it failing, and
+    the two fixes: <code>Object.create(null)</code> or a <code>Map</code>.</p>
+  </div>
+
+  <div class="note key">
+    <span class="t">Two things to be deliberate about</span>
+    <p><strong>The key becomes a string.</strong> Object keys always do. Group by an object, a
+    <code>Date</code> or a boolean and you get <code>"[object Object]"</code>,
+    <code>"Mon Jan..."</code> or <code>"true"</code> &mdash; sometimes fine, often a collision.</p>
+    <p><strong>The groups hold references, not copies.</strong> Mutating a grouped item mutates the
+    original. Usually what you want; occasionally a surprise.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the nested-loop version</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0a &mdash; filter once per distinct key</span></div>
+<pre><code>function groupByFilter(items, key) {
+  const keys = [...new Set(items.map((i) =&gt; i[key]))];
+  const out = {};
+  let comparisons = 0;
+  for (const k of keys) {
+    out[k] = items.filter((i) =&gt; { comparisons++; return i[key] === k; });
+  }
+  return { out, comparisons };
+}
+
+function groupByReduce(items, key) {
+  let comparisons = 0;
+  const out = items.reduce((acc, item) =&gt; {
+    comparisons++;
+    (acc[item[key]] ||= []).push(item);
+    return acc;
+  }, {});
+  return { out, comparisons };
+}
+
+// 2000 records across 50 cities
+const records = [];
+for (let i = 0; i &lt; 2000; i++) {
+  records.push({ id: i, city: 'city' + (i % 50) });
+}
+
+const a = groupByFilter(records, 'city');
+const b = groupByReduce(records, 'city');
+
+console.log('2000 records, 50 distinct cities');
+console.log('  filter-per-key comparisons:', a.comparisons.toLocaleString('en-US'));
+console.log('  single-pass comparisons   :', b.comparisons.toLocaleString('en-US'));
+console.log('  same grouping             :',
+            JSON.stringify(Object.keys(a.out).sort()) ===
+            JSON.stringify(Object.keys(b.out).sort()));
+
+console.log('');
+console.log('One scan per distinct key is O(n * k). With 50 keys that');
+console.log('is 50 full passes over the array -- and it gets worse as');
+console.log('the data grows in BOTH dimensions.');
+console.log('');
+console.log('One pass with a lookup is O(n), always. Same shape of');
+console.log('improvement as Two Sum: replace "search the array again"');
+console.log('with "remember where things go".');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why the spread version is the one to watch for</h2>
+
+  <p>The &ldquo;functional&rdquo; grouping that spreads the accumulator looks elegant and is
+  quadratic. This is the single most common performance bug in data-shaping code.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; spread versus mutate</span></div>
+<pre><code>const N = 4000;
+const records = [];
+for (let i = 0; i &lt; N; i++) records.push({ id: i, group: 'g' + (i % 200) });
+
+// spreads the whole accumulator on every item
+const withSpread = (items) =&gt; items.reduce((acc, item) =&gt; ({
+  ...acc,
+  [item.group]: [...(acc[item.group] || []), item],
+}), {});
+
+// mutates the accumulator it already owns
+const withMutation = (items) =&gt; items.reduce((acc, item) =&gt; {
+  (acc[item.group] ||= []).push(item);
+  return acc;
+}, {});
+
+let t = performance.now();
+const a = withSpread(records);
+const spreadMs = performance.now() - t;
+
+t = performance.now();
+const b = withMutation(records);
+const mutateMs = performance.now() - t;
+
+console.log(N.toLocaleString('en-US') + ' records into 200 groups');
+console.log('  spread the accumulator: ' + spreadMs.toFixed(1) + ' ms');
+console.log('  mutate the accumulator: ' + mutateMs.toFixed(1) + ' ms');
+console.log('  ratio                 : ' +
+            Math.round(spreadMs / Math.max(mutateMs, 0.01)) + 'x');
+console.log('  identical result      :',
+            JSON.stringify(Object.keys(a).sort()) === JSON.stringify(Object.keys(b).sort()) &amp;&amp;
+            Object.keys(a).every((k) =&gt; a[k].length === b[k].length));
+
+console.log('');
+console.log('The spread copies every key of the accumulator on every');
+console.log('single item -- and the accumulator grows. It also copies');
+console.log('the group array. So it is doing O(n * k) work where the');
+console.log('mutating version does O(n).');
+console.log('');
+console.log('The usual defence is "immutability". It does not apply:');
+console.log('reduce OWNS the accumulator you passed as the seed. No');
+console.log('other code can see it until reduce returns. Mutating it is');
+console.log('local, and local mutation is not the thing immutability is');
+console.log('protecting you from.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; one pass, and choose your container</h2>
+
+  <div class="trace">
+<pre>  for each item:
+      key = keyOf(item)
+      bucket = out[key]  or  a new []
+      bucket.push(item)
+
+  Three decisions, and each has a right answer for a given case:
+
+  1. WHAT IS THE KEY?
+        a property name          groupBy(items, 'city')
+        a computed value         groupBy(items, p => p.age > 40)
+        several properties       groupBy(items, p => p.city + '|' + p.role)
+
+  2. WHAT GOES IN THE BUCKET?
+        the whole item           the default
+        one field                groupBy(items, 'city', p => p.name)
+        a count                  countBy
+        a single item            keyBy / indexBy (last one wins)
+
+  3. OBJECT OR MAP?
+        object   keys are strings, JSON-friendly, integer keys reorder
+        Map      any key type, insertion-ordered, no prototype
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">When to reach for a <code>Map</code></span>
+    <p>Use a plain object when the keys are strings you will serialise. Use a <code>Map</code> when the
+    keys are objects or dates, when insertion order matters and the keys look numeric, or when the
+    keys come from user data &mdash; because <code>"__proto__"</code> as an object key is a real
+    problem, shown in Step 9.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the three object-key traps, before we write anything</span></div>
+<pre><code>// 1. integer-like keys are reordered, always
+const byAge = { 45: ['Grace'], 36: ['Ada'], 41: ['Alan'] };
+console.log('1. inserted 45, 36, 41 -> Object.keys gives',
+            JSON.stringify(Object.keys(byAge)));
+console.log('   ascending numeric order, not insertion order.');
+
+const asMap = new Map([[45, ['Grace']], [36, ['Ada']], [41, ['Alan']]]);
+console.log('   a Map keeps insertion order:', JSON.stringify([...asMap.keys()]));
+
+// 2. every key is stringified
+const mixed = {};
+mixed[1] = 'number one';
+mixed['1'] = 'string one';
+mixed[true] = 'boolean';
+mixed['true'] = 'string true';
+mixed[{ a: 1 }] = 'an object';
+mixed[{ b: 2 }] = 'a different object';
+console.log('');
+console.log('2. six different keys became', Object.keys(mixed).length + ':');
+console.log('  ', JSON.stringify(mixed));
+console.log('   1 and "1" collided; true and "true" collided; and both');
+console.log('   objects became "[object Object]".');
+
+// a Map keeps them apart
+const m = new Map();
+m.set(1, 'number one').set('1', 'string one')
+ .set(true, 'boolean').set('true', 'string true')
+ .set({ a: 1 }, 'an object').set({ b: 2 }, 'a different object');
+console.log('   a Map kept all', m.size, 'of them distinct.');
+
+// 3. dates are a special kind of bad
+const d1 = new Date('2024-01-15T09:00:00Z');
+const d2 = new Date('2024-01-15T17:00:00Z');
+const byDate = {};
+byDate[d1] = 'morning';
+byDate[d2] = 'evening';
+console.log('');
+console.log('3. two different times on the same day:');
+console.log('   keys stored:', Object.keys(byDate).length,
+            '-- different, because the full date string differs');
+console.log('   ', Object.keys(byDate)[0].slice(0, 24), '...');
+console.log('   That long key is almost never what you wanted. Group by');
+console.log('   an ISO date string instead:');
+const iso = (d) =&gt; d.toISOString().slice(0, 10);
+console.log('   ', iso(d1), '===', iso(d2), '->', iso(d1) === iso(d2));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; watch the buckets fill</h2>
+
+  <div class="trace">
+<pre>  items = [
+      { name: 'Ada',    city: 'London' },
+      { name: 'Grace',  city: 'New York' },
+      { name: 'Alan',   city: 'London' },
+  ]
+
+  acc = {}
+
+  item 1  key 'London'
+          acc['London'] is undefined -> create []
+          push Ada
+          acc = { London: [Ada] }
+
+  item 2  key 'New York'
+          undefined -> create []
+          push Grace
+          acc = { London: [Ada], 'New York': [Grace] }
+
+  item 3  key 'London'
+          acc['London'] EXISTS -> reuse it
+          push Alan
+          acc = { London: [Ada, Alan], 'New York': [Grace] }
+
+  Three items, three iterations, no rescanning. The buckets are
+  the same array objects throughout -- only pushed into.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function groupByLoud(items, keyOf) {
+  const acc = {};
+
+  items.forEach((item, i) =&gt; {
+    const key = typeof keyOf === 'function' ? keyOf(item) : item[keyOf];
+    const existed = Object.prototype.hasOwnProperty.call(acc, key);
+
+    if (!existed) acc[key] = [];
+    acc[key].push(item);
+
+    console.log('item ' + (i + 1) + ': ' + JSON.stringify(item));
+    console.log('  key ' + JSON.stringify(key) +
+                (existed ? '  -- bucket exists, pushing' : '  -- NEW bucket'));
+    console.log('  acc: ' + JSON.stringify(
+      Object.fromEntries(Object.entries(acc).map(([k, v]) =&gt;
+        [k, v.map((x) =&gt; x.name)]))));
+  });
+
+  return acc;
+}
+
+const items = [
+  { name: 'Ada', city: 'London' },
+  { name: 'Grace', city: 'New York' },
+  { name: 'Alan', city: 'London' },
+];
+
+const result = groupByLoud(items, 'city');
+
+console.log('');
+console.log('the buckets hold the ORIGINAL objects, not copies:');
+console.log('  same object?', result.London[0] === items[0]);
+result.London[0].city = 'Cambridge';
+console.log('  after editing result.London[0].city, items[0] is',
+            JSON.stringify(items[0]));
+console.log('  (the grouping is now stale, too -- Ada is still in the');
+console.log('   London bucket)');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; index loops, no reduce, no spread</span></div>
+<pre><code>function groupByManual(items, keyOf) {
+  // no prototype at all, so "__proto__", "toString" and
+  // "constructor" are ordinary keys
+  const out = Object.create(null);
+
+  for (let i = 0; i &lt; items.length; i++) {
+    const item = items[i];
+    const key = typeof keyOf === 'function' ? keyOf(item, i) : item[keyOf];
+
+    let bucket = out[key];
+    if (bucket === undefined) {
+      bucket = [];
+      out[key] = bucket;
+    }
+    bucket[bucket.length] = item;
+  }
+
+  return out;
+}
+
+const people = [
+  { name: 'Ada', city: 'London' },
+  { name: 'Grace', city: 'New York' },
+  { name: 'Alan', city: 'London' },
+];
+
+const grouped = groupByManual(people, 'city');
+for (const key in grouped) {
+  console.log(key.padEnd(10) + grouped[key].map((p) =&gt; p.name).join(', '));
+}
+
+console.log('');
+console.log('edge cases:');
+console.log('  empty input        :', JSON.stringify(groupByManual([], 'city')));
+console.log('  missing key        :',
+            JSON.stringify(groupByManual([{ name: 'x' }], 'city')));
+console.log('    -- undefined becomes the string "undefined"');
+console.log('  null key           :',
+            JSON.stringify(groupByManual([{ c: null }], 'c')));
+console.log('  numeric keys       :',
+            JSON.stringify(groupByManual([{ n: 2 }, { n: 1 }, { n: 2 }], 'n')));
+console.log('  all in one group   :',
+            groupByManual([{ c: 'a' }, { c: 'a' }], 'c').a.length, 'items');
+
+console.log('');
+console.log('And the reason for Object.create(null):');
+const dangerous = [{ role: '__proto__' }, { role: 'toString' }, { role: 'admin' }];
+console.log('  with a null prototype:',
+            JSON.stringify(Object.keys(groupByManual(dangerous, 'role'))));
+
+function groupByPlainObject(items, key) {
+  const out = {};
+  for (const item of items) {
+    if (out[item[key]] === undefined) out[item[key]] = [];
+    out[item[key]].push(item);
+  }
+  return out;
+}
+try {
+  const plain = groupByPlainObject(dangerous, 'role');
+  console.log('  with a plain object  :', JSON.stringify(Object.keys(plain)));
+  console.log('    -- "__proto__" is missing. Assigning to it does not');
+  console.log('       create a property; it tries to set the prototype.');
+} catch (e) {
+  console.log('  with a plain object  ->', e.constructor.name + ':', e.message);
+}</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the family</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">groupBy, countBy, keyBy, partition</span></div>
+<pre><code>const iterate = (keyOf) =&gt; (item, i) =&gt;
+  typeof keyOf === 'function' ? keyOf(item, i) : item[keyOf];
+
+// every item that shares a key, in a list
+function groupBy(items, keyOf, valueOf = (x) =&gt; x) {
+  const get = iterate(keyOf);
+  const out = {};
+  items.forEach((item, i) =&gt; {
+    (out[get(item, i)] ||= []).push(valueOf(item, i));
+  });
+  return out;
+}
+
+// how many share each key
+function countBy(items, keyOf) {
+  const get = iterate(keyOf);
+  const out = {};
+  items.forEach((item, i) =&gt; {
+    const k = get(item, i);
+    out[k] = (out[k] || 0) + 1;
+  });
+  return out;
+}
+
+// ONE item per key -- last one wins. For building a lookup table.
+function keyBy(items, keyOf) {
+  const get = iterate(keyOf);
+  const out = {};
+  items.forEach((item, i) =&gt; { out[get(item, i)] = item; });
+  return out;
+}
+
+// exactly two groups, from a predicate
+function partition(items, predicate) {
+  const pass = [], fail = [];
+  items.forEach((item, i) =&gt; (predicate(item, i) ? pass : fail).push(item));
+  return [pass, fail];
+}
+
+// sum / average per key -- the reporting shape
+function aggregateBy(items, keyOf, valueOf) {
+  const get = iterate(keyOf);
+  const acc = {};
+  for (const item of items) {
+    const k = get(item);
+    acc[k] ||= { count: 0, total: 0 };
+    acc[k].count++;
+    acc[k].total += valueOf(item);
+  }
+  return Object.fromEntries(Object.entries(acc).map(([k, v]) =&gt; [k, {
+    count: v.count, total: v.total, average: +(v.total / v.count).toFixed(2),
+  }]));
+}
+
+const orders = [
+  { id: 1, customer: 'ada', status: 'shipped', total: 40 },
+  { id: 2, customer: 'grace', status: 'pending', total: 15 },
+  { id: 3, customer: 'ada', status: 'shipped', total: 60 },
+  { id: 4, customer: 'alan', status: 'cancelled', total: 25 },
+  { id: 5, customer: 'ada', status: 'pending', total: 10 },
+];
+
+console.log('groupBy status, ids only:');
+console.log(' ', JSON.stringify(groupBy(orders, 'status', (o) =&gt; o.id)));
+
+console.log('');
+console.log('countBy status  :', JSON.stringify(countBy(orders, 'status')));
+console.log('countBy customer:', JSON.stringify(countBy(orders, 'customer')));
+
+console.log('');
+const lookup = keyBy(orders, 'id');
+console.log('keyBy id -> a lookup table:');
+console.log('  lookup[3] =', JSON.stringify(lookup[3]));
+console.log('  keys      =', JSON.stringify(Object.keys(lookup)));
+console.log('  note keyBy on a NON-unique key silently drops rows:');
+console.log('   ', JSON.stringify(Object.keys(keyBy(orders, 'customer'))),
+            '-- 3 keys from 5 orders');
+
+console.log('');
+const [big, small] = partition(orders, (o) =&gt; o.total &gt;= 25);
+console.log('partition by total >= 25:');
+console.log('  pass:', big.map((o) =&gt; o.id).join(', '));
+console.log('  fail:', small.map((o) =&gt; o.id).join(', '));
+
+console.log('');
+console.log('aggregateBy customer, summing total:');
+for (const [c, stats] of Object.entries(aggregateBy(orders, 'customer', (o) =&gt; o.total))) {
+  console.log('  ' + c.padEnd(7) + JSON.stringify(stats));
+}</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">multi-level and multi-key grouping</span></div>
+<pre><code>const orders = [
+  { region: 'EU', country: 'UK', status: 'shipped', total: 40 },
+  { region: 'EU', country: 'UK', status: 'pending', total: 15 },
+  { region: 'EU', country: 'NL', status: 'shipped', total: 60 },
+  { region: 'US', country: 'US', status: 'shipped', total: 25 },
+  { region: 'US', country: 'US', status: 'shipped', total: 10 },
+];
+
+// 1. a COMPOSITE key -- flat result, one level
+function groupByComposite(items, keys, sep = '|') {
+  const out = {};
+  for (const item of items) {
+    (out[keys.map((k) =&gt; item[k]).join(sep)] ||= []).push(item);
+  }
+  return out;
+}
+console.log('composite key region|status:');
+for (const [k, v] of Object.entries(groupByComposite(orders, ['region', 'status']))) {
+  console.log('  ' + k.padEnd(12) + v.length + ' order(s)');
+}
+
+// 2. NESTED grouping -- a tree, one level per key
+function groupByNested(items, keys) {
+  if (keys.length === 0) return items;
+  const [first, ...rest] = keys;
+  const out = {};
+  for (const item of items) (out[item[first]] ||= []).push(item);
+  for (const k of Object.keys(out)) out[k] = groupByNested(out[k], rest);
+  return out;
+}
+
+console.log('');
+console.log('nested region -> country -> status:');
+const tree = groupByNested(orders, ['region', 'country', 'status']);
+(function show(node, depth) {
+  if (Array.isArray(node)) {
+    console.log('  '.repeat(depth) + '  ' + node.length + ' order(s), total ' +
+                node.reduce((s, o) =&gt; s + o.total, 0));
+    return;
+  }
+  for (const [k, v] of Object.entries(node)) {
+    console.log('  '.repeat(depth) + '  ' + k);
+    show(v, depth + 1);
+  }
+})(tree, 0);
+
+console.log('');
+console.log('The composite key is easier to iterate and to send over');
+console.log('the wire. The nested version is easier to render as a');
+console.log('collapsible tree, and easier to total at each level.');
+console.log('');
+console.log('Pick the composite one unless the UI actually needs the');
+console.log('tree -- and if you do use it, choose a separator that');
+console.log('cannot appear in the data:');
+console.log('  danger:', JSON.stringify(Object.keys(groupByComposite(
+  [{ a: 'x|y', b: 'z' }, { a: 'x', b: 'y|z' }], ['a', 'b']))));
+console.log('  -- two different rows, one key. Use \\u0000 or JSON.stringify');
+console.log('     of the key array if the data is untrusted.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Object.groupBy &mdash; the built-in</span></div>
+<pre><code>// Object.groupBy and Map.groupBy landed in ES2024 / Node 21.
+console.log('Object.groupBy available?', typeof Object.groupBy === 'function');
+console.log('Map.groupBy available?   ', typeof Map.groupBy === 'function');
+
+const people = [
+  { name: 'Ada', city: 'London', age: 36 },
+  { name: 'Grace', city: 'New York', age: 45 },
+  { name: 'Alan', city: 'London', age: 41 },
+];
+
+if (typeof Object.groupBy === 'function') {
+  const byCity = Object.groupBy(people, (p) =&gt; p.city);
+  console.log('');
+  console.log('Object.groupBy:', JSON.stringify(
+    Object.fromEntries(Object.entries(byCity).map(([k, v]) =&gt; [k, v.map((p) =&gt; p.name)]))));
+
+  console.log('  prototype of the result:', Object.getPrototypeOf(byCity));
+  console.log('  -- null! It is a null-prototype object, so "__proto__"');
+  console.log('     and "toString" are safe as group names:');
+  const risky = Object.groupBy([{ r: '__proto__' }, { r: 'toString' }], (x) =&gt; x.r);
+  console.log('  ', JSON.stringify(Object.keys(risky)));
+
+  console.log('');
+  console.log('  it always takes a FUNCTION, never a property name:');
+  console.log('   Object.groupBy(people, "city") would call "city" and throw.');
+  console.log('  and the key is coerced with ToPropertyKey, so:');
+  console.log('   grouping by age:', JSON.stringify(
+    Object.keys(Object.groupBy(people, (p) =&gt; p.age))));
+}
+
+if (typeof Map.groupBy === 'function') {
+  const byAge = Map.groupBy(people, (p) =&gt; p.age);
+  console.log('');
+  console.log('Map.groupBy keeps the key TYPE and insertion order:');
+  for (const [age, group] of byAge) {
+    console.log('  ' + age + ' (' + typeof age + '): ' +
+                group.map((p) =&gt; p.name).join(', '));
+  }
+
+  // and it can key on objects
+  const cityObjects = { london: { name: 'London' }, ny: { name: 'New York' } };
+  const withObjectKeys = Map.groupBy(people, (p) =&gt;
+    p.city === 'London' ? cityObjects.london : cityObjects.ny);
+  console.log('');
+  console.log('  grouped by an OBJECT key:');
+  for (const [city, group] of withObjectKeys) {
+    console.log('  ' + city.name + ': ' + group.map((p) =&gt; p.name).join(', '));
+  }
+  console.log('  impossible with a plain object -- every key would be');
+  console.log('  "[object Object]".');
+}
+
+console.log('');
+console.log('Still worth being able to write it by hand: it is four');
+console.log('lines, the built-in is recent enough that you cannot');
+console.log('assume it, and the interviewer is asking about reduce.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Approach</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>filter once per key</td><td class="mono">O(n &middot; k)</td><td class="mono">O(n)</td></tr>
+        <tr><td><strong>one pass, mutating the accumulator</strong></td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+        <tr><td>one pass, spreading the accumulator</td><td class="mono">O(n &middot; k)</td><td class="mono">O(n &middot; k) allocated</td></tr>
+        <tr><td>sort then chunk</td><td class="mono">O(n log n)</td><td class="mono">O(n)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><code>n</code> is the number of items, <code>k</code> the number of distinct keys. The one-pass
+  version does one hash insert per item, so O(n) &mdash; and the space is O(n) because every item ends
+  up in exactly one bucket. Nothing is duplicated; the buckets hold references.</p>
+
+  <p>The last row is worth knowing about: sorting by the key and then walking the sorted array gives
+  you groups in sorted key order for free, at O(n log n). If the caller wants the groups ordered, that
+  can be cheaper than grouping and then sorting the keys.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;One <code>reduce</code>, one pass. For each item I compute the key, create the bucket if
+    it is missing, and push. I mutate the accumulator rather than spreading it &mdash; spreading copies
+    the whole accumulator per item and makes it O(n&middot;k), and the accumulator is private to the
+    reduce so there is nothing to protect. The thing to flag is that object keys are strings: grouping
+    by a boolean, a date or an object collapses values, and <code>"__proto__"</code> as a key silently
+    fails, so I would use <code>Object.create(null)</code> or a <code>Map</code> when the keys come from
+    user data. <code>Object.groupBy</code> does this natively now, with a null prototype.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Spreading the accumulator</h3>
+
+  <p>Step 3. Elegant, quadratic, and defended on grounds that do not apply.</p>
+
+  <h3>2. Forgetting the accumulator's prototype</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; inherited keys and __proto__</span></div>
+<pre><code>function groupBy(items, key) {
+  return items.reduce((acc, item) =&gt; {
+    (acc[item[key]] ||= []).push(item);
+    return acc;
+  }, {});
+}
+
+// user-supplied group names, which is completely normal
+const tags = [
+  { name: 'a', tag: 'toString' },
+  { name: 'b', tag: 'normal' },
+];
+
+try {
+  groupBy(tags, 'tag');
+} catch (e) {
+  console.log('groupBy with a "toString" group ->');
+  console.log('  ' + e.constructor.name + ': ' + e.message);
+}
+
+console.log('');
+console.log('Why: `acc.toString` is INHERITED from Object.prototype and');
+console.log('it is a function, which is truthy. So `||=` sees a truthy');
+console.log('value, does NOT assign the empty array, and .push is');
+console.log('called on Object.prototype.toString.');
+console.log('');
+console.log('  {}.toString is:', typeof {}.toString);
+console.log('  truthy?       :', !!{}.toString);
+console.log('');
+console.log('The same is true for constructor, valueOf, hasOwnProperty');
+console.log('and every other prototype method. `||=` and `if (!acc[k])`');
+console.log('are equally broken here -- the bug is the PROTOTYPE, not');
+console.log('the operator.');
+
+// __proto__ fails differently, and more quietly
+console.log('');
+const proto = (() =&gt; {
+  const acc = {};
+  for (const item of [{ tag: '__proto__' }, { tag: 'ok' }]) {
+    if (!Object.prototype.hasOwnProperty.call(acc, item.tag)) acc[item.tag] = [];
+    acc[item.tag].push(item);
+  }
+  return acc;
+})();
+console.log('with a "__proto__" group, using hasOwnProperty:');
+console.log('  Object.keys :', JSON.stringify(Object.keys(proto)));
+console.log('  reading it  :', JSON.stringify(proto['__proto__']));
+console.log('  is it an own property?',
+            Object.prototype.hasOwnProperty.call(proto, '__proto__'));
+console.log('');
+console.log('  Strange, and worth following: no error, and the value');
+console.log('  reads back. But it is not a KEY. `acc.__proto__ = []`');
+console.log('  invoked the setter and made that array the OBJECT PROTOTYPE.');
+console.log('  Reading __proto__ then returns that prototype,');
+console.log('  which is that same array -- so .push worked, and the');
+console.log('  items went into the prototype.');
+console.log('');
+console.log('  Object.keys does not see it, JSON.stringify drops it,');
+console.log('  and Object.entries misses it -- so any code that');
+console.log('  iterates the groups loses that one silently.');
+console.log('  prototype is now an Array?', Array.isArray(Object.getPrototypeOf(proto)));
+
+// both problems disappear with a null prototype
+const safeGroupBy = (items, key) =&gt; {
+  const acc = Object.create(null);
+  for (const item of items) (acc[item[key]] ||= []).push(item);
+  return acc;
+};
+const safe = safeGroupBy(
+  [{ tag: 'toString' }, { tag: '__proto__' }, { tag: 'ok' }], 'tag');
+console.log('');
+console.log('with Object.create(null):');
+console.log('  keys:', JSON.stringify(Object.keys(safe)));
+console.log('  every group present, no inherited anything.');
+
+// or a Map, where a key is only ever a key
+const mapGroupBy = (items, key) =&gt; {
+  const m = new Map();
+  for (const item of items) {
+    if (!m.has(item[key])) m.set(item[key], []);
+    m.get(item[key]).push(item);
+  }
+  return m;
+};
+console.log('');
+console.log('with a Map:', JSON.stringify([...mapGroupBy(
+  [{ tag: 'toString' }, { tag: '__proto__' }, { tag: 'ok' }], 'tag').keys()]));</code></pre>
+  </div>
+
+  <h3>3. Grouping by something that stringifies badly</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; three ways to collapse your data</span></div>
+<pre><code>function groupBy(items, keyOf) {
+  const out = {};
+  for (const item of items) (out[keyOf(item)] ||= []).push(item);
+  return out;
+}
+
+// 1. grouping by an object
+const events = [
+  { name: 'a', user: { id: 1, name: 'Ada' } },
+  { name: 'b', user: { id: 2, name: 'Grace' } },
+  { name: 'c', user: { id: 1, name: 'Ada' } },
+];
+const byUser = groupBy(events, (e) =&gt; e.user);
+console.log('1. by an object   :', JSON.stringify(Object.keys(byUser)));
+console.log('   all three collapsed into one "[object Object]" bucket.');
+console.log('   fix: group by e.user.id, or use Map.groupBy.');
+console.log('   by user.id      :',
+            JSON.stringify(Object.keys(groupBy(events, (e) =&gt; e.user.id))));
+
+// 2. grouping by a Date
+const logs = [
+  { at: new Date('2024-01-15T09:00:00Z') },
+  { at: new Date('2024-01-15T17:30:00Z') },
+  { at: new Date('2024-01-16T09:00:00Z') },
+];
+const byDate = groupBy(logs, (l) =&gt; l.at);
+console.log('');
+console.log('2. by a Date      :', Object.keys(byDate).length, 'groups from 3 logs');
+console.log('   every timestamp is unique, so nothing grouped at all.');
+console.log('   by ISO day      :',
+            JSON.stringify(Object.keys(groupBy(logs,
+              (l) =&gt; l.at.toISOString().slice(0, 10)))));
+
+// 3. grouping by a possibly-missing field
+const records = [
+  { id: 1, dept: 'eng' },
+  { id: 2 },
+  { id: 3, dept: null },
+  { id: 4, dept: undefined },
+  { id: 5, dept: '' },
+];
+const byDept = groupBy(records, (r) =&gt; r.dept);
+console.log('');
+console.log('3. by a missing field:', JSON.stringify(
+  Object.fromEntries(Object.entries(byDept).map(([k, v]) =&gt; [k, v.map((r) =&gt; r.id)]))));
+console.log('   missing and undefined both became "undefined";');
+console.log('   null became "null"; empty string became "".');
+console.log('   Three different absences, three different keys, and two');
+console.log('   of them merged. Decide explicitly:');
+console.log('   ', JSON.stringify(Object.fromEntries(Object.entries(
+  groupBy(records, (r) =&gt; r.dept || 'unassigned')
+).map(([k, v]) =&gt; [k, v.map((r) =&gt; r.id)]))));</code></pre>
+  </div>
+
+  <h3>4. Using <code>keyBy</code> when the key is not unique</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; rows silently disappear</span></div>
+<pre><code>const keyBy = (items, key) =&gt; {
+  const out = {};
+  for (const item of items) out[item[key]] = item;
+  return out;
+};
+const groupBy = (items, key) =&gt; {
+  const out = {};
+  for (const item of items) (out[item[key]] ||= []).push(item);
+  return out;
+};
+
+const orders = [
+  { id: 1, customer: 'ada', total: 40 },
+  { id: 2, customer: 'grace', total: 15 },
+  { id: 3, customer: 'ada', total: 60 },
+  { id: 4, customer: 'ada', total: 10 },
+];
+
+const byCustomer = keyBy(orders, 'customer');
+console.log('keyBy customer:');
+console.log('  orders in   :', orders.length);
+console.log('  entries out :', Object.keys(byCustomer).length);
+console.log('  ada         :', JSON.stringify(byCustomer.ada));
+console.log('  -- orders 1 and 3 are gone. Last write wins, silently.');
+
+console.log('');
+console.log('groupBy customer:');
+for (const [c, list] of Object.entries(groupBy(orders, 'customer'))) {
+  console.log('  ' + c.padEnd(7) + list.length + ' order(s), total ' +
+              list.reduce((s, o) =&gt; s + o.total, 0));
+}
+
+console.log('');
+console.log('keyBy is right for a genuinely unique key -- an id, a slug,');
+console.log('a primary key. If you are not certain it is unique, group.');
+console.log('');
+console.log('And if you rely on uniqueness, assert it:');
+function keyByStrict(items, key) {
+  const out = {};
+  for (const item of items) {
+    if (item[key] in out) {
+      throw new Error('duplicate key ' + JSON.stringify(item[key]));
+    }
+    out[item[key]] = item;
+  }
+  return out;
+}
+try { keyByStrict(orders, 'customer'); }
+catch (e) { console.log('  keyByStrict ->', e.message); }
+console.log('  keyByStrict on id ->',
+            Object.keys(keyByStrict(orders, 'id')).length, 'entries, no loss');</code></pre>
+  </div>
+
+  <h3>5. Assuming the group order</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the report comes out in the wrong order</span></div>
+<pre><code>const groupBy = (items, keyOf) =&gt; {
+  const out = {};
+  for (const item of items) (out[keyOf(item)] ||= []).push(item);
+  return out;
+};
+
+const sales = [
+  { month: 12, amount: 100 },
+  { month: 1, amount: 200 },
+  { month: 9, amount: 300 },
+  { month: 2, amount: 400 },
+];
+
+console.log('grouped by a NUMERIC month:');
+const byMonth = groupBy(sales, (s) =&gt; s.month);
+console.log('  keys:', JSON.stringify(Object.keys(byMonth)));
+console.log('  -- ascending numeric, NOT insertion order. Here that');
+console.log('     happens to be what you wanted.');
+
+console.log('');
+console.log('grouped by a month NAME:');
+const names = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const byName = groupBy(sales, (s) =&gt; names[s.month]);
+console.log('  keys:', JSON.stringify(Object.keys(byName)));
+console.log('  -- insertion order: Dec, Jan, Sep, Feb. A report in that');
+console.log('     order is nonsense.');
+
+console.log('');
+console.log('If order matters, sort it explicitly:');
+const ordered = Object.entries(byName)
+  .sort((a, b) =&gt; names.indexOf(a[0]) - names.indexOf(b[0]));
+console.log('  ', JSON.stringify(ordered.map(([k, v]) =&gt;
+  k + ':' + v.reduce((s, x) =&gt; s + x.amount, 0))));
+
+console.log('');
+console.log('The full rule for a plain object:');
+console.log('  integer-like keys first, ascending;');
+console.log('  then string keys, in insertion order;');
+console.log('  then symbol keys, in insertion order.');
+console.log('');
+const mixedOrder = {};
+mixedOrder.zebra = 1; mixedOrder[10] = 2; mixedOrder.apple = 3; mixedOrder[2] = 4;
+console.log('  inserted zebra, 10, apple, 2 ->',
+            JSON.stringify(Object.keys(mixedOrder)));
+console.log('');
+console.log('A Map avoids all of this -- it is strictly insertion');
+console.log('ordered, whatever the keys are.');
+const asMap = new Map([['zebra', 1], [10, 2], ['apple', 3], [2, 4]]);
+console.log('  same order in a Map ->', JSON.stringify([...asMap.keys()]));</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write <code>groupBy</code> from memory</strong>, then say why the accumulator is
+    mutated rather than spread.</li>
+    <li><strong>Write <code>countBy</code>, <code>keyBy</code> and <code>partition</code>.</strong>
+    Step 7 &mdash; each is three lines and each answers a different question.</li>
+    <li><strong>List the three object-key traps.</strong> Stringification, integer reordering, and
+    <code>__proto__</code>. Then say when you would use a <code>Map</code>.</li>
+    <li><strong>Write the nested version.</strong> Step 7 &mdash; and be able to say why you would
+    usually prefer a composite key.</li>
+    <li><strong>Write <code>aggregateBy</code></strong> that returns count, sum and average per key.
+    That is the shape of nearly every real reporting endpoint.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>One pass, one lookup, mutate what you own.</strong> That is the whole pattern, and it is
+    the same one behind Two Sum, Top K Frequent and every &ldquo;count the things&rdquo; problem. The
+    part specific to this page is the container: an object's keys are strings with rules of their own,
+    and the moment those keys come from data rather than from you, a <code>Map</code> or a
+    null-prototype object is the safer default.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="../index.html">&larr; All problems</a>
+  <a href="02-flatten-unflatten.html">Next: Flatten &amp; Unflatten Dot-Notation &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

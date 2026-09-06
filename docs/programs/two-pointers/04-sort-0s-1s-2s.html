@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sort 0s, 1s and 2s</title>
+<meta name="description" content="Counting sort versus the Dutch flag — and the honest comparison of when each is the better answer.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Two pointers &middot; Problem 04</p>
+  <h1>Sort 0s, 1s and 2s</h1>
+  <p class="standfirst">The same problem as Sort Colors, approached from the two-pointer side. This
+  page focuses on the part that page did not: the <strong>honest comparison</strong> between counting
+  sort and the one-pass Dutch flag, and how to generalise both.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>An array contains only <code>0</code>, <code>1</code> and <code>2</code>. Sort it in place
+  without calling a sort function.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[0, 1, 2, 0, 1, 2]</td><td class="mono">[0, 0, 1, 1, 2, 2]</td></tr>
+        <tr><td class="mono">[2, 2, 1, 1, 0, 0]</td><td class="mono">[0, 0, 1, 1, 2, 2]</td></tr>
+        <tr><td class="mono">[1]</td><td class="mono">[1]</td></tr>
+        <tr><td class="mono">[0, 0, 0]</td><td class="mono">[0, 0, 0]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why a general sort is overkill</span>
+    <p>A comparison sort has to be O(n log n) in the worst case &mdash; that is a proven lower bound.
+    But that bound only applies when <em>all you can do is compare</em>. Here you know something
+    stronger: there are exactly <strong>three possible values</strong>. Knowledge about the data beats
+    a general-purpose algorithm, and it is what lets you get to O(n).</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; count them</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; counting sort, two passes</span></div>
+<pre><code>function sortByCounting(nums) {
+  let zeros = 0, ones = 0, twos = 0;
+
+  // PASS 1: how many of each?
+  for (let i = 0; i &lt; nums.length; i++) {
+    if (nums[i] === 0) zeros++;
+    else if (nums[i] === 1) ones++;
+    else twos++;
+  }
+
+  // PASS 2: write them back in order
+  let i = 0;
+  for (let k = 0; k &lt; zeros; k++) nums[i++] = 0;
+  for (let k = 0; k &lt; ones;  k++) nums[i++] = 1;
+  for (let k = 0; k &lt; twos;  k++) nums[i++] = 2;
+
+  return nums;
+}
+
+console.log(sortByCounting([0,1,2,0,1,2]));   // [0,0,1,1,2,2]
+console.log(sortByCounting([2,2,1,1,0,0]));   // [0,0,1,1,2,2]
+console.log(sortByCounting([1]));             // [1]
+console.log(sortByCounting([]));              // []
+console.log(sortByCounting([2,0,1]));         // [0,1,2]
+
+// O(n) time, O(1) space, in place, two passes.
+// This is a completely correct answer. Do not let anyone tell you
+// otherwise -- the one-pass version is more elegant, not more correct.</code></pre>
+  </div>
+
+  <p>Counting sort is the answer most people give and it deserves respect: it is short, obviously
+  right, and impossible to get subtly wrong. The interview question is usually <em>&ldquo;can you do
+  it in one pass?&rdquo;</em>, which is a different question from <em>&ldquo;can you do it
+  faster?&rdquo;</em>.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why one pass, honestly</h2>
+
+  <p>Both are O(n). Both are O(1) space. So what does one pass actually buy?</p>
+
+  <ul>
+    <li><strong>Streams.</strong> If the data arrives once and cannot be re-read, two passes is not an
+    option.</li>
+    <li><strong>Cache behaviour.</strong> One walk over a very large array beats two, because the
+    second walk has to pull everything back from memory again.</li>
+    <li><strong>Stability of the technique.</strong> The three-way partition generalises to a pivot
+    (see Step 7); counting does not.</li>
+  </ul>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; and a fair comparison</span></div>
+<pre><code>const N = 5000000;
+const base = [];
+for (let i = 0; i &lt; N; i++) base.push(i % 3);
+
+function counting(a) {
+  let c0 = 0, c1 = 0, c2 = 0;
+  for (let i = 0; i &lt; a.length; i++) {
+    if (a[i] === 0) c0++; else if (a[i] === 1) c1++; else c2++;
+  }
+  let i = 0;
+  while (c0-- &gt; 0) a[i++] = 0;
+  while (c1-- &gt; 0) a[i++] = 1;
+  while (c2-- &gt; 0) a[i++] = 2;
+  return a;
+}
+
+function dutchFlag(a) {
+  let low = 0, mid = 0, high = a.length - 1;
+  while (mid &lt;= high) {
+    if (a[mid] === 0)      { const t = a[low];  a[low]  = a[mid]; a[mid] = t; low++; mid++; }
+    else if (a[mid] === 2) { const t = a[high]; a[high] = a[mid]; a[mid] = t; high--; }
+    else mid++;
+  }
+  return a;
+}
+
+function librarySort(a) { return a.sort((x, y) =&gt; x - y); }
+
+let t = performance.now();
+const a = librarySort(base.slice());
+const sortMs = performance.now() - t;
+
+t = performance.now();
+const b = counting(base.slice());
+const countMs = performance.now() - t;
+
+t = performance.now();
+const c = dutchFlag(base.slice());
+const dutchMs = performance.now() - t;
+
+const ok = (x) =&gt; x[0] === 0 &amp;&amp; x[N - 1] === 2;
+
+console.log('library sort   : ' + sortMs.toFixed(1) + ' ms   correct: ' + ok(a));
+console.log('counting sort  : ' + countMs.toFixed(1) + ' ms   correct: ' + ok(b));
+console.log('dutch flag     : ' + dutchMs.toFixed(1) + ' ms   correct: ' + ok(c));
+console.log('');
+console.log('Counting and Dutch flag are both linear and land close');
+console.log('together. The library sort is the outlier. Do not oversell');
+console.log('the one-pass version -- its advantage is streams and');
+console.log('generality, not raw speed.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; three regions</h2>
+
+  <p>Keep three pointers describing four zones of the array:</p>
+
+  <div class="trace">
+<pre>  [ 0 0 0 ][ 1 1 1 ][ ? ? ? ? ? ][ 2 2 2 ]
+            ^        ^           ^
+           low      mid         high
+
+  before low   : settled 0s
+  low to mid   : settled 1s
+  mid to high  : not yet examined
+  after high   : settled 2s
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Look at <code>nums[mid]</code>. There are exactly three cases and each forces one action:</p>
+    <ul style="margin-bottom:0">
+      <li><strong>0</strong> &mdash; swap with <code>low</code>, then <code>low++</code> and
+      <code>mid++</code>.</li>
+      <li><strong>1</strong> &mdash; already correct, just <code>mid++</code>.</li>
+      <li><strong>2</strong> &mdash; swap with <code>high</code>, then <code>high--</code>
+      <em>only</em>.</li>
+    </ul>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The asymmetry, one more time</span>
+    <p>On a <strong>0</strong> you advance <code>mid</code>; on a <strong>2</strong> you do not.</p>
+    <p><code>low</code> sits inside territory you have already swept, so whatever it hands back is
+    known &mdash; a 1, or the element itself. <code>high</code> sits at the edge of the unexamined
+    region, so whatever it hands back could be anything, including another 2. You must look at it.</p>
+  </div>
+
+  <p>The loop condition is <code>mid &lt;= high</code>, with <code>&lt;=</code>: when they are equal
+  there is still one unexamined element sitting there.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>nums = [2, 0, 1, 2, 1, 0]</code>. Start <code>low=0 mid=0 high=5</code>.</p>
+
+  <div class="trace">
+<pre>          array               low mid high    action
+
+start   [2,0,1,2,1,0]          0   0   5
+
+mid=0 value 2  -> swap with high(5), high--, mid STAYS
+        [0,0,1,2,1,2]          0   0   4
+
+mid=0 value 0  -> swap with low(0) (itself), low++ mid++
+        [0,0,1,2,1,2]          1   1   4
+
+mid=1 value 0  -> swap with low(1) (itself), low++ mid++
+        [0,0,1,2,1,2]          2   2   4
+
+mid=2 value 1  -> leave it, mid++
+        [0,0,1,2,1,2]          2   3   4
+
+mid=3 value 2  -> swap with high(4), high--, mid STAYS
+        [0,0,1,1,2,2]          2   3   3
+
+mid=3 value 1  -> leave it, mid++
+        [0,0,1,1,2,2]          2   4   3
+
+mid(4) > high(3)  ->  STOP
+
+answer: [0,0,1,1,2,2]
+</pre>
+  </div>
+
+  <p>Six elements, seven iterations. Each iteration either advances <code>mid</code> or retreats
+  <code>high</code>, so the unexamined gap shrinks by exactly one every time &mdash; that is the
+  termination proof and the O(n) proof at once.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function sortExplained(nums) {
+  let low = 0, mid = 0, high = nums.length - 1;
+
+  console.log('start  [' + nums.join(',') + ']   low=0 mid=0 high=' + high);
+  console.log('');
+
+  let steps = 0;
+
+  while (mid &lt;= high) {
+    steps++;
+    const v = nums[mid];
+
+    if (v === 0) {
+      [nums[low], nums[mid]] = [nums[mid], nums[low]];
+      low++; mid++;
+      console.log('value 0 -> swap with low, low++ mid++   [' + nums.join(',') +
+                  ']   low=' + low + ' mid=' + mid + ' high=' + high);
+    } else if (v === 2) {
+      [nums[high], nums[mid]] = [nums[mid], nums[high]];
+      high--;
+      console.log('value 2 -> swap with high, high-- ONLY  [' + nums.join(',') +
+                  ']   low=' + low + ' mid=' + mid + ' high=' + high);
+    } else {
+      mid++;
+      console.log('value 1 -> leave it, mid++             [' + nums.join(',') +
+                  ']   low=' + low + ' mid=' + mid + ' high=' + high);
+    }
+  }
+
+  console.log('');
+  console.log(steps + ' iterations for ' + nums.length + ' elements');
+  console.log('');
+  return nums;
+}
+
+sortExplained([2, 0, 1, 2, 1, 0]);
+console.log('==========================================');
+sortExplained([2, 2, 2, 0, 0, 0]);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; three pointers, manual swaps</span></div>
+<pre><code>function sortColorsManual(nums) {
+  let low = 0;                    // next slot for a 0
+  let mid = 0;                    // the element being examined
+  let high = nums.length - 1;     // next slot for a 2
+
+  while (mid &lt;= high) {
+
+    if (nums[mid] === 0) {
+      const tmp = nums[low];
+      nums[low] = nums[mid];
+      nums[mid] = tmp;
+      low = low + 1;
+      mid = mid + 1;              // the incoming value is known-good
+
+    } else if (nums[mid] === 2) {
+      const tmp = nums[high];
+      nums[high] = nums[mid];
+      nums[mid] = tmp;
+      high = high - 1;
+      // mid does NOT move -- the incoming value is unexamined
+
+    } else {
+      mid = mid + 1;
+    }
+  }
+
+  return nums;
+}
+
+console.log(sortColorsManual([0,1,2,0,1,2]));       // [0,0,1,1,2,2]
+console.log(sortColorsManual([2,2,1,1,0,0]));       // [0,0,1,1,2,2]
+console.log(sortColorsManual([1]));                 // [1]
+console.log(sortColorsManual([]));                  // []
+console.log(sortColorsManual([2,0,1]));             // [0,1,2]
+console.log(sortColorsManual([0,0,0]));             // [0,0,0]
+console.log(sortColorsManual([2,2,2]));             // [2,2,2]
+console.log(sortColorsManual([1,0,2,1,0,2,1,0,2])); // [0,0,0,1,1,1,2,2,2]</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">counting the work: swaps vs writes</span></div>
+<pre><code>// A fair comparison people rarely make: counting sort does 2n
+// reads/writes; Dutch flag does n reads plus up to n swaps, and a
+// swap is three assignments.
+function countingInstrumented(nums) {
+  let ops = 0;
+  let c0 = 0, c1 = 0, c2 = 0;
+  for (let i = 0; i &lt; nums.length; i++) { ops++; if (nums[i]===0) c0++; else if (nums[i]===1) c1++; else c2++; }
+  let i = 0;
+  while (c0-- &gt; 0) { nums[i++] = 0; ops++; }
+  while (c1-- &gt; 0) { nums[i++] = 1; ops++; }
+  while (c2-- &gt; 0) { nums[i++] = 2; ops++; }
+  return ops;
+}
+
+function dutchInstrumented(nums) {
+  let ops = 0;
+  let low = 0, mid = 0, high = nums.length - 1;
+  while (mid &lt;= high) {
+    ops++;                                    // the read
+    if (nums[mid] === 0) {
+      const t = nums[low]; nums[low] = nums[mid]; nums[mid] = t;
+      ops += 3;                               // the swap
+      low++; mid++;
+    } else if (nums[mid] === 2) {
+      const t = nums[high]; nums[high] = nums[mid]; nums[mid] = t;
+      ops += 3;
+      high--;
+    } else mid++;
+  }
+  return ops;
+}
+
+const make = () =&gt; {
+  const a = [];
+  for (let i = 0; i &lt; 3000; i++) a.push(Math.floor(Math.random() * 3));
+  return a;
+};
+
+const sample = make();
+console.log('counting sort ops :', countingInstrumented(sample.slice()));
+console.log('dutch flag ops    :', dutchInstrumented(sample.slice()));
+console.log('');
+console.log('Dutch flag does FEWER passes but MORE work per element.');
+console.log('Neither is obviously better. Choose for the right reason:');
+console.log('one pass when the data is a stream, counting when you want');
+console.log('code nobody can misread.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; destructuring swap</span></div>
+<pre><code>function sortColors(nums) {
+  let low = 0, mid = 0, high = nums.length - 1;
+
+  while (mid &lt;= high) {
+    if (nums[mid] === 0) {
+      [nums[low], nums[mid]] = [nums[mid], nums[low]];
+      low++;
+      mid++;
+    } else if (nums[mid] === 2) {
+      [nums[high], nums[mid]] = [nums[mid], nums[high]];
+      high--;
+    } else {
+      mid++;
+    }
+  }
+
+  return nums;
+}
+
+console.log(sortColors([0,1,2,0,1,2]));   // [0,0,1,1,2,2]
+console.log(sortColors([2,0,1]));         // [0,1,2]
+console.log(sortColors([1,2,0]));         // [0,1,2]</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">generalising: counting sort for k values</span></div>
+<pre><code>// Counting sort extends to any small set of values; Dutch flag
+// does not extend past three without getting ugly.
+function countingSortSmallRange(nums, maxValue) {
+  const counts = new Array(maxValue + 1).fill(0);
+  for (const n of nums) counts[n]++;
+
+  let i = 0;
+  for (let value = 0; value &lt;= maxValue; value++) {
+    for (let k = 0; k &lt; counts[value]; k++) nums[i++] = value;
+  }
+  return nums;
+}
+
+console.log(countingSortSmallRange([3,1,4,1,5,9,2,6,5,3,5], 9));
+console.log(countingSortSmallRange([2,0,1,2,0,1], 2));
+console.log(countingSortSmallRange([0,0,0], 2));
+
+// O(n + k). Beats n log n whenever k is small relative to n --
+// grades, ages, priorities, small enum values. It is the same
+// "index by the key" idea as bucket sort in Top K Frequent.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">generalising: three-way partition around a pivot</span></div>
+<pre><code>// This is where Dutch flag earns its place: partition into
+// less / equal / greater around any pivot. It is the partition step
+// of a quicksort that handles duplicates well.
+function partitionThreeWay(arr, pivot, compare = (a, b) =&gt; a - b) {
+  let low = 0, mid = 0, high = arr.length - 1;
+
+  while (mid &lt;= high) {
+    const c = compare(arr[mid], pivot);
+    if (c &lt; 0)      { [arr[low], arr[mid]] = [arr[mid], arr[low]]; low++; mid++; }
+    else if (c &gt; 0) { [arr[high], arr[mid]] = [arr[mid], arr[high]]; high--; }
+    else            { mid++; }
+  }
+
+  return { lessEnd: low, greaterStart: high + 1 };
+}
+
+const nums = [5, 3, 8, 5, 1, 9, 5, 2];
+console.log('bounds:', partitionThreeWay(nums, 5), nums);
+// everything before lessEnd is &lt; 5, from greaterStart onwards is > 5
+
+// And a quicksort built on it -- notice the recursion skips the
+// whole EQUAL block, which is why duplicate-heavy arrays are fast.
+function quickSort3(arr, lo = 0, hi = arr.length - 1) {
+  if (lo &gt;= hi) return arr;
+
+  const pivot = arr[Math.floor((lo + hi) / 2)];
+  let i = lo, mid = lo, j = hi;
+
+  while (mid &lt;= j) {
+    if (arr[mid] &lt; pivot)      { [arr[i], arr[mid]] = [arr[mid], arr[i]]; i++; mid++; }
+    else if (arr[mid] &gt; pivot) { [arr[j], arr[mid]] = [arr[mid], arr[j]]; j--; }
+    else mid++;
+  }
+
+  quickSort3(arr, lo, i - 1);
+  quickSort3(arr, j + 1, hi);
+  return arr;
+}
+
+console.log(quickSort3([5,3,8,5,1,9,5,2,7,5]));
+console.log(quickSort3([3,3,3,3,3]));            // the case two-way quicksort hates
+console.log(quickSort3([]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>Passes</th><th>Generalises to</th></tr></thead>
+      <tbody>
+        <tr><td>Library sort</td><td class="mono">O(n log n)</td><td class="mono">O(n)</td><td>&mdash;</td><td>anything</td></tr>
+        <tr><td>Counting sort</td><td class="mono">O(n + k)</td><td class="mono">O(k)</td><td>two</td><td>any small k</td></tr>
+        <tr><td><strong>Dutch flag</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td><td><strong>one</strong></td><td>three-way partition</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Why the Dutch flag terminates and is linear:</strong> every iteration either increments
+  <code>mid</code> or decrements <code>high</code>, so the size of the unexamined region
+  <code>high - mid</code> shrinks by exactly one each time. It starts at <code>n - 1</code> and the
+  loop ends when it goes negative &mdash; at most <code>n</code> iterations.</p>
+
+  <p>Say that argument rather than &ldquo;it looks linear&rdquo;. It is the difference between having
+  reasoned about the algorithm and having recognised it.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;With only three values I do not need a comparison sort. Counting sort is two passes:
+    count each value, then rewrite. For one pass I use three pointers &mdash; low, mid and high
+    &mdash; with the invariant that everything before low is 0, between low and mid is 1, and after
+    high is 2. On a 0 I swap with low and advance both; on a 2 I swap with high and only move high,
+    because the incoming value has not been examined; on a 1 I advance mid. Each iteration shrinks
+    the unknown region by one, so O(n) time, O(1) space.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Advancing <code>mid</code> after swapping with <code>high</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; skips an unexamined value</span></div>
+<pre><code>function broken(nums) {
+  let low = 0, mid = 0, high = nums.length - 1;
+  while (mid &lt;= high) {
+    if (nums[mid] === 0)      { [nums[low],nums[mid]]=[nums[mid],nums[low]]; low++; mid++; }
+    else if (nums[mid] === 2) { [nums[high],nums[mid]]=[nums[mid],nums[high]]; high--; mid++; }
+    else mid++;
+  }
+  return nums;
+}
+
+console.log(broken([0,1,2,0,1,2]));   // [0,0,1,1,2,2]  right, by luck
+console.log(broken([2,2,0,1]));       // [1,0,2,2]      WRONG
+console.log(broken([2,0,0,1]));       // [1,0,0,2]      WRONG
+
+// On [2,2,0,1]: mid=0 sees a 2, swaps the 1 in from the end, then
+// skips past it. That 1 sits at index 0 forever.</code></pre>
+  </div>
+
+  <h3>2. Using <code>mid &lt; high</code> instead of <code>&lt;=</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; misses the last element</span></div>
+<pre><code>function broken(nums) {
+  let low = 0, mid = 0, high = nums.length - 1;
+  while (mid &lt; high) {          // should be &lt;=
+    if (nums[mid] === 0)      { [nums[low],nums[mid]]=[nums[mid],nums[low]]; low++; mid++; }
+    else if (nums[mid] === 2) { [nums[high],nums[mid]]=[nums[mid],nums[high]]; high--; }
+    else mid++;
+  }
+  return nums;
+}
+
+console.log(broken([0,1,2,0,1,2]));   // [0,0,1,1,2,2]  right
+console.log(broken([1,0]));           // [1,0]          WRONG
+console.log(broken([2,1]));           // [1,2]          right
+
+// When mid === high there is still one element nobody has looked at.
+// The bug only shows on tiny arrays and on inputs where the final
+// element is out of place -- so test [1,0] every time.</code></pre>
+  </div>
+
+  <h3>3. Forgetting <code>low++</code></h3>
+
+  <p>Without it, the zeros region never grows, so the next 0 swaps into the same slot and overwrites
+  the previous one. The result has the wrong counts entirely &mdash; obvious the moment you print the
+  array, invisible if you only check that it is sorted at the front.</p>
+
+  <h3>4. Reaching for a sort function</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">and the numeric-comparator reminder</span></div>
+<pre><code>// The problem forbids it, but know the trap anyway:
+console.log([2,0,1,10].sort());                  // [0,1,10,2]  string order
+console.log([2,0,1,10].sort((a,b) =&gt; a - b));    // [0,1,2,10]  numeric
+
+// Also: sort() MUTATES and returns the same array.
+const a = [2,0,1];
+const b = a.sort((x,y) =&gt; x - y);
+console.log(a, b, a === b);                      // both sorted, same object
+
+// The non-mutating version, in newer runtimes:
+if (Array.prototype.toSorted) {
+  const c = [2,0,1];
+  console.log(c.toSorted((x,y) =&gt; x - y), c);    // sorted copy, c untouched
+}</code></pre>
+  </div>
+
+  <h3>5. Assuming the values are exactly 0, 1, 2</h3>
+
+  <p>The algorithm has no branch for anything else &mdash; a stray 3 would be treated as a 1 and left
+  stranded in the middle. Correct for this problem&rsquo;s guarantees. If you generalise, use the
+  three-way comparison version from Step 7 rather than equality tests.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write both versions from memory</strong>, then say which you would ship and why.
+    (Counting sort, most days. Say so &mdash; being able to defend the <em>simpler</em> choice is a
+    senior signal.)</li>
+    <li><strong>Sort 0s and 1s only.</strong> Two pointers, no middle region &mdash; and notice it is
+    exactly Move Zeroes.</li>
+    <li><strong>Sort by a boolean property, in place.</strong> Move every object where
+    <code>isActive</code> is true to the front. Same partition, different test.</li>
+    <li><strong>Three-way quicksort.</strong> In Step 7 &mdash; write it from memory, then race it
+    against a two-way quicksort on an array of a million values drawn from five distinct numbers.</li>
+    <li><strong>Prove the termination in one sentence</strong> without looking at Step 8. Interviewers
+    ask this exact follow-up.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Knowing something about your data beats a general algorithm.</strong> The O(n log n)
+    lower bound applies to comparison sorts; the moment you know the values come from a small fixed
+    set, you can index by them instead of comparing them, and linear becomes possible. The same
+    reasoning gives you bucket sort, counting sort and radix sort. Whenever a sort feels expensive,
+    ask: <em>what do I know about these values that a general sort does not?</em></p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="03-valid-palindrome.html">&larr; Valid Palindrome</a>
+  <a href="05-trapping-rain-water.html">Next: Trapping Rain Water &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

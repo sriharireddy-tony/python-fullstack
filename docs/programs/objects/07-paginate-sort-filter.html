@@ -1,0 +1,1189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paginate, Sort and Filter</title>
+<meta name="description" content="The API endpoint you keep writing — operation order, stable sorts, and why offset pagination drops rows.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Object &amp; data shaping &middot; Problem 07</p>
+  <h1>Paginate, Sort and Filter an Array of Records</h1>
+  <p class="standfirst">The endpoint you have written a dozen times. Three things make it a real
+  question: <strong>the operations must happen in the right order</strong>, <code>sort</code> mutates
+  and stringifies, and offset pagination silently skips rows when the data changes underneath
+  it.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; filter, sort, slice</span></div>
+<pre><code>const users = [
+  { id: 1, name: 'Ada', age: 36, city: 'London', active: true },
+  { id: 2, name: 'Grace', age: 45, city: 'New York', active: true },
+  { id: 3, name: 'Alan', age: 41, city: 'London', active: false },
+  { id: 4, name: 'Edsger', age: 42, city: 'Amsterdam', active: true },
+  { id: 5, name: 'Barbara', age: 38, city: 'London', active: true },
+];
+
+function query(records, { filter = {}, sortBy, sortDir = 'asc', page = 1, perPage = 10 }) {
+  // 1. FILTER first -- so the total and the pages are of the filtered set
+  let rows = records.filter((r) =&gt;
+    Object.entries(filter).every(([k, v]) =&gt; r[k] === v));
+
+  const total = rows.length;
+
+  // 2. SORT the filtered rows
+  if (sortBy) {
+    rows = [...rows].sort((a, b) =&gt; {
+      const x = a[sortBy], y = b[sortBy];
+      const cmp = x &lt; y ? -1 : x &gt; y ? 1 : 0;
+      return sortDir === 'desc' ? -cmp : cmp;
+    });
+  }
+
+  // 3. SLICE the page out of the sorted rows
+  const start = (page - 1) * perPage;
+  const data = rows.slice(start, start + perPage);
+
+  return {
+    data,
+    total,
+    page,
+    perPage,
+    totalPages: Math.max(1, Math.ceil(total / perPage)),
+    hasNext: start + perPage &lt; total,
+  };
+}
+
+const result = query(users, {
+  filter: { city: 'London', active: true },
+  sortBy: 'age',
+  page: 1,
+  perPage: 2,
+});
+
+console.log('data :', result.data.map((u) =&gt; u.name + '(' + u.age + ')').join(', '));
+console.log('meta :', JSON.stringify({
+  total: result.total, page: result.page, totalPages: result.totalPages,
+  hasNext: result.hasNext,
+}));
+
+console.log('');
+console.log('page 2:', query(users, {
+  filter: { city: 'London', active: true }, sortBy: 'age', page: 2, perPage: 2,
+}).data.map((u) =&gt; u.name).join(', '));</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The order is not negotiable</span>
+    <p><strong>Filter, then sort, then slice.</strong></p>
+    <p>Filter first because the <code>total</code> and the page count must describe the filtered set,
+    and because there is no point sorting rows you are about to throw away.</p>
+    <p>Sort before slicing because slicing an unsorted array gives you an arbitrary page. Getting
+    those two backwards is the single most common bug in this code, and it is shown in Step 2.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; every wrong order, and what it does</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">the six orderings, four of them broken</span></div>
+<pre><code>const users = [
+  { id: 1, name: 'Ada', age: 36, active: true },
+  { id: 2, name: 'Grace', age: 45, active: false },
+  { id: 3, name: 'Alan', age: 41, active: true },
+  { id: 4, name: 'Edsger', age: 42, active: true },
+  { id: 5, name: 'Barbara', age: 38, active: false },
+  { id: 6, name: 'Donald', age: 39, active: true },
+];
+
+const F = (rows) =&gt; rows.filter((r) =&gt; r.active);
+const S = (rows) =&gt; [...rows].sort((a, b) =&gt; a.age - b.age);
+const P = (rows) =&gt; rows.slice(0, 2);            // page 1, 2 per page
+
+const orders = {
+  'filter, sort, page  ': (r) =&gt; P(S(F(r))),
+  'filter, page, sort  ': (r) =&gt; S(P(F(r))),
+  'sort, filter, page  ': (r) =&gt; P(F(S(r))),
+  'sort, page, filter  ': (r) =&gt; F(P(S(r))),
+  'page, filter, sort  ': (r) =&gt; S(F(P(r))),
+  'page, sort, filter  ': (r) =&gt; F(S(P(r))),
+};
+
+console.log('active users by age: Ada 36, Donald 39, Alan 41, Edsger 42');
+console.log('page 1 of 2 should be: Ada, Donald');
+console.log('');
+for (const [label, fn] of Object.entries(orders)) {
+  const out = fn(users);
+  console.log('  ' + label + (out.map((u) =&gt; u.name).join(', ') || '(empty)').padEnd(20) +
+              ' ' + out.length + ' row(s)');
+}
+
+console.log('');
+console.log('Two produced the right rows -- and only the first is');
+console.log('right for the right reason. Read the rest:');
+console.log('  filter, page, sort -> right rows, but "sorted" only');
+console.log('    within the page. Page 2 could start lower than page 1');
+console.log('    ends.');
+console.log('  sort, filter, page -> happens to be right here, and it');
+console.log('    sorted rows it then threw away. Wasteful, not wrong.');
+console.log('  sort, page, filter -> the page has FEWER than 2 rows,');
+console.log('    because filtering happened after slicing. Page sizes');
+console.log('    become unpredictable.');
+console.log('  page, ... anything -> only ever sees the first 2 of 6');
+console.log('    rows, so pages 2 onward are empty regardless.');
+
+console.log('');
+console.log('The "sort, page, filter" failure is the nastiest in');
+console.log('practice: the API returns 20 rows for perPage=20 on some');
+console.log('pages and 3 on others, and the front end concludes it has');
+console.log('reached the end.');
+
+const cases = [1, 2, 3];
+console.log('');
+console.log('page sizes under "sort, page, filter", perPage=2:');
+for (const page of cases) {
+  const sorted = S(users);
+  const paged = sorted.slice((page - 1) * 2, page * 2);
+  console.log('  page ' + page + ': ' + F(paged).length + ' row(s)');
+}</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why filtering first matters at scale</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; sort 100,000 or sort 500</span></div>
+<pre><code>const N = 100000;
+const rows = [];
+for (let i = 0; i &lt; N; i++) {
+  rows.push({ id: i, score: Math.sin(i) * 1000, rare: i % 200 === 0 });
+}
+
+const filterFirst = (r) =&gt; {
+  const filtered = r.filter((x) =&gt; x.rare);
+  return [...filtered].sort((a, b) =&gt; a.score - b.score).slice(0, 20);
+};
+
+const sortFirst = (r) =&gt; {
+  const sorted = [...r].sort((a, b) =&gt; a.score - b.score);
+  return sorted.filter((x) =&gt; x.rare).slice(0, 20);
+};
+
+let t = performance.now();
+const a = filterFirst(rows);
+const filterMs = performance.now() - t;
+
+t = performance.now();
+const b = sortFirst(rows);
+const sortMs = performance.now() - t;
+
+console.log(N.toLocaleString('en-US') + ' rows, ' +
+            rows.filter((x) =&gt; x.rare).length + ' match the filter');
+console.log('');
+console.log('  filter then sort : ' + filterMs.toFixed(1) + ' ms');
+console.log('  sort then filter : ' + sortMs.toFixed(1) + ' ms');
+console.log('  same 20 rows     :',
+            JSON.stringify(a.map((x) =&gt; x.id)) === JSON.stringify(b.map((x) =&gt; x.id)));
+console.log('  ratio            : ' +
+            Math.round(sortMs / Math.max(filterMs, 0.01)) + 'x');
+
+console.log('');
+console.log('Sorting 500 rows instead of 100,000 is the whole');
+console.log('difference. Both give the same answer, and one of them');
+console.log('sorted 99,500 rows it then discarded.');
+
+console.log('');
+console.log('And when the filter matches almost everything, the');
+console.log('advantage disappears -- which is the honest caveat:');
+const common = rows.map((x) =&gt; ({ ...x, rare: x.id % 2 === 0 }));
+t = performance.now();
+filterFirst(common);
+const fMs = performance.now() - t;
+t = performance.now();
+sortFirst(common);
+const sMs = performance.now() - t;
+console.log('  filter matches 50%:');
+console.log('    filter then sort: ' + fMs.toFixed(1) + ' ms');
+console.log('    sort then filter: ' + sMs.toFixed(1) + ' ms');
+console.log('');
+console.log('So filter-first is not a performance trick you have to');
+console.log('justify. It is the CORRECT order, and it is usually');
+console.log('faster as well.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; and the <code>sort</code> traps</h2>
+
+  <div class="note warn">
+    <span class="t">Three things about <code>Array.prototype.sort</code></span>
+    <p><strong>It mutates.</strong> <code>rows.sort(...)</code> reorders the caller's array. Always
+    <code>[...rows].sort(...)</code> or <code>rows.toSorted(...)</code>.</p>
+    <p><strong>Without a comparator it stringifies.</strong> <code>[10, 9, 1].sort()</code> gives
+    <code>[1, 10, 9]</code>.</p>
+    <p><strong>It is stable since ES2019.</strong> Equal elements keep their relative order, which is
+    what makes multi-column sorting work by sorting repeatedly &mdash; though doing it in one
+    comparator is better.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">all three, demonstrated</span></div>
+<pre><code>// 1. mutation
+const original = [3, 1, 2];
+const sorted = original.sort((a, b) =&gt; a - b);
+console.log('1. after original.sort():');
+console.log('   original:', original, ' returned:', sorted);
+console.log('   same array?', original === sorted);
+
+const safe = [3, 1, 2];
+const copy = [...safe].sort((a, b) =&gt; a - b);
+console.log('   with a copy -> original:', safe, ' sorted:', copy);
+console.log('   toSorted available?', typeof [].toSorted === 'function');
+if (typeof [].toSorted === 'function') {
+  const t = [3, 1, 2];
+  console.log('   t.toSorted() ->', t.toSorted((a, b) =&gt; a - b), ' t is still', t);
+}
+
+// 2. the default comparator
+console.log('');
+console.log('2. no comparator:');
+console.log('   [10, 9, 1].sort()        ->', [10, 9, 1].sort());
+console.log('   [10, 9, 1].sort((a,b)=>a-b) ->', [10, 9, 1].sort((a, b) =&gt; a - b));
+console.log('   ["b","a","C"].sort()     ->', ['b', 'a', 'C'].sort());
+console.log('   -- uppercase sorts before lowercase, because it');
+console.log('      compares UTF-16 code units:');
+console.log('      "C" is', 'C'.charCodeAt(0), 'and "a" is', 'a'.charCodeAt(0));
+console.log('   localeCompare fixes it   ->',
+            ['b', 'a', 'C'].sort((x, y) =&gt; x.localeCompare(y)));
+console.log('   and it handles accents   ->',
+            ['zebra', 'ábaco', 'apple'].sort((x, y) =&gt; x.localeCompare(y)));
+console.log('   raw sort on the same     ->', ['zebra', 'ábaco', 'apple'].sort());
+
+// 3. stability
+console.log('');
+console.log('3. stability:');
+const records = [
+  { name: 'Ada', dept: 'eng' },
+  { name: 'Grace', dept: 'eng' },
+  { name: 'Alan', dept: 'ops' },
+  { name: 'Barbara', dept: 'eng' },
+];
+const byDept = [...records].sort((a, b) =&gt; a.dept.localeCompare(b.dept));
+console.log('   sorted by dept:', byDept.map((r) =&gt; r.name).join(', '));
+console.log('   -- Ada, Grace, Barbara kept their original relative');
+console.log('      order within "eng". That is stability, and it is');
+console.log('      guaranteed by the spec since ES2019.');
+
+const twoPass = [...records]
+  .sort((a, b) =&gt; a.name.localeCompare(b.name))     // secondary first
+  .sort((a, b) =&gt; a.dept.localeCompare(b.dept));    // primary last
+console.log('   dept then name, by sorting twice:',
+            twoPass.map((r) =&gt; r.dept + '/' + r.name).join(', '));
+console.log('   -- correct, and it sorts twice. One comparator is');
+console.log('      better; see Step 6.');</code></pre>
+  </div>
+
+  <div class="trace">
+<pre>  The pipeline, with the decisions marked:
+
+      rows
+        |
+        |  FILTER   -- every active predicate must pass (AND)
+        |             text search is usually case-insensitive
+        |             and matches a SUBSTRING, not equality
+        v
+      filtered  ------------> total = filtered.length
+        |                     (the count the UI shows)
+        |  SORT     -- on a COPY
+        |             a comparator, never the default
+        |             tie-break on a unique key, or paging is unstable
+        v
+      sorted
+        |
+        |  SLICE    -- offset = (page - 1) * perPage
+        |             clamp page to [1, totalPages]
+        v
+      data
+</pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; and the tie-break that everyone forgets</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; a row appears on two pages</span></div>
+<pre><code>// 6 users, three of them the same age
+const users = [
+  { id: 1, name: 'Ada', age: 40 },
+  { id: 2, name: 'Grace', age: 40 },
+  { id: 3, name: 'Alan', age: 40 },
+  { id: 4, name: 'Edsger', age: 35 },
+  { id: 5, name: 'Barbara', age: 45 },
+  { id: 6, name: 'Donald', age: 40 },
+];
+
+// a comparator with NO tie-break
+const noTieBreak = (a, b) =&gt; a.age - b.age;
+
+// with a tie-break on the unique id
+const withTieBreak = (a, b) =&gt; a.age - b.age || a.id - b.id;
+
+const page = (rows, cmp, p, perPage) =&gt;
+  [...rows].sort(cmp).slice((p - 1) * perPage, p * perPage);
+
+console.log('sorted by age, no tie-break, perPage 2:');
+for (const p of [1, 2, 3]) {
+  console.log('  page ' + p + ': ' +
+              page(users, noTieBreak, p, 2).map((u) =&gt; u.name).join(', '));
+}
+
+console.log('');
+console.log('Stable sort means this IS consistent -- as long as the');
+console.log('input array order never changes. Now simulate a database,');
+console.log('which makes no such promise:');
+
+const shuffled = [users[3], users[5], users[0], users[4], users[2], users[1]];
+
+console.log('');
+console.log('the same query against differently-ordered rows:');
+const seen = new Map();
+for (const p of [1, 2, 3]) {
+  const names = page(shuffled, noTieBreak, p, 2).map((u) =&gt; u.name);
+  console.log('  page ' + p + ': ' + names.join(', '));
+  for (const n of names) seen.set(n, (seen.get(n) || 0) + 1);
+}
+
+console.log('');
+console.log('with a tie-break on id, the order is fully determined:');
+for (const rows of [users, shuffled]) {
+  const all = [1, 2, 3].flatMap((p) =&gt;
+    page(rows, withTieBreak, p, 2).map((u) =&gt; u.name));
+  console.log('  ' + all.join(', '));
+}
+
+console.log('');
+console.log('A stable sort only preserves the order it was GIVEN. If');
+console.log('the input order can change -- a different query plan, a');
+console.log('new index, rows inserted -- then "sorted by age" is not a');
+console.log('total order and pagination is undefined.');
+console.log('');
+console.log('The fix is one operator: `|| a.id - b.id`. Always');
+console.log('tie-break on something unique.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function queryLoud(records, opts) {
+  const { filter = {}, search = '', searchIn = [], sortBy, sortDir = 'asc',
+          page = 1, perPage = 2 } = opts;
+
+  console.log('start with ' + records.length + ' rows');
+
+  let rows = records;
+
+  for (const [key, value] of Object.entries(filter)) {
+    const before = rows.length;
+    rows = rows.filter((r) =&gt; r[key] === value);
+    console.log('  filter ' + key + ' === ' + JSON.stringify(value) +
+                ': ' + before + ' -> ' + rows.length);
+  }
+
+  if (search) {
+    const needle = search.toLowerCase();
+    const before = rows.length;
+    rows = rows.filter((r) =&gt; searchIn.some((k) =&gt;
+      String(r[k] ?? '').toLowerCase().includes(needle)));
+    console.log('  search ' + JSON.stringify(search) + ' in [' + searchIn +
+                ']: ' + before + ' -> ' + rows.length);
+  }
+
+  const total = rows.length;
+  console.log('  total = ' + total + '  (this is what the UI shows)');
+
+  if (sortBy) {
+    rows = [...rows].sort((a, b) =&gt; {
+      const x = a[sortBy], y = b[sortBy];
+      const cmp = x &lt; y ? -1 : x &gt; y ? 1 : 0;
+      return (sortDir === 'desc' ? -cmp : cmp) || (a.id - b.id);
+    });
+    console.log('  sorted by ' + sortBy + ' ' + sortDir + ' (tie-break on id): ' +
+                rows.map((r) =&gt; r.name).join(', '));
+  }
+
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  const clamped = Math.min(Math.max(1, page), totalPages);
+  if (clamped !== page) {
+    console.log('  page ' + page + ' clamped to ' + clamped +
+                ' (only ' + totalPages + ' page(s))');
+  }
+  const start = (clamped - 1) * perPage;
+  const data = rows.slice(start, start + perPage);
+  console.log('  slice(' + start + ', ' + (start + perPage) + '): ' +
+              data.map((r) =&gt; r.name).join(', '));
+
+  return { data, total, page: clamped, perPage, totalPages };
+}
+
+const users = [
+  { id: 1, name: 'Ada', age: 36, city: 'London', active: true },
+  { id: 2, name: 'Grace', age: 45, city: 'New York', active: true },
+  { id: 3, name: 'Alan', age: 41, city: 'London', active: false },
+  { id: 4, name: 'Edsger', age: 42, city: 'Amsterdam', active: true },
+  { id: 5, name: 'Barbara', age: 38, city: 'London', active: true },
+  { id: 6, name: 'Donald', age: 39, city: 'London', active: true },
+];
+
+console.log('=== London, active, by age, page 2 of 2 per page ===');
+const r = queryLoud(users, {
+  filter: { city: 'London', active: true }, sortBy: 'age', page: 2, perPage: 2,
+});
+console.log('RESULT:', JSON.stringify({ total: r.total, page: r.page,
+                                        totalPages: r.totalPages,
+                                        data: r.data.map((u) =&gt; u.name) }));
+
+console.log('');
+console.log('=== with a search, and a page number past the end ===');
+const r2 = queryLoud(users, { search: 'a', searchIn: ['name', 'city'],
+                              sortBy: 'name', page: 99, perPage: 3 });
+console.log('RESULT:', r2.data.map((u) =&gt; u.name).join(', '));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; the comparator, done properly</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">multi-column sorting in one comparator</span></div>
+<pre><code>// A comparator factory: a list of { key, dir, type } specs.
+function makeComparator(specs) {
+  const compare = {
+    number: (a, b) =&gt; a - b,
+    string: (a, b) =&gt; String(a).localeCompare(String(b)),
+    date: (a, b) =&gt; new Date(a) - new Date(b),
+    boolean: (a, b) =&gt; (a === b ? 0 : a ? 1 : -1),
+  };
+
+  return (rowA, rowB) =&gt; {
+    for (const { key, dir = 'asc', type = 'string' } of specs) {
+      const a = rowA[key], b = rowB[key];
+
+      // nulls always last, whichever direction
+      const aNull = a === null || a === undefined || a === '';
+      const bNull = b === null || b === undefined || b === '';
+      if (aNull &amp;&amp; bNull) continue;
+      if (aNull) return 1;
+      if (bNull) return -1;
+
+      const cmp = compare[type](a, b);
+      if (cmp !== 0) return dir === 'desc' ? -cmp : cmp;
+    }
+    return 0;
+  };
+}
+
+const rows = [
+  { id: 1, dept: 'eng', name: 'ada', salary: 100, joined: '2020-01-01' },
+  { id: 2, dept: 'eng', name: 'Grace', salary: 120, joined: '2019-05-01' },
+  { id: 3, dept: 'ops', name: 'Alan', salary: 100, joined: '2021-03-01' },
+  { id: 4, dept: 'eng', name: 'barbara', salary: null, joined: '2018-01-01' },
+  { id: 5, dept: 'ops', name: 'Donald', salary: 90, joined: '2022-07-01' },
+];
+
+const show = (list) =&gt; list.map((r) =&gt;
+  r.dept + '/' + r.name + '/' + r.salary).join('  ');
+
+console.log('dept asc, then salary desc:');
+console.log(' ', show([...rows].sort(makeComparator([
+  { key: 'dept', type: 'string' },
+  { key: 'salary', type: 'number', dir: 'desc' },
+  { key: 'id', type: 'number' },
+]))));
+
+console.log('');
+console.log('name, case-insensitively:');
+console.log(' ', [...rows].sort(makeComparator([{ key: 'name' }]))
+  .map((r) =&gt; r.name).join(', '));
+console.log('  compare with the default sort:');
+console.log(' ', [...rows].sort((a, b) =&gt; (a.name &lt; b.name ? -1 : 1))
+  .map((r) =&gt; r.name).join(', '));
+console.log('  -- raw comparison puts every capital before every');
+console.log('     lowercase. localeCompare does what a user expects.');
+
+console.log('');
+console.log('by joined date:');
+console.log(' ', [...rows].sort(makeComparator([{ key: 'joined', type: 'date' }]))
+  .map((r) =&gt; r.name + '(' + r.joined.slice(0, 4) + ')').join(', '));
+
+console.log('');
+console.log('nulls last, in BOTH directions:');
+console.log('  asc :', [...rows].sort(makeComparator([
+  { key: 'salary', type: 'number' }, { key: 'id', type: 'number' }]))
+  .map((r) =&gt; r.salary).join(', '));
+console.log('  desc:', [...rows].sort(makeComparator([
+  { key: 'salary', type: 'number', dir: 'desc' }, { key: 'id', type: 'number' }]))
+  .map((r) =&gt; r.salary).join(', '));
+console.log('  -- null is last either way, which is what a table');
+console.log('     header click should do. Reversing the comparator');
+console.log('     blindly would float the nulls to the top.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">the comparator contract, and what breaks it</span></div>
+<pre><code>const rows = Array.from({ length: 12 }, (_, i) =&gt; ({ id: i, score: i % 4 }));
+
+// a comparator that returns a BOOLEAN
+const boolCmp = (a, b) =&gt; a.score &gt; b.score;
+
+// one that is not consistent
+const randomCmp = () =&gt; Math.random() - 0.5;
+
+// one that does not handle equality
+const noZero = (a, b) =&gt; (a.score &lt; b.score ? -1 : 1);
+
+const proper = (a, b) =&gt; a.score - b.score || a.id - b.id;
+
+const isSorted = (list) =&gt; list.every((r, i) =&gt;
+  i === 0 || list[i - 1].score &lt;= r.score);
+
+console.log('boolean comparator  -> sorted?',
+            isSorted([...rows].sort(boolCmp)),
+            ' scores:', [...rows].sort(boolCmp).map((r) =&gt; r.score).join(''));
+console.log('  -- true coerces to 1 and false to 0, so it never');
+console.log('     returns a negative. The engine is told "equal or');
+console.log('     after", never "before".');
+
+console.log('');
+console.log('random comparator   -> sorted?', isSorted([...rows].sort(randomCmp)));
+console.log('  -- and it is not even a fair shuffle. Use a proper');
+console.log('     Fisher-Yates if you want random order.');
+
+console.log('');
+const a = [...rows].sort(noZero).map((r) =&gt; r.id).join(',');
+const b = [...rows].sort(noZero).map((r) =&gt; r.id).join(',');
+console.log('no-zero comparator  -> sorted?', isSorted([...rows].sort(noZero)));
+console.log('  stable across two calls?', a === b);
+console.log('  -- it may sort correctly and it destroys stability,');
+console.log('     because it claims a definite order for equal items.');
+
+console.log('');
+console.log('proper comparator   -> sorted?', isSorted([...rows].sort(proper)),
+            ' fully determined:',
+            [...rows].sort(proper).map((r) =&gt; r.id).join(',') ===
+            [...rows].reverse().sort(proper).map((r) =&gt; r.id).join(','));
+
+console.log('');
+console.log('The contract, and all four parts matter:');
+console.log('  return a NUMBER: &lt; 0, 0, or > 0');
+console.log('  cmp(a,b) and cmp(b,a) must have opposite signs');
+console.log('  if cmp(a,b) === 0 then a and b are interchangeable');
+console.log('  it must be transitive, and the same every time');
+console.log('');
+console.log('Break any of them and the result is not just');
+console.log('unsorted -- it is implementation-defined.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the endpoint, and cursor pagination</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function makeComparator(specs) {
+  const cmp = {
+    number: (a, b) =&gt; a - b,
+    string: (a, b) =&gt; String(a).localeCompare(String(b)),
+    date: (a, b) =&gt; new Date(a) - new Date(b),
+    boolean: (a, b) =&gt; (a === b ? 0 : a ? 1 : -1),
+  };
+  return (ra, rb) =&gt; {
+    for (const { key, dir = 'asc', type = 'string' } of specs) {
+      const a = ra[key], b = rb[key];
+      const an = a === null || a === undefined || a === '';
+      const bn = b === null || b === undefined || b === '';
+      if (an &amp;&amp; bn) continue;
+      if (an) return 1;
+      if (bn) return -1;
+      const c = cmp[type](a, b);
+      if (c !== 0) return dir === 'desc' ? -c : c;
+    }
+    return 0;
+  };
+}
+
+const OPERATORS = {
+  eq: (v, t) =&gt; v === t,
+  ne: (v, t) =&gt; v !== t,
+  gt: (v, t) =&gt; v &gt; t,
+  gte: (v, t) =&gt; v &gt;= t,
+  lt: (v, t) =&gt; v &lt; t,
+  lte: (v, t) =&gt; v &lt;= t,
+  in: (v, t) =&gt; Array.isArray(t) &amp;&amp; t.includes(v),
+  contains: (v, t) =&gt; String(v ?? '').toLowerCase().includes(String(t).toLowerCase()),
+};
+
+function query(records, options = {}) {
+  const {
+    where = [],              // [{ key, op, value }]
+    search = '',
+    searchIn = [],
+    sort = [],               // [{ key, dir, type }]
+    page = 1,
+    perPage = 20,
+    maxPerPage = 100,
+  } = options;
+
+  const size = Math.min(Math.max(1, Math.floor(perPage) || 1), maxPerPage);
+
+  // 1. FILTER
+  let rows = records;
+  for (const { key, op = 'eq', value } of where) {
+    const test = OPERATORS[op];
+    if (!test) throw new Error('unknown operator: ' + op);
+    rows = rows.filter((r) =&gt; test(r[key], value));
+  }
+
+  if (search &amp;&amp; searchIn.length) {
+    const needle = search.toLowerCase();
+    rows = rows.filter((r) =&gt; searchIn.some((k) =&gt;
+      String(r[k] ?? '').toLowerCase().includes(needle)));
+  }
+
+  const total = rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / size));
+  const current = Math.min(Math.max(1, Math.floor(page) || 1), totalPages);
+
+  // 2. SORT -- on a copy, always with a unique tie-break
+  if (sort.length) {
+    const specs = sort.some((s) =&gt; s.key === 'id')
+      ? sort
+      : [...sort, { key: 'id', type: 'number' }];
+    rows = [...rows].sort(makeComparator(specs));
+  }
+
+  // 3. SLICE
+  const from = (current - 1) * size;
+  const data = rows.slice(from, from + size);
+
+  return {
+    data,
+    meta: {
+      total, page: current, perPage: size, totalPages,
+      from: total === 0 ? 0 : from + 1,
+      to: from + data.length,
+      hasPrev: current &gt; 1,
+      hasNext: current &lt; totalPages,
+    },
+  };
+}
+
+const users = [
+  { id: 1, name: 'Ada', age: 36, city: 'London', active: true, joined: '2020-01-01' },
+  { id: 2, name: 'Grace', age: 45, city: 'New York', active: true, joined: '2019-05-01' },
+  { id: 3, name: 'Alan', age: 41, city: 'London', active: false, joined: '2021-03-01' },
+  { id: 4, name: 'Edsger', age: 42, city: 'Amsterdam', active: true, joined: '2018-01-01' },
+  { id: 5, name: 'Barbara', age: 38, city: 'London', active: true, joined: '2022-07-01' },
+  { id: 6, name: 'Donald', age: 39, city: 'London', active: true, joined: '2017-11-01' },
+  { id: 7, name: 'Tim', age: 41, city: 'London', active: true, joined: '2023-02-01' },
+];
+
+const r1 = query(users, {
+  where: [{ key: 'city', op: 'eq', value: 'London' },
+          { key: 'active', op: 'eq', value: true }],
+  sort: [{ key: 'age', type: 'number', dir: 'desc' }],
+  page: 1, perPage: 2,
+});
+console.log('London + active, age desc, page 1:');
+console.log('  data:', r1.data.map((u) =&gt; u.name + '(' + u.age + ')').join(', '));
+console.log('  meta:', JSON.stringify(r1.meta));
+
+console.log('');
+console.log('page 2:');
+const r2 = query(users, { ...{
+  where: [{ key: 'city', op: 'eq', value: 'London' },
+          { key: 'active', op: 'eq', value: true }],
+  sort: [{ key: 'age', type: 'number', dir: 'desc' }],
+}, page: 2, perPage: 2 });
+console.log('  data:', r2.data.map((u) =&gt; u.name + '(' + u.age + ')').join(', '));
+console.log('  meta:', JSON.stringify(r2.meta));
+
+console.log('');
+console.log('operators:');
+console.log('  age gte 41   :', query(users,
+  { where: [{ key: 'age', op: 'gte', value: 41 }], perPage: 99 })
+  .data.map((u) =&gt; u.name).join(', '));
+console.log('  city in [..] :', query(users,
+  { where: [{ key: 'city', op: 'in', value: ['Amsterdam', 'New York'] }], perPage: 99 })
+  .data.map((u) =&gt; u.name).join(', '));
+console.log('  name contains "a":', query(users,
+  { where: [{ key: 'name', op: 'contains', value: 'a' }], perPage: 99 })
+  .data.map((u) =&gt; u.name).join(', '));
+
+console.log('');
+console.log('robustness:');
+console.log('  page 999        :', JSON.stringify(query(users, { page: 999 }).meta));
+console.log('  perPage 100000  :', query(users, { perPage: 100000 }).meta.perPage,
+            '(clamped to maxPerPage)');
+console.log('  perPage 0       :', query(users, { perPage: 0 }).meta.perPage);
+console.log('  no matches      :', JSON.stringify(query(users,
+  { where: [{ key: 'city', op: 'eq', value: 'Mars' }] }).meta));
+console.log('  bad operator    :');
+try { query(users, { where: [{ key: 'x', op: 'like', value: 1 }] }); }
+catch (e) { console.log('    ' + e.message); }</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">why offset pagination drops rows, and what to do</span></div>
+<pre><code>// Offset pagination reads "skip 20, take 20". If a row is inserted
+// or deleted between requests, the window shifts under the reader.
+let rows = Array.from({ length: 10 }, (_, i) =&gt;
+  ({ id: i + 1, name: 'user' + (i + 1) }));
+
+const offsetPage = (list, page, size) =&gt;
+  [...list].sort((a, b) =&gt; a.id - b.id).slice((page - 1) * size, page * size);
+
+console.log('offset pagination, 3 per page:');
+const p1 = offsetPage(rows, 1, 3);
+console.log('  page 1:', p1.map((r) =&gt; r.name).join(', '));
+
+// a row is DELETED between requests
+rows = rows.filter((r) =&gt; r.id !== 2);
+const p2 = offsetPage(rows, 2, 3);
+console.log('  (user2 deleted between requests)');
+console.log('  page 2:', p2.map((r) =&gt; r.name).join(', '));
+console.log('  -- user4 was on neither page. The reader never sees it.');
+
+// and an INSERT duplicates
+rows = Array.from({ length: 10 }, (_, i) =&gt; ({ id: i + 1, name: 'user' + (i + 1) }));
+const q1 = offsetPage(rows, 1, 3);
+rows.unshift({ id: 0, name: 'user0' });
+const q2 = offsetPage(rows, 2, 3);
+console.log('');
+console.log('  page 1:', q1.map((r) =&gt; r.name).join(', '));
+console.log('  (user0 inserted at the front)');
+console.log('  page 2:', q2.map((r) =&gt; r.name).join(', '));
+console.log('  -- user3 appears on BOTH pages.');
+
+// CURSOR pagination: "give me rows after this one"
+function cursorPage(list, { after = null, size = 3 }) {
+  const sorted = [...list].sort((a, b) =&gt; a.id - b.id);
+  const start = after === null ? 0 : sorted.findIndex((r) =&gt; r.id === after) + 1;
+  const data = sorted.slice(start, start + size);
+  return {
+    data,
+    nextCursor: data.length === size ? data[data.length - 1].id : null,
+  };
+}
+
+console.log('');
+console.log('cursor pagination:');
+rows = Array.from({ length: 10 }, (_, i) =&gt; ({ id: i + 1, name: 'user' + (i + 1) }));
+let cursor = null;
+const seen = [];
+for (let i = 0; i &lt; 2; i++) {
+  const { data, nextCursor } = cursorPage(rows, { after: cursor, size: 3 });
+  console.log('  after ' + cursor + ': ' + data.map((r) =&gt; r.name).join(', '));
+  seen.push(...data.map((r) =&gt; r.name));
+  cursor = nextCursor;
+  if (i === 0) {
+    rows.unshift({ id: 0, name: 'user0' });
+    rows = rows.filter((r) =&gt; r.id !== 2);
+    console.log('  (user0 inserted, user2 deleted)');
+  }
+}
+console.log('  rows seen:', seen.join(', '));
+console.log('  duplicates?', seen.length !== new Set(seen).size);
+console.log('');
+console.log('The cursor names a POSITION IN THE DATA rather than a');
+console.log('count of skipped rows, so inserts and deletes elsewhere');
+console.log('cannot shift the window.');
+console.log('');
+console.log('The trade-offs, and they are real:');
+console.log('  no "page 7" -- you can only go forwards from a cursor');
+console.log('  no total page count without a separate COUNT query');
+console.log('  the cursor must encode EVERY sort key, not just the id,');
+console.log('    or ties break it again');
+console.log('  and it is much faster on a large table: LIMIT with a');
+console.log('    WHERE uses the index, OFFSET 100000 does not.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">a composite cursor, for a non-unique sort</span></div>
+<pre><code>// Sorting by a non-unique column means the cursor has to carry
+// both the sort value AND the tie-break, or rows are skipped.
+const rows = [
+  { id: 1, score: 100 }, { id: 2, score: 90 }, { id: 3, score: 90 },
+  { id: 4, score: 90 }, { id: 5, score: 80 }, { id: 6, score: 80 },
+];
+
+const byScoreDesc = (a, b) =&gt; b.score - a.score || a.id - b.id;
+
+// WRONG: the cursor is only the score
+function badCursor(list, { afterScore = null, size = 2 }) {
+  const sorted = [...list].sort(byScoreDesc);
+  const data = (afterScore === null
+    ? sorted
+    : sorted.filter((r) =&gt; r.score &lt; afterScore)
+  ).slice(0, size);
+  return { data, next: data.length ? data[data.length - 1].score : null };
+}
+
+// RIGHT: the cursor is (score, id) -- the full sort key
+function goodCursor(list, { after = null, size = 2 }) {
+  const sorted = [...list].sort(byScoreDesc);
+  const data = (after === null
+    ? sorted
+    : sorted.filter((r) =&gt;
+        r.score &lt; after.score || (r.score === after.score &amp;&amp; r.id &gt; after.id))
+  ).slice(0, size);
+  const last = data[data.length - 1];
+  return { data, next: data.length === size ? { score: last.score, id: last.id } : null };
+}
+
+console.log('sorted: ' + [...rows].sort(byScoreDesc)
+  .map((r) =&gt; '#' + r.id + '/' + r.score).join(' '));
+
+console.log('');
+console.log('score-only cursor:');
+let c = null, seen = [];
+for (let i = 0; i &lt; 4; i++) {
+  const { data, next } = badCursor(rows, { afterScore: c, size: 2 });
+  if (!data.length) break;
+  console.log('  after score ' + c + ': ' + data.map((r) =&gt; '#' + r.id).join(' '));
+  seen.push(...data.map((r) =&gt; r.id));
+  c = next;
+}
+console.log('  ids seen:', seen.join(', '), ' of 6');
+console.log('  MISSING :', rows.map((r) =&gt; r.id).filter((id) =&gt; !seen.includes(id)).join(', '));
+console.log('  -- everything with score 90 after the first two was');
+console.log('     skipped, because "score &lt; 90" excludes them all.');
+
+console.log('');
+console.log('composite (score, id) cursor:');
+let k = null; seen = [];
+for (let i = 0; i &lt; 5; i++) {
+  const { data, next } = goodCursor(rows, { after: k, size: 2 });
+  if (!data.length) break;
+  console.log('  after ' + JSON.stringify(k) + ': ' +
+              data.map((r) =&gt; '#' + r.id).join(' '));
+  seen.push(...data.map((r) =&gt; r.id));
+  k = next;
+  if (!k) break;
+}
+console.log('  ids seen:', seen.join(', '), ' of 6');
+console.log('  complete:', seen.length === rows.length &amp;&amp;
+            new Set(seen).size === rows.length);
+
+console.log('');
+console.log('The rule: the cursor must be the FULL sort key, in the');
+console.log('same order, with the same tie-break. In SQL that is the');
+console.log('row-value comparison:');
+console.log('  WHERE (score, id) < (:score, :id) ORDER BY score DESC, id');
+console.log('');
+console.log('Which is also why the sort must include a unique column:');
+console.log('without one there is no cursor you could write.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Step</th><th>Cost</th></tr></thead>
+      <tbody>
+        <tr><td>filter</td><td class="mono">O(n) per predicate</td></tr>
+        <tr><td>sort</td><td class="mono">O(m log m), m = rows that survived the filter</td></tr>
+        <tr><td>slice</td><td class="mono">O(perPage)</td></tr>
+        <tr><td><strong>total</strong></td><td class="mono">O(n &middot; p + m log m)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Filtering first is what makes <code>m</code> small, and <code>m log m</code> is the dominant term
+  &mdash; so the order is a complexity decision as well as a correctness one.</p>
+
+  <p>The real point about complexity here, though, is different: <strong>all of this belongs in the
+  database.</strong> Doing it in JavaScript means loading every row into memory to return twenty of
+  them. It is the right answer for an in-memory table, a client-side data grid, or a fixture &mdash;
+  and the wrong answer for a table with a million rows, where <code>WHERE</code>, <code>ORDER BY</code>
+  and <code>LIMIT</code> use indexes you cannot replicate in an array.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Filter, then sort, then slice &mdash; in that order, because the total has to describe
+    the filtered set and slicing before sorting gives you an arbitrary page. I sort a copy, never the
+    input, always with an explicit comparator, and always with a unique tie-break, because a stable
+    sort only preserves the order it was given &mdash; if the input order can change, two equal rows
+    can swap between requests and a row is missed or duplicated. I clamp the page and page size. And I
+    would say that offset pagination is inherently racy with concurrent writes: a delete shifts
+    everything up and a row is skipped, so for an append-heavy feed I would use a cursor carrying the
+    full sort key. In production, all of this goes in the query, not in JavaScript.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Slicing before sorting</h3>
+
+  <p>Step 2. Four of the six orderings are wrong, and the one that returns short pages is the one that
+  confuses the front end most.</p>
+
+  <h3>2. Mutating the caller's array</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the source data is reordered</span></div>
+<pre><code>const ALL_USERS = [
+  { id: 3, name: 'Alan' }, { id: 1, name: 'Ada' }, { id: 2, name: 'Grace' },
+];
+
+function queryMutating(records, sortBy) {
+  return records.sort((a, b) =&gt; (a[sortBy] &lt; b[sortBy] ? -1 : 1));
+}
+function queryPure(records, sortBy) {
+  return [...records].sort((a, b) =&gt; (a[sortBy] &lt; b[sortBy] ? -1 : 1));
+}
+
+console.log('source order:', ALL_USERS.map((u) =&gt; u.name).join(', '));
+queryMutating(ALL_USERS, 'name');
+console.log('after one query by name:', ALL_USERS.map((u) =&gt; u.name).join(', '));
+queryMutating(ALL_USERS, 'id');
+console.log('after one query by id  :', ALL_USERS.map((u) =&gt; u.name).join(', '));
+console.log('  -- the module-level array is now in whatever order the');
+console.log('     last request asked for.');
+
+console.log('');
+console.log('Why that is worse than untidy:');
+console.log('  a component holding a reference sees rows jump;');
+console.log('  React sees the same array identity and may not');
+console.log('    re-render at all, so the UI and the data disagree;');
+console.log('  and any code relying on the insertion order is now');
+console.log('    subject to whatever the last query did.');
+
+const RESET = [{ id: 3, name: 'Alan' }, { id: 1, name: 'Ada' }, { id: 2, name: 'Grace' }];
+console.log('');
+console.log('with a copy:');
+console.log('  query result :', queryPure(RESET, 'name').map((u) =&gt; u.name).join(', '));
+console.log('  source order :', RESET.map((u) =&gt; u.name).join(', '), '-- untouched');
+
+console.log('');
+console.log('And note the identity change is a FEATURE for React:');
+const a = queryPure(RESET, 'name');
+const b = queryPure(RESET, 'id');
+console.log('  two queries return different arrays:', a !== b);
+console.log('  so a memoised list component actually re-renders.');</code></pre>
+  </div>
+
+  <h3>3. No tie-break in the sort</h3>
+
+  <p>Step 5. It looks fine in every test, because the test fixture always arrives in the same order.</p>
+
+  <h3>4. The default comparator on numbers</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the page-2 boundary is nonsense</span></div>
+<pre><code>const rows = [
+  { id: 1, views: 9 }, { id: 2, views: 100 }, { id: 3, views: 25 },
+  { id: 4, views: 3 }, { id: 5, views: 1000 }, { id: 6, views: 7 },
+];
+
+const byViews = [...rows].map((r) =&gt; r.views);
+
+console.log('raw numbers            :', byViews.join(', '));
+console.log('sort() with no comparator:', [...byViews].sort().join(', '));
+console.log('sort((a,b) => a - b)     :', [...byViews].sort((a, b) =&gt; a - b).join(', '));
+
+console.log('');
+console.log('Why: the default comparator converts each element to a');
+console.log('STRING and compares UTF-16 code units.');
+console.log('  "1000" < "100" < "25" < "3" < "7" < "9"');
+console.log('  because "1" < "2" < "3" < "7" < "9" at the first');
+console.log('  character.');
+
+console.log('');
+console.log('And what it does to pagination -- top 3 by views:');
+const wrongTop = [...rows].sort((a, b) =&gt; (a.views &lt; b.views ? 1 : -1)).slice(0, 3);
+const noCmpTop = [...rows].sort().reverse().slice(0, 3);
+const rightTop = [...rows].sort((a, b) =&gt; b.views - a.views).slice(0, 3);
+console.log('  proper comparator:', rightTop.map((r) =&gt; r.views).join(', '));
+console.log('  default + reverse:', noCmpTop.map((r) =&gt; r.views).join(', '));
+console.log('  -- "top 3" reported 9, 7, 3 instead of 1000, 100, 25.');
+
+console.log('');
+console.log('It also catches mixed types and dates:');
+console.log('  [10, "9", 1].sort()      :', JSON.stringify([10, '9', 1].sort()));
+const dates = ['2024-01-15', '2023-12-01', '2024-02-01'];
+console.log('  ISO date strings sort()  :', dates.slice().sort().join(', '));
+console.log('  -- ISO 8601 sorts correctly as a string, which is the');
+console.log('     one place the default comparator is safe, and the');
+console.log('     reason to store dates in that format.');
+const usDates = ['01/15/2024', '12/01/2023', '02/01/2024'];
+console.log('  US-format dates sort()   :', usDates.slice().sort().join(', '));
+console.log('  -- and that is why you never store them that way.');</code></pre>
+  </div>
+
+  <h3>5. Recomputing the whole pipeline on every keystroke</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct, and it re-sorts 50,000 rows per character typed</span></div>
+<pre><code>const N = 50000;
+const rows = Array.from({ length: N }, (_, i) =&gt; ({
+  id: i, name: 'user' + i, score: (i * 7919) % N,
+}));
+
+function query(records, search, sortBy) {
+  const needle = search.toLowerCase();
+  const filtered = needle
+    ? records.filter((r) =&gt; r.name.toLowerCase().includes(needle))
+    : records;
+  const sorted = [...filtered].sort((a, b) =&gt; a[sortBy] - b[sortBy] || a.id - b.id);
+  return { data: sorted.slice(0, 20), total: filtered.length };
+}
+
+// a user typing "user123"
+const typed = 'user123';
+
+let t = performance.now();
+for (let i = 1; i &lt;= typed.length; i++) query(rows, typed.slice(0, i), 'score');
+const naiveMs = performance.now() - t;
+
+// memoise the filter step, since the sort key did not change
+let lastSearch = null, lastFiltered = null;
+function queryMemo(records, search, sortBy) {
+  const needle = search.toLowerCase();
+  if (needle !== lastSearch) {
+    lastSearch = needle;
+    lastFiltered = needle
+      ? records.filter((r) =&gt; r.name.toLowerCase().includes(needle))
+      : records;
+  }
+  const sorted = [...lastFiltered].sort((a, b) =&gt; a[sortBy] - b[sortBy] || a.id - b.id);
+  return { data: sorted.slice(0, 20), total: lastFiltered.length };
+}
+
+// and narrow from the PREVIOUS result, since each keystroke only
+// ever removes rows
+let prevSearch = '', prevRows = rows;
+function queryIncremental(records, search, sortBy) {
+  const needle = search.toLowerCase();
+  const base = needle.startsWith(prevSearch) ? prevRows : records;
+  const filtered = needle
+    ? base.filter((r) =&gt; r.name.toLowerCase().includes(needle))
+    : records;
+  prevSearch = needle;
+  prevRows = filtered;
+  const sorted = [...filtered].sort((a, b) =&gt; a[sortBy] - b[sortBy] || a.id - b.id);
+  return { data: sorted.slice(0, 20), total: filtered.length };
+}
+
+t = performance.now();
+for (let i = 1; i &lt;= typed.length; i++) queryMemo(rows, typed.slice(0, i), 'score');
+const memoMs = performance.now() - t;
+
+prevSearch = ''; prevRows = rows;
+t = performance.now();
+let last;
+for (let i = 1; i &lt;= typed.length; i++) {
+  last = queryIncremental(rows, typed.slice(0, i), 'score');
+}
+const incMs = performance.now() - t;
+
+console.log(N.toLocaleString('en-US') + ' rows, typing "' + typed + '" one char at a time');
+console.log('');
+console.log('  full pipeline each keystroke : ' + naiveMs.toFixed(0) + ' ms');
+console.log('  memoised filter              : ' + memoMs.toFixed(0) + ' ms');
+console.log('  narrowed from the previous   : ' + incMs.toFixed(0) + ' ms');
+console.log('');
+console.log('  final result agrees:',
+            JSON.stringify(last.data.map((r) =&gt; r.id)) ===
+            JSON.stringify(query(rows, typed, 'score').data.map((r) =&gt; r.id)));
+
+console.log('');
+console.log('Three things to take from this:');
+console.log('  a growing search string can only REMOVE rows, so you');
+console.log('    can narrow the previous result instead of rescanning;');
+console.log('  the sort dominates once the filter is cheap, so sort');
+console.log('    LAST and over as few rows as possible;');
+console.log('  and the real fix is a debounce on the input (page 01 of');
+console.log('    the JavaScript section), so most of these keystrokes');
+console.log('    never trigger a query at all.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Say the order and why:</strong> filter, sort, slice. Then explain what each wrong order
+    does to the response.</li>
+    <li><strong>Write the comparator factory.</strong> Step 6 &mdash; multi-column, typed, nulls last,
+    with a unique tie-break.</li>
+    <li><strong>List the three <code>sort</code> traps</strong> &mdash; mutation, the default
+    comparator, and what stability does and does not guarantee.</li>
+    <li><strong>Explain the offset-pagination race</strong> with the delete and the insert, then write
+    the cursor version.</li>
+    <li><strong>Write the composite cursor.</strong> Step 7 &mdash; and say why a non-unique sort
+    column makes a single-value cursor impossible.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Order of operations, and a total order.</strong> Filter before sort before slice; and
+    the sort must be a <em>total</em> order, meaning a unique tie-break, or pagination is undefined
+    even with a stable sort. Both bugs are invisible in a test fixture and both show up as
+    &ldquo;sometimes a row is missing&rdquo; in production, which is the hardest kind of bug report to
+    act on.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="06-tree-to-list.html">&larr; Nested Tree &rarr; Flat List</a>
+  <a href="08-dedupe-by-key.html">Next: Remove Duplicates by Object Key &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

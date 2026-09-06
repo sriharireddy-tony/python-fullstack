@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Max Consecutive Ones After K Flips</title>
+<meta name="description" content="Longest window containing at most k zeros — the cleanest sliding window on the list, and a nice one-if variant.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Sliding window &middot; Problem 05</p>
+  <h1>Max Consecutive Ones After K Flips</h1>
+  <p class="standfirst">The cleanest sliding window on the whole list. The validity test is a single
+  counter, and the reframe is one sentence: <strong>the longest run of ones you can make is the
+  longest window containing at most k zeros</strong>.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>An array of 0s and 1s. You may flip at most <code>k</code> zeros to ones. Return the length of
+  the longest run of consecutive ones you can produce.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th class="mono">k</th><th>Answer</th><th>The window</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[1,1,1,0,0,0,1,1,1,1,0]</td><td class="mono">2</td><td class="mono">6</td><td>indexes 5&ndash;10</td></tr>
+        <tr><td class="mono">[0,0,1,1,0,0,1,1,1,0,1,1,0,0,0,1,1,1,1]</td><td class="mono">3</td><td class="mono">10</td><td>indexes 4&ndash;13</td></tr>
+        <tr><td class="mono">[1,1,1]</td><td class="mono">0</td><td class="mono">3</td><td>already all ones</td></tr>
+        <tr><td class="mono">[0,0,0]</td><td class="mono">2</td><td class="mono">2</td><td>flip two of them</td></tr>
+        <tr><td class="mono">[0,0,0]</td><td class="mono">0</td><td class="mono">0</td><td>no flips, no ones</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">The reframe</span>
+    <p>Do not think about <em>which</em> zeros to flip. A window can be turned into all-ones exactly
+    when it contains <strong>at most k zeros</strong> &mdash; flip them all.</p>
+    <p>So the question becomes: <em>what is the longest window containing at most k zeros?</em></p>
+  </div>
+
+  <p>Compare that with the previous two pages and the family becomes obvious:</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Problem</th><th>Invalid when&hellip;</th></tr></thead>
+      <tbody>
+        <tr><td>Longest substring without repeats</td><td>a character repeats</td></tr>
+        <tr><td>Longest repeating char replacement</td><td><code>length - maxCount &gt; k</code></td></tr>
+        <tr><td>Fruit into baskets</td><td><code>distinctTypes &gt; 2</code></td></tr>
+        <tr><td><strong>Max consecutive ones III</strong></td><td><code>zeros &gt; k</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; try every start</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; walk from every position</span></div>
+<pre><code>function longestOnesBrute(nums, k) {
+  let best = 0;
+
+  for (let start = 0; start &lt; nums.length; start++) {
+    let flips = 0;
+    let length = 0;
+
+    for (let i = start; i &lt; nums.length; i++) {
+      if (nums[i] === 0) {
+        flips++;
+        if (flips &gt; k) break;        // out of flips, this run ends
+      }
+      length++;
+    }
+
+    best = Math.max(best, length);
+  }
+
+  return best;
+}
+
+console.log(longestOnesBrute([1,1,1,0,0,0,1,1,1,1,0], 2));                 // 6
+console.log(longestOnesBrute([0,0,1,1,0,0,1,1,1,0,1,1,0,0,0,1,1,1,1], 3)); // 10
+console.log(longestOnesBrute([1,1,1], 0));                                 // 3
+console.log(longestOnesBrute([0,0,0], 2));                                 // 2
+console.log(longestOnesBrute([0,0,0], 0));                                 // 0
+console.log(longestOnesBrute([], 3));                                      // 0</code></pre>
+  </div>
+
+  <p>Direct, correct, and O(n&sup2;). Each start walks forward until it runs out of flips, and the
+  next start re-walks nearly all of the same ground.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// Almost all ones, so every start walks a very long way.
+const N = 40000;
+const nums = [];
+for (let i = 0; i &lt; N; i++) nums.push(i % 5000 === 0 ? 0 : 1);
+const k = 3;
+
+function brute(a, k) {
+  let best = 0;
+  for (let s = 0; s &lt; a.length; s++) {
+    let flips = 0, len = 0;
+    for (let i = s; i &lt; a.length; i++) {
+      if (a[i] === 0) { flips++; if (flips &gt; k) break; }
+      len++;
+    }
+    if (len &gt; best) best = len;
+  }
+  return best;
+}
+
+function windowed(a, k) {
+  let left = 0, zeros = 0, best = 0;
+  for (let right = 0; right &lt; a.length; right++) {
+    if (a[right] === 0) zeros++;
+    while (zeros &gt; k) {
+      if (a[left] === 0) zeros--;
+      left++;
+    }
+    if (right - left + 1 &gt; best) best = right - left + 1;
+  }
+  return best;
+}
+
+let t = performance.now();
+const p = brute(nums, k);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const q = windowed(nums, k);
+const winMs = performance.now() - t;
+
+console.log('walk from every start :', p, 'in', bruteMs.toFixed(1) + ' ms');
+console.log('sliding window        :', q, 'in', winMs.toFixed(2) + ' ms');
+console.log('same answer:', p === q);
+console.log('speed-up:', Math.round(bruteMs / Math.max(winMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; count the zeros inside</h2>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Keep one counter: how many zeros are currently in the window. Grow on the right, incrementing
+    when a zero enters. While that count exceeds <code>k</code>, shrink from the left, decrementing
+    when a zero leaves. Record the length afterwards.</p>
+  </div>
+
+  <p>No map, no frequency table, no maximum to track &mdash; the whole state is
+  <code>left</code>, <code>zeros</code> and <code>best</code>. This is the sliding window at its most
+  stripped-down, which is why it is worth learning last: you can see the skeleton with nothing on
+  top of it.</p>
+
+  <div class="trace">
+<pre>  nums = [1,1,1,0,0,0,1,1,1,1,0]     k = 2
+
+  right walks; `zeros` counts zeros between left and right
+
+  ...  1 1 1 0 0 [0 1 1 1 1 0]  ...
+                  \___________/
+                  zeros in here: 2   (the 0 at index 5 and at index 10)
+                  length 6
+
+  That is the answer. Any longer window would contain a third zero.
+</pre>
+  </div>
+
+  <h3>The one-<code>if</code> variant &mdash; and why it works</h3>
+
+  <p>There is a well-known shorter version that replaces the <code>while</code> with an
+  <code>if</code>. The window then never shrinks &mdash; it only slides at its current width.</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the two shapes</span></div>
+<pre><code>// shrink properly -- the window is always valid
+while (zeros &gt; k) { if (nums[left] === 0) zeros--; left++; }
+best = Math.max(best, right - left + 1);
+
+// slide only -- the window is a high-water mark
+if (zeros &gt; k) { if (nums[left] === 0) zeros--; left++; }
+return nums.length - left;      // the final width IS the answer</code></pre>
+  </div>
+
+  <p>The <code>if</code> version works because we only want the <em>maximum</em> width. The window
+  grows by one whenever it can and slides by one when it cannot, so its width is a high-water mark
+  that never decreases. At the end, <code>right - left</code> is that maximum &mdash; which for a full
+  pass is <code>nums.length - left</code>.</p>
+
+  <p>It is shorter and does fewer operations. It is also harder to justify, and it silently gives the
+  wrong answer if you ever need the actual window contents. <strong>Write the <code>while</code>
+  version</strong>, and mention the other as an optimisation.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>nums = [1,1,1,0,0,0,1,1,1,1,0]</code>, <code>k = 2</code>.</p>
+
+  <div class="trace">
+<pre>left=0  zeros=0  best=0
+
+right=0  value 1   zeros=0   window [1]              len 1  best=1
+right=1  value 1   zeros=0   window [1,1]            len 2  best=2
+right=2  value 1   zeros=0   window [1,1,1]          len 3  best=3
+right=3  value 0   zeros=1   window [1,1,1,0]        len 4  best=4
+right=4  value 0   zeros=2   window [1,1,1,0,0]      len 5  best=5
+right=5  value 0   zeros=3   TOO MANY
+         drop nums[0]=1  zeros stays 3   left=1
+         drop nums[1]=1  zeros stays 3   left=2
+         drop nums[2]=1  zeros stays 3   left=3
+         drop nums[3]=0  zeros=2         left=4      valid again
+                          window [0,0]   len 2  best stays 5
+right=6  value 1   zeros=2   window [0,0,1]          len 3  best 5
+right=7  value 1   zeros=2   window [0,0,1,1]        len 4  best 5
+right=8  value 1   zeros=2   window [0,0,1,1,1]      len 5  best 5
+right=9  value 1   zeros=2   window [0,0,1,1,1,1]    len 6  best=6
+right=10 value 0   zeros=3   TOO MANY
+         drop nums[4]=0  zeros=2         left=5      valid
+                          window [0,1,1,1,1,0]  len 6  best stays 6
+
+answer: 6
+</pre>
+  </div>
+
+  <p>Look at <code>right=5</code>: four drops in one step, three of them ones that did not change the
+  counter. That is fine &mdash; <code>left</code> only moves forward, and across the whole run it
+  moves at most <code>n</code> times in total.</p>
+
+  <p>And at <code>right=10</code> the window slid to a different position at the same width 6. That is
+  the behaviour the <code>if</code> variant relies on.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function longestOnesExplained(nums, k) {
+  let left = 0, zeros = 0, best = 0;
+
+  console.log('nums =', nums, '  k =', k);
+  console.log('');
+
+  for (let right = 0; right &lt; nums.length; right++) {
+    if (nums[right] === 0) zeros++;
+
+    console.log('right=' + right + '  value ' + nums[right] + '   zeros=' + zeros);
+
+    while (zeros &gt; k) {
+      if (nums[left] === 0) {
+        zeros--;
+        console.log('        too many -> drop nums[' + left + ']=0   zeros=' + zeros);
+      } else {
+        console.log('        too many -> drop nums[' + left + ']=1   zeros stays ' + zeros);
+      }
+      left++;
+    }
+
+    const len = right - left + 1;
+    const improved = len &gt; best;
+    if (improved) best = len;
+
+    console.log('        window [' + nums.slice(left, right + 1).join(',') +
+                ']  len ' + len + '   best=' + best + (improved ? '   *new best*' : ''));
+  }
+
+  console.log('');
+  return best;
+}
+
+console.log('ANSWER:', longestOnesExplained([1,1,1,0,0,0,1,1,1,1,0], 2));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; the shrinking window</span></div>
+<pre><code>function longestOnesManual(nums, k) {
+  let left = 0;
+  let zeros = 0;      // how many zeros are inside the window
+  let best = 0;
+
+  for (let right = 0; right &lt; nums.length; right++) {
+
+    if (nums[right] === 0) {
+      zeros = zeros + 1;
+    }
+
+    // too many zeros to flip? shrink from the left until it fits
+    while (zeros &gt; k) {
+      if (nums[left] === 0) {
+        zeros = zeros - 1;
+      }
+      left = left + 1;
+    }
+
+    const length = right - left + 1;
+    if (length &gt; best) {
+      best = length;
+    }
+  }
+
+  return best;
+}
+
+console.log(longestOnesManual([1,1,1,0,0,0,1,1,1,1,0], 2));                 // 6
+console.log(longestOnesManual([0,0,1,1,0,0,1,1,1,0,1,1,0,0,0,1,1,1,1], 3)); // 10
+console.log(longestOnesManual([1,1,1], 0));                                 // 3
+console.log(longestOnesManual([0,0,0], 2));                                 // 2
+console.log(longestOnesManual([0,0,0], 0));                                 // 0
+console.log(longestOnesManual([], 3));                                      // 0
+console.log(longestOnesManual([1,0,1,0,1], 1));                             // 3
+console.log(longestOnesManual([0], 5));                                     // 1</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; the sliding-only variant</span></div>
+<pre><code>function longestOnesSlide(nums, k) {
+  let left = 0;
+  let zeros = 0;
+
+  for (let right = 0; right &lt; nums.length; right++) {
+    if (nums[right] === 0) zeros = zeros + 1;
+
+    // slide by exactly one when we overflow -- never shrink further
+    if (zeros &gt; k) {
+      if (nums[left] === 0) zeros = zeros - 1;
+      left = left + 1;
+    }
+  }
+
+  // the window width never decreased, so its final width is the max
+  return nums.length - left;
+}
+
+console.log(longestOnesSlide([1,1,1,0,0,0,1,1,1,1,0], 2));                 // 6
+console.log(longestOnesSlide([0,0,1,1,0,0,1,1,1,0,1,1,0,0,0,1,1,1,1], 3)); // 10
+console.log(longestOnesSlide([1,1,1], 0));                                 // 3
+console.log(longestOnesSlide([0,0,0], 2));                                 // 2
+console.log(longestOnesSlide([0,0,0], 0));                                 // 0
+console.log(longestOnesSlide([], 3));                                      // 0
+console.log(longestOnesSlide([1,0,1,0,1], 1));                             // 3
+
+// Shorter, fewer operations, and the reasoning is much subtler:
+// the window is a high-water mark rather than a valid window.
+// Note it CANNOT tell you where the best window was.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">variation &mdash; report the window and which zeros to flip</span></div>
+<pre><code>function bestRun(nums, k) {
+  let left = 0, zeros = 0, best = 0, bestStart = 0;
+
+  for (let right = 0; right &lt; nums.length; right++) {
+    if (nums[right] === 0) zeros++;
+
+    while (zeros &gt; k) {
+      if (nums[left] === 0) zeros--;
+      left++;
+    }
+
+    if (right - left + 1 &gt; best) {
+      best = right - left + 1;
+      bestStart = left;                 // freeze only on a new best
+    }
+  }
+
+  const flipAt = [];
+  for (let i = bestStart; i &lt; bestStart + best; i++) {
+    if (nums[i] === 0) flipAt.push(i);
+  }
+
+  return { length: best, from: bestStart, to: bestStart + best - 1, flipAt };
+}
+
+console.log(bestRun([1,1,1,0,0,0,1,1,1,1,0], 2));
+// { length: 6, from: 4, to: 9, flipAt: [4, 5] }
+// note: [0,1,1,1,1,0] at 5..10 is also length 6, but we only
+// replace the best on a STRICTLY longer window, so the earlier
+// one wins.
+
+console.log(bestRun([0,0,1,1,0,0,1,1,1,0,1,1,0,0,0,1,1,1,1], 3));
+console.log(bestRun([1,1,1], 0));
+console.log(bestRun([0,0,0], 0));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function longestOnes(nums, k) {
+  let left = 0;
+  let zeros = 0;
+  let best = 0;
+
+  for (let right = 0; right &lt; nums.length; right++) {
+    if (nums[right] === 0) zeros++;
+
+    while (zeros &gt; k) {
+      if (nums[left] === 0) zeros--;
+      left++;
+    }
+
+    best = Math.max(best, right - left + 1);
+  }
+
+  return best;
+}
+
+console.log(longestOnes([1,1,1,0,0,0,1,1,1,1,0], 2));                 // 6
+console.log(longestOnes([0,0,1,1,0,0,1,1,1,0,1,1,0,0,0,1,1,1,1], 3)); // 10
+console.log(longestOnes([1,1,1], 0));                                 // 3
+console.log(longestOnes([0,0,0], 0));                                 // 0
+console.log(longestOnes([1,0,1,0,1], 1));                             // 3</code></pre>
+  </div>
+
+  <p>Eleven lines with nothing clever in them. If you can write this from memory and explain why the
+  <code>while</code> does not make it quadratic, you have the whole sliding-window family.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the whole family, from one skeleton</span></div>
+<pre><code>// Every "longest window" problem is this shape with a different
+// isValid. Here it is factored out to make that literal.
+function longestWindow(items, addToState, removeFromState, isValid, initialState) {
+  let state = initialState();
+  let left = 0, best = 0;
+
+  for (let right = 0; right &lt; items.length; right++) {
+    addToState(state, items[right]);
+
+    while (!isValid(state, right - left + 1)) {
+      removeFromState(state, items[left]);
+      left++;
+    }
+
+    best = Math.max(best, right - left + 1);
+  }
+
+  return best;
+}
+
+// at most k zeros
+const k1 = 2;
+console.log('at most 2 zeros:', longestWindow(
+  [1,1,1,0,0,0,1,1,1,1,0],
+  (s, v) =&gt; { if (v === 0) s.zeros++; },
+  (s, v) =&gt; { if (v === 0) s.zeros--; },
+  (s) =&gt; s.zeros &lt;= k1,
+  () =&gt; ({ zeros: 0 })
+));   // 6
+
+// no repeated characters
+console.log('no repeats:', longestWindow(
+  [...'abcabcbb'],
+  (s, v) =&gt; s.counts.set(v, (s.counts.get(v) || 0) + 1),
+  (s, v) =&gt; { const n = s.counts.get(v) - 1; if (n === 0) s.counts.delete(v); else s.counts.set(v, n); },
+  (s, len) =&gt; s.counts.size === len,
+  () =&gt; ({ counts: new Map() })
+));   // 3
+
+// at most 2 distinct values
+console.log('two baskets:', longestWindow(
+  [1,2,3,2,2],
+  (s, v) =&gt; s.counts.set(v, (s.counts.get(v) || 0) + 1),
+  (s, v) =&gt; { const n = s.counts.get(v) - 1; if (n === 0) s.counts.delete(v); else s.counts.set(v, n); },
+  (s) =&gt; s.counts.size &lt;= 2,
+  () =&gt; ({ counts: new Map() })
+));   // 4
+
+// Do not write this abstraction in an interview -- it is here to
+// show that four named problems share one body. Write the specific
+// eleven lines; recognise the shape.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the simpler sibling: no flips at all</span></div>
+<pre><code>// "Max Consecutive Ones" -- k = 0. No window needed; just a run
+// counter that resets.
+function maxConsecutiveOnes(nums) {
+  let current = 0, best = 0;
+  for (const n of nums) {
+    current = n === 1 ? current + 1 : 0;    // extend or reset
+    best = Math.max(best, current);
+  }
+  return best;
+}
+
+console.log(maxConsecutiveOnes([1,1,0,1,1,1]));   // 3
+console.log(maxConsecutiveOnes([1,0,1,1,0,1]));   // 2
+console.log(maxConsecutiveOnes([0,0,0]));         // 0
+console.log(maxConsecutiveOnes([1,1,1]));         // 3
+
+// Notice the shape: "extend or reset" is Kadane's, with a reset to
+// zero instead of a max. And check it agrees with the k = 0 case:
+function longestOnes(nums, k) {
+  let left = 0, zeros = 0, best = 0;
+  for (let right = 0; right &lt; nums.length; right++) {
+    if (nums[right] === 0) zeros++;
+    while (zeros &gt; k) { if (nums[left] === 0) zeros--; left++; }
+    best = Math.max(best, right - left + 1);
+  }
+  return best;
+}
+
+const t = [1,1,0,1,1,1,0,1];
+console.log('run counter :', maxConsecutiveOnes(t));
+console.log('window, k=0 :', longestOnes(t, 0));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Walk from every start</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td></tr>
+        <tr><td><strong>Sliding window</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The <code>while</code> inside the <code>for</code> is the usual apparent problem and the usual
+  answer: <code>left</code> only increases, so across the entire run the inner loop executes at most
+  <code>n</code> times in total. Two pointers, at most 2n moves, O(n).</p>
+
+  <p>Space is three integers &mdash; genuinely O(1), with no map, no counter array, nothing that grows
+  with the input. This is the leanest window in the collection.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;A window can be made all-ones exactly when it contains at most k zeros, so this is the
+    longest window with at most k zeros. I slide a window keeping a count of the zeros inside:
+    extend right, and while the count exceeds k, drop from the left, decrementing when the dropped
+    element was a zero. Record the length after each shrink. Both pointers only move forward, so O(n)
+    time and O(1) space.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Decrementing the counter unconditionally</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; ones decrement the zero count</span></div>
+<pre><code>function broken(nums, k) {
+  let left = 0, zeros = 0, best = 0;
+  for (let right = 0; right &lt; nums.length; right++) {
+    if (nums[right] === 0) zeros++;
+    while (zeros &gt; k) {
+      zeros--;             // decremented even when nums[left] is a 1 -- bug
+      left++;
+    }
+    best = Math.max(best, right - left + 1);
+  }
+  return best;
+}
+
+console.log(broken([1,1,1,0,0,0,1,1,1,1,0], 2));   // 9   WRONG, should be 6
+console.log(broken([0,0,0], 0));                   // 0   right, by luck
+console.log(broken([1,0,1,0,1], 1));               // 4   WRONG, should be 3
+console.log(broken([0,1,0,1,0], 1));               // 3   right, by luck
+
+// The counter must track the zeros ACTUALLY inside the window.
+// Dropping a 1 changes nothing about the zero count.</code></pre>
+  </div>
+
+  <h3>2. Recording the length before shrinking</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; measures an invalid window</span></div>
+<pre><code>function broken(nums, k) {
+  let left = 0, zeros = 0, best = 0;
+  for (let right = 0; right &lt; nums.length; right++) {
+    if (nums[right] === 0) zeros++;
+
+    best = Math.max(best, right - left + 1);    // recorded BEFORE shrinking
+
+    while (zeros &gt; k) {
+      if (nums[left] === 0) zeros--;
+      left++;
+    }
+  }
+  return best;
+}
+
+console.log(broken([1,1,1,0,0,0,1,1,1,1,0], 2));   // 7   WRONG, should be 6
+console.log(broken([0,0,0], 0));                   // 1   WRONG, should be 0
+console.log(broken([0,0,0], 1));                   // 2   right
+console.log(broken([1,0,0], 0));                   // 2   WRONG, should be 1
+
+// In the LONGEST shape you must shrink FIRST, then measure. The
+// window you record has to be a valid one.</code></pre>
+  </div>
+
+  <h3>3. Using the sliding-only variant and then asking for the window</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the final window is not the best one</span></div>
+<pre><code>function slideOnly(nums, k) {
+  let left = 0, zeros = 0;
+  for (let right = 0; right &lt; nums.length; right++) {
+    if (nums[right] === 0) zeros++;
+    if (zeros &gt; k) { if (nums[left] === 0) zeros--; left++; }
+  }
+  return { length: nums.length - left, from: left, to: nums.length - 1 };
+}
+
+const nums = [1,1,1,1,0,0,1,0,0,0,0];
+console.log(slideOnly(nums, 2));
+// length 7 is CORRECT, but from/to point at the LAST window,
+// which contains six zeros -- not a valid answer window at all.
+
+// Check it:
+const win = nums.slice(4, 11);
+console.log('that window:', win, 'zeros:', win.filter(v =&gt; v === 0).length);
+
+// The slide-only variant gives the right LENGTH and nothing else.
+// If you need the window itself, use the shrinking version.</code></pre>
+  </div>
+
+  <h3>4. Flipping ones to zeros by mistake</h3>
+
+  <p>The problem says flip <em>zeros</em> to ones. Counting ones and comparing against <code>k</code>
+  answers a different question entirely. Read which value you are allowed to change &mdash; and note
+  that &ldquo;longest run of zeros after flipping k ones&rdquo; is the identical algorithm with the
+  test inverted.</p>
+
+  <h3>5. Assuming <code>k</code> is at most the number of zeros</h3>
+
+  <p>If <code>k</code> is larger than the total number of zeros, the whole array is achievable and the
+  answer is <code>nums.length</code>. The window handles it naturally &mdash; <code>zeros</code> never
+  exceeds <code>k</code>, so it never shrinks. Confirm that rather than adding a special case.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the eleven-line version from memory</strong>, then say the O(n) argument out
+    loud. This is the cleanest place to lock in both.</li>
+    <li><strong>Max Consecutive Ones with exactly one flip.</strong> <code>k = 1</code>. There is also
+    a neat two-variable solution tracking the previous run and the current one &mdash; work it out
+    before writing the window.</li>
+    <li><strong>Longest run of zeros after flipping k ones.</strong> Invert the test. Confirm it needs
+    no other change.</li>
+    <li><strong>Return the window and the indexes to flip.</strong> In Step 6 &mdash; and note why the
+    slide-only variant cannot do this.</li>
+    <li><strong>Maximum consecutive answers.</strong> A string of T and F where you may change up to
+    <code>k</code> characters, and you want the longest run of <em>either</em>. Run the window twice
+    &mdash; once treating F as the cost, once T &mdash; and take the larger.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p>You have now written the <strong>longest-window skeleton</strong> five times with five
+    different validity tests. That repetition is the point: the shape never changes. Extend right,
+    shrink left while invalid, record after. What changes is only <em>what makes a window
+    invalid</em> &mdash; a repeat, a count, a distinct-type limit, a budget. When you meet a new
+    &ldquo;longest contiguous stretch such that&hellip;&rdquo; problem, the only question worth asking
+    is: <em>what is my invalid condition, and can I maintain it incrementally?</em></p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="04-fruit-into-baskets.html">&larr; Fruit Into Baskets</a>
+  <a href="../searching-sorting/01-binary-search.html">Next topic: Searching &amp; sorting &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

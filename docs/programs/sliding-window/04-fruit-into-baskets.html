@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fruit Into Baskets</title>
+<meta name="description" content="Longest window with at most two distinct values — a word problem hiding a standard sliding window.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Sliding window &middot; Problem 04</p>
+  <h1>Fruit Into Baskets</h1>
+  <p class="standfirst">A story about picking fruit that is really one line of maths:
+  <strong>find the longest window containing at most two distinct values</strong>. The main skill this
+  page teaches is <em>translating a word problem into the algorithm hiding inside it</em>.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>You walk along a row of fruit trees, carrying <strong>two baskets</strong>. Each basket can only
+  hold <strong>one type</strong> of fruit, but any amount of it. You must:</p>
+
+  <ul>
+    <li>Start at any tree you like.</li>
+    <li>Pick exactly one fruit from every tree you pass, moving right.</li>
+    <li>Stop as soon as you reach a fruit you cannot carry.</li>
+  </ul>
+
+  <p>How many fruits can you pick at most?</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Trees</th><th>Answer</th><th>The stretch</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[1, 2, 1]</td><td class="mono">3</td><td>all of it &mdash; only two types</td></tr>
+        <tr><td class="mono">[0, 1, 2, 2]</td><td class="mono">3</td><td class="mono">[1, 2, 2]</td></tr>
+        <tr><td class="mono">[1, 2, 3, 2, 2]</td><td class="mono">4</td><td class="mono">[2, 3, 2, 2]</td></tr>
+        <tr><td class="mono">[3,3,3,1,2,1,1,2,3,3,4]</td><td class="mono">5</td><td class="mono">[1,2,1,1,2]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">Translating the story</span>
+    <p>&ldquo;Two baskets, one type each&rdquo; &rarr; <strong>at most 2 distinct values</strong>.<br>
+    &ldquo;Every tree you pass, moving right&rdquo; &rarr; <strong>a contiguous window</strong>.<br>
+    &ldquo;How many fruits at most&rdquo; &rarr; <strong>the longest such window</strong>.</p>
+    <p>So: <em>longest subarray with at most two distinct values</em>. That is the entire problem, and
+    the fruit is decoration.</p>
+  </div>
+
+  <p>Word problems like this are common, and the skill being tested is partly whether you can strip
+  the story away. Write the one-line restatement on the board before you write any code &mdash; it
+  also gives the interviewer a chance to correct you early.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; try every starting tree</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; walk from every start</span></div>
+<pre><code>function totalFruitBrute(fruits) {
+  let best = 0;
+
+  for (let start = 0; start &lt; fruits.length; start++) {
+    const basket = new Set();
+    let count = 0;
+
+    for (let i = start; i &lt; fruits.length; i++) {
+      basket.add(fruits[i]);
+      if (basket.size &gt; 2) break;     // cannot carry this one -- stop
+      count++;
+    }
+
+    best = Math.max(best, count);
+  }
+
+  return best;
+}
+
+console.log(totalFruitBrute([1, 2, 1]));                     // 3
+console.log(totalFruitBrute([0, 1, 2, 2]));                  // 3
+console.log(totalFruitBrute([1, 2, 3, 2, 2]));               // 4
+console.log(totalFruitBrute([3,3,3,1,2,1,1,2,3,3,4]));       // 5
+console.log(totalFruitBrute([]));                            // 0
+console.log(totalFruitBrute([5]));                           // 1</code></pre>
+  </div>
+
+  <p>This mirrors the story exactly &mdash; start at a tree, walk until you cannot carry the next
+  fruit &mdash; which makes it easy to trust. Its cost is O(n&sup2;): every start walks forward until
+  it hits a third type.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>Each start re-walks ground the previous start already covered. Take
+  <code>[1,1,1,1,1,2,2,2,2,3]</code>: starting at 0 walks nine trees, starting at 1 walks eight of the
+  same trees, and so on.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// Long stretches of two types, then a third -- the worst case.
+const N = 40000;
+const fruits = [];
+for (let i = 0; i &lt; N; i++) fruits.push(i % 2);   // only 1s and 0s
+fruits.push(9);                                   // one intruder at the end
+
+function brute(a) {
+  let best = 0;
+  for (let s = 0; s &lt; a.length; s++) {
+    const basket = new Set();
+    let n = 0;
+    for (let i = s; i &lt; a.length; i++) {
+      basket.add(a[i]);
+      if (basket.size &gt; 2) break;
+      n++;
+    }
+    if (n &gt; best) best = n;
+  }
+  return best;
+}
+
+function windowed(a) {
+  const counts = new Map();
+  let left = 0, best = 0;
+  for (let right = 0; right &lt; a.length; right++) {
+    counts.set(a[right], (counts.get(a[right]) || 0) + 1);
+    while (counts.size &gt; 2) {
+      const n = counts.get(a[left]) - 1;
+      if (n === 0) counts.delete(a[left]); else counts.set(a[left], n);
+      left++;
+    }
+    if (right - left + 1 &gt; best) best = right - left + 1;
+  }
+  return best;
+}
+
+let t = performance.now();
+const p = brute(fruits);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const q = windowed(fruits);
+const winMs = performance.now() - t;
+
+console.log('walk from every start :', p, 'in', bruteMs.toFixed(1) + ' ms');
+console.log('sliding window        :', q, 'in', winMs.toFixed(2) + ' ms');
+console.log('same answer:', p === q);
+console.log('speed-up:', Math.round(bruteMs / Math.max(winMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; the standard longest-window shape</h2>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Grow the window on the right, adding each fruit to a count map. While the window holds
+    <strong>more than two distinct types</strong>, drop fruit from the left. Then record the length
+    &mdash; the window is valid again.</p>
+  </div>
+
+  <p>This is the identical skeleton to Longest Substring Without Repeating Characters and Longest
+  Repeating Character Replacement. Only the validity test changes:</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Problem</th><th>Window is invalid when&hellip;</th></tr></thead>
+      <tbody>
+        <tr><td>Longest substring without repeats</td><td>a character appears twice</td></tr>
+        <tr><td>Longest repeating char replacement</td><td><code>length - maxCount &gt; k</code></td></tr>
+        <tr><td><strong>Fruit into baskets</strong></td><td><code>counts.size &gt; 2</code></td></tr>
+        <tr><td>At most K distinct</td><td><code>counts.size &gt; k</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>The line that keeps <code>counts.size</code> honest</h3>
+
+  <p>The whole validity test is <code>counts.size</code>, so the map must contain exactly the types
+  currently in the window &mdash; no more. When a count drops to zero, that type is <strong>gone</strong>
+  and its entry must be <em>deleted</em>, not left sitting at zero.</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the delete that makes it work</span></div>
+<pre><code>const n = counts.get(fruits[left]) - 1;
+if (n === 0) counts.delete(fruits[left]);   // gone from the window
+else counts.set(fruits[left], n);
+left++;</code></pre>
+  </div>
+
+  <p>Leave a zero entry behind and <code>counts.size</code> keeps counting a type that is no longer
+  there. The window then shrinks forever and the answer is far too small &mdash; or the loop never
+  terminates.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>fruits = [1, 2, 3, 2, 2]</code>. The answer is 4.</p>
+
+  <div class="trace">
+<pre>left=0  counts={}  best=0
+
+right=0  fruit 1   counts{1:1}   size 1  valid
+         window [1]              length 1   best=1
+
+right=1  fruit 2   counts{1:1, 2:1}  size 2  valid
+         window [1,2]            length 2   best=2
+
+right=2  fruit 3   counts{1:1, 2:1, 3:1}  size 3  INVALID
+         drop fruits[0]=1  ->  count hits 0, DELETE it
+                           counts{2:1, 3:1}  size 2   left=1
+         window [2,3]            length 2   best=2
+
+right=3  fruit 2   counts{2:2, 3:1}  size 2  valid
+         window [2,3,2]          length 3   best=3
+
+right=4  fruit 2   counts{2:3, 3:1}  size 2  valid
+         window [2,3,2,2]        length 4   best=4
+
+answer: 4
+</pre>
+  </div>
+
+  <p>Now one where the window shrinks by more than one step,
+  <code>fruits = [3,3,3,1,2,1,1,2,3,3,4]</code>:</p>
+
+  <div class="trace">
+<pre>... skipping ahead to the interesting part ...
+
+after right=7 (fruit 2)   counts{1:3, 2:2}   left=3
+         window [1,2,1,1,2]      length 5   best=5
+
+right=8  fruit 3   counts{1:3, 2:2, 3:1}  size 3  INVALID
+         drop fruits[3]=1  counts{1:2, 2:2, 3:1}  still size 3  left=4
+         drop fruits[4]=2  counts{1:2, 2:1, 3:1}  still size 3  left=5
+         drop fruits[5]=1  counts{1:1, 2:1, 3:1}  still size 3  left=6
+         drop fruits[6]=1  counts{2:1, 3:1}  1 DELETED, size 2   left=7
+         window [2,3]            length 2   best stays 5
+
+right=9  fruit 3   counts{2:1, 3:2}  size 2  valid
+         window [2,3,3]          length 3   best stays 5
+
+right=10 fruit 4   counts{2:1, 3:2, 4:1}  size 3  INVALID
+         drop fruits[7]=2  counts{3:2, 4:1}  2 DELETED, size 2   left=8
+         window [3,3,4]          length 3   best stays 5
+
+answer: 5
+</pre>
+  </div>
+
+  <p>Four drops in one step at <code>right=8</code>, and that is fine &mdash; the <code>while</code>
+  loop only ever moves <code>left</code> forward, and across the whole run it can move at most
+  <code>n</code> times in total. That is the O(n) argument.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function fruitExplained(fruits) {
+  const counts = new Map();
+  let left = 0, best = 0;
+
+  console.log('fruits =', fruits);
+  console.log('');
+
+  for (let right = 0; right &lt; fruits.length; right++) {
+    const f = fruits[right];
+    counts.set(f, (counts.get(f) || 0) + 1);
+    console.log('right=' + right + '  pick ' + f + '   counts ' +
+                JSON.stringify([...counts]) + '   size ' + counts.size);
+
+    while (counts.size &gt; 2) {
+      const gone = fruits[left];
+      const n = counts.get(gone) - 1;
+      if (n === 0) {
+        counts.delete(gone);
+        console.log('        too many types -> drop ' + gone +
+                    ' (last one, DELETED)   size ' + counts.size);
+      } else {
+        counts.set(gone, n);
+        console.log('        too many types -> drop one ' + gone +
+                    ' (still ' + n + ' left)   size ' + counts.size);
+      }
+      left++;
+    }
+
+    const len = right - left + 1;
+    const improved = len &gt; best;
+    if (improved) best = len;
+
+    console.log('        window [' + fruits.slice(left, right + 1).join(',') +
+                ']  length ' + len + '   best=' + best +
+                (improved ? '   *new best*' : ''));
+  }
+
+  console.log('');
+  return best;
+}
+
+console.log('ANSWER:', fruitExplained([1, 2, 3, 2, 2]));
+console.log('==========================================');
+console.log('ANSWER:', fruitExplained([3,3,3,1,2,1,1,2,3,3,4]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; plain object, manual distinct count</span></div>
+<pre><code>function totalFruitManual(fruits) {
+  const counts = {};      // type -> how many in the window
+  let distinct = 0;       // how many types the window holds
+  let left = 0;
+  let best = 0;
+
+  for (let right = 0; right &lt; fruits.length; right++) {
+    const f = fruits[right];
+
+    if (counts[f] === undefined || counts[f] === 0) {
+      counts[f] = 0;
+      distinct = distinct + 1;      // a new type just arrived
+    }
+    counts[f] = counts[f] + 1;
+
+    // too many types? drop from the left until we are back to two
+    while (distinct &gt; 2) {
+      const gone = fruits[left];
+      counts[gone] = counts[gone] - 1;
+
+      if (counts[gone] === 0) {
+        distinct = distinct - 1;    // that type has left entirely
+      }
+
+      left = left + 1;
+    }
+
+    const length = right - left + 1;
+    if (length &gt; best) best = length;
+  }
+
+  return best;
+}
+
+console.log(totalFruitManual([1, 2, 1]));                   // 3
+console.log(totalFruitManual([0, 1, 2, 2]));                // 3
+console.log(totalFruitManual([1, 2, 3, 2, 2]));             // 4
+console.log(totalFruitManual([3,3,3,1,2,1,1,2,3,3,4]));     // 5
+console.log(totalFruitManual([]));                          // 0
+console.log(totalFruitManual([5]));                         // 1
+console.log(totalFruitManual([1,1,1,1]));                   // 4
+console.log(totalFruitManual([1,2,3,4,5]));                 // 2</code></pre>
+  </div>
+
+  <p>Tracking <code>distinct</code> by hand instead of relying on <code>counts.size</code> makes the
+  two transitions explicit: it goes <strong>up</strong> when a count moves from 0 to 1, and
+  <strong>down</strong> when it moves from 1 to 0. That is the same incremental-invariant idea as
+  <code>formed</code> and <code>matches</code> on the previous pages.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">variation &mdash; report which trees, and which fruits</span></div>
+<pre><code>function bestHarvest(fruits) {
+  const counts = new Map();
+  let left = 0, best = 0, bestStart = 0;
+
+  for (let right = 0; right &lt; fruits.length; right++) {
+    counts.set(fruits[right], (counts.get(fruits[right]) || 0) + 1);
+
+    while (counts.size &gt; 2) {
+      const n = counts.get(fruits[left]) - 1;
+      if (n === 0) counts.delete(fruits[left]); else counts.set(fruits[left], n);
+      left++;
+    }
+
+    if (right - left + 1 &gt; best) {
+      best = right - left + 1;
+      bestStart = left;                 // freeze only on a new best
+    }
+  }
+
+  const picked = fruits.slice(bestStart, bestStart + best);
+  return { total: best, from: bestStart, to: bestStart + best - 1,
+           picked, baskets: [...new Set(picked)] };
+}
+
+console.log(bestHarvest([1, 2, 3, 2, 2]));
+// { total: 4, from: 1, to: 4, picked: [2,3,2,2], baskets: [2,3] }
+
+console.log(bestHarvest([3,3,3,1,2,1,1,2,3,3,4]));
+// { total: 5, from: 3, to: 7, picked: [1,2,1,1,2], baskets: [1,2] }
+
+console.log(bestHarvest([1,2,3,4,5]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function totalFruit(fruits) {
+  const counts = new Map();
+  let left = 0;
+  let best = 0;
+
+  for (let right = 0; right &lt; fruits.length; right++) {
+    counts.set(fruits[right], (counts.get(fruits[right]) || 0) + 1);
+
+    while (counts.size &gt; 2) {
+      const gone = fruits[left];
+      const n = counts.get(gone) - 1;
+      if (n === 0) counts.delete(gone);
+      else counts.set(gone, n);
+      left++;
+    }
+
+    best = Math.max(best, right - left + 1);
+  }
+
+  return best;
+}
+
+console.log(totalFruit([1, 2, 1]));                   // 3
+console.log(totalFruit([0, 1, 2, 2]));                // 3
+console.log(totalFruit([1, 2, 3, 2, 2]));             // 4
+console.log(totalFruit([3,3,3,1,2,1,1,2,3,3,4]));     // 5
+console.log(totalFruit([]));                          // 0
+console.log(totalFruit([1,2,3,4,5]));                 // 2</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">the general version &mdash; at most K distinct</span></div>
+<pre><code>// Fruit Into Baskets is this with k = 2. Writing the general one
+// costs nothing and covers three problems at once.
+function longestWithAtMostKDistinct(items, k) {
+  if (k &lt;= 0) return 0;
+
+  const counts = new Map();
+  let left = 0, best = 0;
+
+  for (let right = 0; right &lt; items.length; right++) {
+    counts.set(items[right], (counts.get(items[right]) || 0) + 1);
+
+    while (counts.size &gt; k) {
+      const gone = items[left];
+      const n = counts.get(gone) - 1;
+      if (n === 0) counts.delete(gone); else counts.set(gone, n);
+      left++;
+    }
+
+    best = Math.max(best, right - left + 1);
+  }
+
+  return best;
+}
+
+console.log(longestWithAtMostKDistinct([1,2,3,2,2], 2));        // 4  -- fruit baskets
+console.log(longestWithAtMostKDistinct([...'eceba'], 2));       // 3  -- "ece"
+console.log(longestWithAtMostKDistinct([...'aa'], 1));          // 2
+console.log(longestWithAtMostKDistinct([...'abcadcacacaca'], 3));// 11
+console.log(longestWithAtMostKDistinct([1,2,3,4,5], 1));        // 1
+console.log(longestWithAtMostKDistinct([1,2,3,4,5], 0));        // 0
+
+// Three named problems, one function:
+//   k = 2  -> Fruit Into Baskets
+//   k = 2  -> Longest Substring with At Most Two Distinct Characters
+//   k = k  -> Longest Substring with At Most K Distinct Characters</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the O(1)-space version, since k is 2</span></div>
+<pre><code>// With exactly two baskets you do not need a map at all -- two
+// variables will do. Faster, and much easier to get subtly wrong.
+function totalFruitTwoVars(fruits) {
+  if (fruits.length === 0) return 0;
+
+  let lastType = fruits[0];       // the most recently seen type
+  let otherType = -1;             // the other basket, -1 = empty
+  let lastTypeRun = 1;            // how long the trailing run of lastType is
+  let current = 1;                // the current window length
+  let best = 1;
+
+  for (let i = 1; i &lt; fruits.length; i++) {
+    const f = fruits[i];
+
+    if (f === lastType || f === otherType) {
+      current++;
+    } else {
+      // a third type: restart from the trailing run plus this fruit
+      current = lastTypeRun + 1;
+      otherType = lastType;
+    }
+
+    if (f === lastType) {
+      lastTypeRun++;
+    } else {
+      lastTypeRun = 1;
+      lastType = f;
+    }
+
+    best = Math.max(best, current);
+  }
+
+  return best;
+}
+
+console.log(totalFruitTwoVars([1, 2, 1]));                 // 3
+console.log(totalFruitTwoVars([0, 1, 2, 2]));              // 3
+console.log(totalFruitTwoVars([1, 2, 3, 2, 2]));           // 4
+console.log(totalFruitTwoVars([3,3,3,1,2,1,1,2,3,3,4]));   // 5
+console.log(totalFruitTwoVars([5]));                       // 1
+console.log(totalFruitTwoVars([1,2,3,4,5]));               // 2
+
+// O(1) space instead of O(k). Correct, and notice how much harder
+// it is to convince yourself of. That is the trade: the map version
+// generalises AND is obviously right. Ship the map version.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Walk from every start</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td></tr>
+        <tr><td><strong>Sliding window with a map</strong></td><td class="mono">O(n)</td><td class="mono">O(k) = O(1)</td></tr>
+        <tr><td>Two variables</td><td class="mono">O(n)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Why the inner <code>while</code> does not make it quadratic.</strong> It only advances
+  <code>left</code>, and <code>left</code> travels from 0 to n exactly once across the entire run
+  &mdash; it never resets. So the two pointers together take at most 2n steps, however unevenly those
+  steps are distributed. One step can drop four fruits, as the Step 5 trace shows; that budget is
+  taken out of the same total.</p>
+
+  <p>Space is O(k), and here <code>k</code> is 3 at most &mdash; the map briefly holds three types
+  before shrinking. So effectively O(1).</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Stripping the story: this is the longest subarray with at most two distinct values.
+    I slide a window with a map from value to count, extending right and, while the map holds more
+    than two keys, dropping from the left &mdash; deleting a key when its count reaches zero, so
+    <code>map.size</code> stays accurate. I record the length after each shrink. Both pointers only
+    move forward, so O(n) time and O(1) space for a fixed limit of two. The same code with
+    <code>k</code> instead of 2 solves at-most-K-distinct.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Not deleting the key when the count hits zero</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; size never comes back down</span></div>
+<pre><code>function broken(fruits) {
+  const counts = new Map();
+  let left = 0, best = 0;
+
+  for (let right = 0; right &lt; fruits.length; right++) {
+    counts.set(fruits[right], (counts.get(fruits[right]) || 0) + 1);
+
+    while (counts.size &gt; 2 &amp;&amp; left &lt;= right) {
+      counts.set(fruits[left], counts.get(fruits[left]) - 1);   // never deleted
+      left++;
+    }
+
+    best = Math.max(best, right - left + 1);
+  }
+
+  return best;
+}
+
+console.log(broken([1, 2, 1]));               // 3   fine, only two types
+console.log(broken([1, 2, 3, 2, 2]));         // 2   WRONG, should be 4
+console.log(broken([0, 1, 2, 2]));            // 2   WRONG, should be 3
+console.log(broken([1, 1, 2, 3, 2, 2]));      // 3   WRONG, should be 4
+
+// Once a third type appears, its key stays in the map at zero, so
+// counts.size is permanently 3 and the window is shrunk to nothing
+// on every step. (The `left &lt;= right` guard is the only thing
+// stopping an infinite loop.)</code></pre>
+  </div>
+
+  <h3>2. Using a Set instead of a Map</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; no way to know when a type leaves</span></div>
+<pre><code>function broken(fruits) {
+  const basket = new Set();
+  let left = 0, best = 0;
+
+  for (let right = 0; right &lt; fruits.length; right++) {
+    basket.add(fruits[right]);
+
+    while (basket.size &gt; 2) {
+      basket.delete(fruits[left]);    // deletes even if more remain in the window
+      left++;
+    }
+
+    best = Math.max(best, right - left + 1);
+  }
+  return best;
+}
+
+console.log(broken([1, 2, 1]));                 // 3   fine
+console.log(broken([1, 2, 3, 2, 2]));           // 4   right, by luck
+console.log(broken([1, 1, 2, 3, 2, 2]));        // 5   WRONG, should be 4
+console.log(broken([1, 2, 2, 3, 2, 2, 1]));     // 5   right, by luck
+console.log(broken([3, 3, 1, 3, 2, 3, 3]));     // 4   right, by luck
+
+// A Set only knows PRESENCE. On [1,1,2,3,2,2] the window grows to
+// include the 3, the Set deletes type 1 from the left -- but there
+// is still another 1 inside the window. The Set now claims two
+// types when the window really holds three, and it reports a
+// window of 5 that could never be picked.
+// You need COUNTS to know when the LAST copy of a type has left.</code></pre>
+  </div>
+
+  <h3>3. Recording the length before shrinking</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; measures an invalid window</span></div>
+<pre><code>function broken(fruits) {
+  const counts = new Map();
+  let left = 0, best = 0;
+
+  for (let right = 0; right &lt; fruits.length; right++) {
+    counts.set(fruits[right], (counts.get(fruits[right]) || 0) + 1);
+
+    best = Math.max(best, right - left + 1);      // recorded BEFORE shrinking
+
+    while (counts.size &gt; 2) {
+      const n = counts.get(fruits[left]) - 1;
+      if (n === 0) counts.delete(fruits[left]); else counts.set(fruits[left], n);
+      left++;
+    }
+  }
+  return best;
+}
+
+console.log(broken([1, 2, 1]));           // 3   fine
+console.log(broken([1, 2, 3, 2, 2]));     // 4   right, by luck
+console.log(broken([1, 2, 3, 4, 5]));     // 3   WRONG, should be 2
+console.log(broken([0, 1, 2, 2]));        // 3   right
+
+// In the LONGEST shape you shrink first, then record. The window
+// you measure must be a valid one.</code></pre>
+  </div>
+
+  <h3>4. Hard-coding two baskets when the follow-up asks for K</h3>
+
+  <p>The two-variable version in Step 7 is fast and completely unextendable. Interviewers routinely
+  follow up with &ldquo;now make it K baskets&rdquo;, and rewriting from scratch under pressure is
+  worse than having written the map version in the first place. Write the general shape; mention the
+  specialised one as an optimisation.</p>
+
+  <h3>5. Misreading the story</h3>
+
+  <p>&ldquo;Two baskets, one type of fruit each&rdquo; means at most <strong>two distinct types</strong>
+  &mdash; not two fruits, and not two of each. Read the constraint back in your own words before
+  coding. If you had written &ldquo;at most 2 fruits per basket&rdquo;, every answer would be 4.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>State the one-line restatement first</strong>, then write the general
+    at-most-K version from memory. Two baskets is a call with <code>k = 2</code>.</li>
+    <li><strong>Longest Substring with At Most K Distinct Characters.</strong> Literally the same
+    function on characters. Confirm your general version handles it unchanged.</li>
+    <li><strong>Return the trees you picked from</strong>, not just the count. In Step 6 &mdash; and
+    remember to freeze the start only on a new best.</li>
+    <li><strong>Exactly K distinct, not at most.</strong> A neat trick: <code>exactly(k)</code> equals
+    <code>atMost(k) - atMost(k - 1)</code>. Work out why that is true &mdash; it is a genuinely useful
+    counting identity.</li>
+    <li><strong>Longest window with at most K distinct, where you may also skip one tree.</strong>
+    Invent your own variation and see whether the skeleton still fits. Most of the time it does, which
+    is the point.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Strip the story before you solve it.</strong> Fruit and baskets, rooms and meetings,
+    tasks and cooldowns &mdash; the narrative is nearly always a costume over a standard shape. Write
+    the one-line restatement first: it forces you to identify the real constraint, it catches
+    misreadings early, and it usually names the technique for you. Here, &ldquo;longest window with at
+    most two distinct values&rdquo; is both the restatement and the algorithm.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="03-permutation-in-string.html">&larr; Permutation in String</a>
+  <a href="05-max-consecutive-ones-k-flips.html">Next: Max Consecutive Ones After K Flips &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

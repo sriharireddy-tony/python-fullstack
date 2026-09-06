@@ -1,0 +1,891 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flatten Nested Structures</title>
+<meta name="description" content="Recursion on shape rather than on choices — arrays, objects, cycles, and the depth limit.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Recursion &middot; Problem 05</p>
+  <h1>Flatten a Deeply Nested Array or Object</h1>
+  <p class="standfirst">The last four pages searched a space of <em>choices</em>. This one walks a
+  space of <em>shapes</em> &mdash; and it is by far the most common recursion question in a MEAN-stack
+  interview, because it is the shape of every API response you will ever have to reformat.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Two related questions, usually asked one after the other.</p>
+
+  <p><strong>A &mdash; flatten an array.</strong> Turn a nested array into a flat one, in order.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Output</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[1, [2, 3], 4]</td><td class="mono">[1, 2, 3, 4]</td></tr>
+        <tr><td class="mono">[1, [2, [3, [4]]]]</td><td class="mono">[1, 2, 3, 4]</td></tr>
+        <tr><td class="mono">[[[[1]]]]</td><td class="mono">[1]</td></tr>
+        <tr><td class="mono">[1, [], [[], [2]]]</td><td class="mono">[1, 2]</td></tr>
+        <tr><td class="mono">[]</td><td class="mono">[]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>B &mdash; flatten an object</strong> into dot-notation keys.</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the object version</span></div>
+<pre><code>{ a: 1, b: { c: 2, d: { e: 3 } } }
+
+  becomes
+
+{ 'a': 1, 'b.c': 2, 'b.d.e': 3 }</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why this is a different kind of recursion</span>
+    <p>In Subsets and Permutations, recursion explored decisions you invented. Here the recursion
+    <strong>mirrors the data</strong>: an array can contain arrays, so a function that handles an array
+    must call itself on the elements that happen to be arrays. The structure is self-similar, so the
+    code is too.</p>
+    <p>There is no choosing, no un-choosing, and no pruning. Just: <em>is this thing a container? if so
+    go inside it; if not, keep it.</em></p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the loop-until-nothing-changes version</h2>
+
+  <p>Before reaching for recursion, here is a version that avoids it entirely. Repeatedly do one level
+  of unwrapping until no element is an array any more.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; unwrap one level, repeatedly</span></div>
+<pre><code>function flattenByRepeating(arr) {
+  let result = arr.slice();
+  let rounds = 0;
+
+  while (result.some(function (x) { return Array.isArray(x); })) {
+    const next = [];
+    for (const item of result) {
+      if (Array.isArray(item)) {
+        for (const inner of item) next.push(inner);   // one level off
+      } else {
+        next.push(item);
+      }
+    }
+    result = next;
+    rounds++;
+  }
+
+  console.log('  ' + rounds + ' rounds');
+  return result;
+}
+
+console.log(flattenByRepeating([1, [2, 3], 4]));
+console.log(flattenByRepeating([1, [2, [3, [4]]]]));
+console.log(flattenByRepeating([[[[1]]]]));
+console.log(flattenByRepeating([1, [], [[], [2]]]));
+console.log(flattenByRepeating([]));</code></pre>
+  </div>
+
+  <p>It works, and it is worth knowing &mdash; it never overflows the stack, which matters for one
+  specific case we get to at the end. But look at the round count: each round rescans the
+  <strong>entire</strong> array to peel off one level.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>A structure nested <code>d</code> levels deep needs <code>d</code> rounds, and every round touches
+  every element. That is <code>O(n &middot; d)</code>, and it allocates a whole new array each time.
+  Recursion visits each node exactly once: <code>O(n)</code>.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; repeated peeling versus one recursive pass</span></div>
+<pre><code>// build a structure that is deep AND wide: 400 items at each of
+// 400 levels
+function buildDeepWide(depth, width) {
+  let node = [];
+  for (let d = 0; d &lt; depth; d++) {
+    const level = [];
+    for (let w = 0; w &lt; width; w++) level.push(d * width + w);
+    level.push(node);
+    node = level;
+  }
+  return node;
+}
+
+const data = buildDeepWide(400, 400);
+
+function flattenByRepeating(arr) {
+  let result = arr.slice();
+  while (result.some(function (x) { return Array.isArray(x); })) {
+    const next = [];
+    for (const item of result) {
+      if (Array.isArray(item)) { for (const inner of item) next.push(inner); }
+      else next.push(item);
+    }
+    result = next;
+  }
+  return result;
+}
+
+function flattenRecursive(arr) {
+  const out = [];
+  (function walk(list) {
+    for (const item of list) {
+      if (Array.isArray(item)) walk(item);
+      else out.push(item);
+    }
+  })(arr);
+  return out;
+}
+
+let t = performance.now();
+const a = flattenByRepeating(data);
+const repeatMs = performance.now() - t;
+
+t = performance.now();
+const b = flattenRecursive(data);
+const recurseMs = performance.now() - t;
+
+console.log('items flattened      :', a.length.toLocaleString('en-US'));
+console.log('repeated peeling     : ' + repeatMs.toFixed(1) + ' ms');
+console.log('one recursive pass   : ' + recurseMs.toFixed(1) + ' ms');
+console.log('same result:', JSON.stringify(a) === JSON.stringify(b));
+console.log('speed-up:', Math.round(repeatMs / Math.max(recurseMs, 0.01)) + 'x');</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The line that hides a loop</span>
+    <p><code>result.some(x =&gt; Array.isArray(x))</code> is an O(n) scan, and it runs at the top of
+    every round. Together with the rebuild inside the loop that is two full passes per level. Whenever
+    a <code>while</code> condition calls a method on a collection, stop and ask what that method
+    costs.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; let the shape drive the code</h2>
+
+  <p>Write down what a nested array <em>is</em>, and the function falls out of the definition:</p>
+
+  <div class="trace">
+<pre>  A nested array is a list, where each element is either
+
+      a plain value        ->  keep it
+      another nested array ->  do the same thing to it
+
+
+  function walk(list):
+      for each item in list:
+          if item is an array:  walk(item)
+          else:                 out.push(item)
+</pre>
+  </div>
+
+  <p>Six lines, and every line comes directly from the definition. That is the pattern to internalise:
+  <strong>one branch per shape the data can take.</strong> For arrays there are two shapes, so two
+  branches. For objects there are three (object, array, leaf), so three.</p>
+
+  <div class="note key">
+    <span class="t">Where the base case went</span>
+    <p>There is no explicit <code>if (empty) return</code>. The <code>for</code> loop over an empty
+    array simply does nothing and the function returns &mdash; the loop <em>is</em> the base case.</p>
+    <p>Every recursive function still needs one, but it does not always need its own
+    <code>if</code>. What matters is that some input makes the recursion stop, and that every call
+    moves towards it. Here each call goes one level deeper into a finite structure.</p>
+  </div>
+
+  <p>The other design decision is where the output goes. Two styles, both worth being able to write:</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th></th><th>Accumulator</th><th>Return-and-concat</th></tr></thead>
+      <tbody>
+        <tr><td>Shape</td><td class="mono">walk(list) { ... out.push(x) }</td><td class="mono">return [...flat(a), ...flat(b)]</td></tr>
+        <tr><td>Allocations</td><td>one array total</td><td>a new array at every level</td></tr>
+        <tr><td>Reads as</td><td>a procedure</td><td>an expression</td></tr>
+        <tr><td>Cost</td><td class="mono">O(n)</td><td class="mono">O(n &middot; d) worst case</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace the walk</h2>
+
+  <p><code>[1, [2, [3, 4]], 5]</code></p>
+
+  <div class="trace">
+<pre>walk([1, [2, [3, 4]], 5])
+    item 1          not an array  ->  out = [1]
+    item [2,[3,4]]  IS an array   ->  go deeper
+        walk([2, [3, 4]])
+            item 2      not an array  ->  out = [1,2]
+            item [3,4]  IS an array   ->  go deeper
+                walk([3, 4])
+                    item 3  ->  out = [1,2,3]
+                    item 4  ->  out = [1,2,3,4]
+                back up
+        back up
+    item 5          not an array  ->  out = [1,2,3,4,5]
+
+result: [1, 2, 3, 4, 5]
+
+Depth of the call stack at its worst: 3, the nesting depth.
+Number of push calls: 5, the number of leaves.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function flattenExplained(arr) {
+  const out = [];
+  let maxDepth = 0;
+
+  function walk(list, depth) {
+    if (depth &gt; maxDepth) maxDepth = depth;
+    const pad = '  '.repeat(depth);
+
+    for (const item of list) {
+      if (Array.isArray(item)) {
+        console.log(pad + JSON.stringify(item) + '  IS an array -> go deeper');
+        walk(item, depth + 1);
+        console.log(pad + 'back up');
+      } else {
+        out.push(item);
+        console.log(pad + JSON.stringify(item) +
+                    '  plain value -> out = ' + JSON.stringify(out));
+      }
+    }
+  }
+
+  walk(arr, 0);
+  console.log('max stack depth reached:', maxDepth + 1);
+  console.log('');
+  return out;
+}
+
+console.log('RESULT:', flattenExplained([1, [2, [3, 4]], 5]));
+console.log('=========================================');
+console.log('RESULT:', flattenExplained([1, [], [[], [2]]]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; indexes only, no Array.isArray, no push</span></div>
+<pre><code>function isArrayManual(x) {
+  // Array.isArray does this properly. Without it, the honest check
+  // is the internal class tag -- which is what Array.isArray reads.
+  return Object.prototype.toString.call(x) === '[object Array]';
+}
+
+function flattenManual(arr) {
+  const out = [];
+  let count = 0;
+
+  function walk(list) {
+    for (let i = 0; i &lt; list.length; i++) {
+      const item = list[i];
+      if (isArrayManual(item)) {
+        walk(item);
+      } else {
+        out[count] = item;
+        count = count + 1;
+      }
+    }
+  }
+
+  walk(arr);
+  return out;
+}
+
+console.log(JSON.stringify(flattenManual([1, [2, 3], 4])));
+console.log(JSON.stringify(flattenManual([1, [2, [3, [4]]]])));
+console.log(JSON.stringify(flattenManual([[[[1]]]])));
+console.log(JSON.stringify(flattenManual([1, [], [[], [2]]])));
+console.log(JSON.stringify(flattenManual([])));
+const falsy = flattenManual([0, false, null, [undefined, '']]);
+console.log(JSON.stringify(falsy));         // [0,false,null,null,""]
+console.log(falsy);                          // the real values
+// Falsy values all survive -- this filters on TYPE, not truthiness.
+// The second `null` in the JSON is JSON.stringify's rendering of
+// undefined, not a lost value. Always check with a raw log too.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; no recursion at all, using an explicit stack</span></div>
+<pre><code>// Every recursive function can be rewritten with your own stack.
+// Here it also removes the call-depth limit entirely.
+function flattenIterative(arr) {
+  const out = [];
+  const stack = [arr];        // things still to look at
+  let top = 1;
+
+  while (top &gt; 0) {
+    top = top - 1;
+    const current = stack[top];
+
+    if (Array.isArray(current)) {
+      // push children in REVERSE so they pop in original order
+      for (let i = current.length - 1; i &gt;= 0; i--) {
+        stack[top] = current[i];
+        top = top + 1;
+      }
+    } else {
+      out[out.length] = current;
+    }
+  }
+
+  return out;
+}
+
+console.log(JSON.stringify(flattenIterative([1, [2, 3], 4])));
+console.log(JSON.stringify(flattenIterative([1, [2, [3, [4]]]])));
+console.log(JSON.stringify(flattenIterative([1, [], [[], [2]]])));
+
+// The payoff: a structure 200,000 levels deep
+let deep = [0];
+for (let i = 1; i &lt; 200000; i++) deep = [i, deep];
+
+function flattenRecursive(a) {
+  const out = [];
+  (function w(l) {
+    for (const it of l) { if (Array.isArray(it)) w(it); else out.push(it); }
+  })(a);
+  return out;
+}
+
+try {
+  flattenRecursive(deep);
+  console.log('');
+  console.log('recursive: survived');
+} catch (err) {
+  console.log('');
+  console.log('recursive: ' + err.message);
+}
+
+const flat = flattenIterative(deep);
+console.log('iterative: fine --', flat.length, 'items, first three:',
+            flat.slice(0, 3));
+
+// Reversing the push order is the whole trick. Push [1,2,3] in
+// order and a stack hands them back as 3,2,1.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function flatten(arr) {
+  const out = [];
+
+  function walk(list) {
+    for (const item of list) {
+      if (Array.isArray(item)) walk(item);
+      else out.push(item);
+    }
+  }
+
+  walk(arr);
+  return out;
+}
+
+console.log(flatten([1, [2, 3], 4]));
+console.log(flatten([1, [2, [3, [4]]]]));
+console.log(flatten([1, [], [[], [2]]]));
+
+// The one-line reduce version -- neat, and quadratic if you are not
+// careful, because each concat copies everything so far.
+const flattenReduce = function (arr) {
+  return arr.reduce(function (acc, item) {
+    return acc.concat(Array.isArray(item) ? flattenReduce(item) : item);
+  }, []);
+};
+console.log('');
+console.log('reduce version:', flattenReduce([1, [2, [3, [4]]]]));
+
+// And the built-in, since ES2019
+console.log('flat(Infinity):', [1, [2, [3, [4]]]].flat(Infinity));
+console.log('flat(1)       :', [1, [2, [3, [4]]]].flat(1));
+console.log('flat()        :', [1, [2, [3, [4]]]].flat());   // depth 1 default</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">flatten to a given depth &mdash; the follow-up you will get</span></div>
+<pre><code>function flattenDepth(arr, depth) {
+  if (depth === undefined) depth = 1;
+  const out = [];
+
+  function walk(list, remaining) {
+    for (const item of list) {
+      if (Array.isArray(item) &amp;&amp; remaining &gt; 0) {
+        walk(item, remaining - 1);
+      } else {
+        out.push(item);            // too deep to unwrap -- keep as-is
+      }
+    }
+  }
+
+  walk(arr, depth);
+  return out;
+}
+
+const nested = [1, [2, [3, [4, [5]]]]];
+
+for (let d = 0; d &lt;= 4; d++) {
+  console.log('depth ' + d + ': ' + JSON.stringify(flattenDepth(nested, d)));
+}
+console.log('Infinity: ' + JSON.stringify(flattenDepth(nested, Infinity)));
+
+// cross-check against the built-in
+console.log('');
+let allMatch = true;
+for (let d = 0; d &lt;= 5; d++) {
+  const mine = JSON.stringify(flattenDepth(nested, d));
+  const theirs = JSON.stringify(nested.flat(d));
+  if (mine !== theirs) { allMatch = false; console.log('MISMATCH at depth', d); }
+}
+console.log('matches Array.prototype.flat for depths 0..5:', allMatch);
+
+// Note depth 0 returns a COPY, not the original -- worth saying out
+// loud, since callers often assume flatten always returns something
+// new. Confirm it:
+const same = flattenDepth(nested, 0);
+console.log('depth 0 returns a copy, not the input:', same !== nested);</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">The object version &mdash; dot-notation keys</span></div>
+<pre><code>function flattenObject(obj, prefix) {
+  if (prefix === undefined) prefix = '';
+  const out = {};
+
+  for (const key of Object.keys(obj)) {
+    const value = obj[key];
+    const path = prefix ? prefix + '.' + key : key;
+
+    // three shapes: plain object -> recurse, array -> index keys,
+    // anything else -> a leaf
+    if (value !== null &amp;&amp; typeof value === 'object' &amp;&amp; !Array.isArray(value)) {
+      const inner = flattenObject(value, path);
+      for (const k of Object.keys(inner)) out[k] = inner[k];
+    } else if (Array.isArray(value)) {
+      value.forEach(function (item, i) {
+        const itemPath = path + '.' + i;
+        if (item !== null &amp;&amp; typeof item === 'object') {
+          const inner = flattenObject(item, itemPath);
+          for (const k of Object.keys(inner)) out[k] = inner[k];
+        } else {
+          out[itemPath] = item;
+        }
+      });
+    } else {
+      out[path] = value;
+    }
+  }
+
+  return out;
+}
+
+console.log(flattenObject({ a: 1, b: { c: 2, d: { e: 3 } } }));
+// { a: 1, 'b.c': 2, 'b.d.e': 3 }
+
+console.log(flattenObject({
+  user: { name: 'Ada', address: { city: 'London', zip: 'N1' } },
+  active: true,
+}));
+
+console.log(flattenObject({
+  id: 7,
+  tags: ['a', 'b'],
+  items: [{ sku: 'x', qty: 2 }, { sku: 'y', qty: 5 }],
+}));
+
+console.log('');
+console.log('edge cases:');
+console.log(flattenObject({}));                    // {}
+console.log(flattenObject({ a: null }));           // { a: null } -- typeof null is 'object'!
+console.log(flattenObject({ a: {} }));             // {} -- empty object contributes no keys
+console.log(flattenObject({ a: [] }));             // {} -- same for an empty array
+console.log(flattenObject({ a: undefined }));      // { a: undefined }
+console.log(flattenObject({ a: new Date(0) }));    // {} -- the Date VANISHED
+// A Date passes the object test, gets recursed into, and has no
+// own enumerable keys -- so it contributes nothing. Silent data
+// loss, and the reason the constructor check below matters.</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Three traps in that function</span>
+    <p><code>typeof null === 'object'</code>, so the null check must come first or you recurse into
+    nothing and crash.</p>
+    <p><code>{ a: {} }</code> flattens to <code>{}</code> &mdash; the empty branch vanishes. Whether
+    that is correct depends on the requirement; unflattening will not restore it. Say so out loud.</p>
+    <p>A <code>Date</code>, a <code>Map</code>, a <code>RegExp</code> and a class instance are all
+    <code>typeof 'object'</code>, so a naive check recurses into them. If leaves can be any of those,
+    test with <code>value.constructor === Object</code> instead.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Extra space</th></tr></thead>
+      <tbody>
+        <tr><td>Repeated peeling</td><td class="mono">O(n &middot; d)</td><td class="mono">O(n)</td></tr>
+        <tr><td><strong>Recursive, accumulator</strong></td><td class="mono">O(n)</td><td class="mono">O(d) stack</td></tr>
+        <tr><td>Recursive with concat / reduce</td><td class="mono">O(n &middot; d) worst case</td><td class="mono">O(n &middot; d)</td></tr>
+        <tr><td>Iterative with an explicit stack</td><td class="mono">O(n)</td><td class="mono">O(n) heap, no call stack</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><code>n</code> is the total number of nodes and <code>d</code> the maximum nesting depth. The
+  accumulator version touches each node once and pushes each leaf once, so O(n). Its extra space is the
+  call stack: O(d), not O(n).</p>
+
+  <p>The concat version is the one to be careful about. Every <code>concat</code> copies both operands,
+  so a chain of them re-copies the growing prefix at every level &mdash; the same trap as building a
+  string with <code>+=</code> inside a loop.</p>
+
+  <p>The iterative version trades the call stack for a heap array. Same asymptotic space, but the heap
+  has room for millions of entries where the call stack gives out around ten thousand.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;The recursion mirrors the data: for each element, if it is an array I recurse, otherwise I
+    push it onto a shared output array. One pass, O(n) time, O(d) stack space where d is the nesting
+    depth. I use a shared accumulator rather than concatenating returned arrays, because concat copies
+    and would make it O(n&middot;d). If the input could be pathologically deep &mdash; a linked-list
+    shape thousands of levels down &mdash; I would swap the call stack for an explicit stack array,
+    pushing children in reverse to preserve order.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. <code>typeof item === 'object'</code> to test for an array</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; two different ways</span></div>
+<pre><code>function broken(arr) {
+  const out = [];
+  function walk(list) {
+    for (const item of list) {
+      if (typeof item === 'object') walk(item);    // bug
+      else out.push(item);
+    }
+  }
+  walk(arr);
+  return out;
+}
+
+// works on the simple case, which is how it gets shipped
+console.log(JSON.stringify(broken([1, [2, [3]], 4])));   // [1,2,3,4]
+
+// but null is typeof 'object'
+try {
+  console.log(broken([1, null, 2]));
+} catch (err) {
+  console.log('with null   :', err.constructor.name + ' -- ' + err.message);
+}
+
+// and a plain object is typeof 'object' too
+try {
+  console.log('with object :', JSON.stringify(broken([1, { a: 9 }, 2])));
+} catch (err) {
+  console.log('with object :', err.constructor.name + ' -- ' + err.message);
+}
+
+console.log('');
+console.log('Both crash for the same reason: for...of needs a');
+console.log('Symbol.iterator, and neither null nor a plain object');
+console.log('has one. A crash is the lucky outcome -- with a Map or a');
+console.log('Set as the element, for...of DOES work and you would');
+console.log('silently iterate the wrong thing:');
+console.log('  Map   :', JSON.stringify(broken([1, new Map([['k', 9]]), 2])));
+console.log('  Set   :', JSON.stringify(broken([1, new Set([9]), 2])));
+console.log('');
+console.log('Array.isArray is the only correct test. typeof cannot');
+console.log('distinguish arrays from objects from null.');</code></pre>
+  </div>
+
+  <h3>2. Building the output with <code>concat</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct, and quadratic</span></div>
+<pre><code>function withConcat(arr) {
+  let out = [];
+  for (const item of arr) {
+    out = out.concat(Array.isArray(item) ? withConcat(item) : item);
+  }
+  return out;
+}
+
+function withPush(arr) {
+  const out = [];
+  (function walk(list) {
+    for (const item of list) {
+      if (Array.isArray(item)) walk(item);
+      else out.push(item);
+    }
+  })(arr);
+  return out;
+}
+
+// a deep left-leaning chain -- the shape that punishes concat
+let deep = [0];
+for (let i = 1; i &lt; 4000; i++) deep = [deep, i];
+
+let t = performance.now();
+const a = withConcat(deep);
+const concatMs = performance.now() - t;
+
+t = performance.now();
+const b = withPush(deep);
+const pushMs = performance.now() - t;
+
+console.log('items:', a.length);
+console.log('same result:', JSON.stringify(a) === JSON.stringify(b));
+console.log('concat : ' + concatMs.toFixed(1) + ' ms');
+console.log('push   : ' + pushMs.toFixed(1) + ' ms');
+console.log('ratio  : ' + Math.round(concatMs / Math.max(pushMs, 0.01)) + 'x');
+console.log('');
+console.log('concat copies BOTH arrays every time, so the growing');
+console.log('prefix is re-copied at every level. Same shape of');
+console.log('mistake as s += ch inside a loop over a long string.');</code></pre>
+  </div>
+
+  <h3>3. Assuming a finite depth</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; stack overflow on deep input</span></div>
+<pre><code>function flattenRecursive(arr) {
+  const out = [];
+  (function walk(list) {
+    for (const item of list) {
+      if (Array.isArray(item)) walk(item);
+      else out.push(item);
+    }
+  })(arr);
+  return out;
+}
+
+function flattenIterative(arr) {
+  const out = [], stack = [arr];
+  while (stack.length) {
+    const cur = stack.pop();
+    if (Array.isArray(cur)) {
+      for (let i = cur.length - 1; i &gt;= 0; i--) stack.push(cur[i]);
+    } else out.push(cur);
+  }
+  return out;
+}
+
+// find where the recursive version actually gives out
+function makeDeep(depth) {
+  let node = [0];
+  for (let i = 1; i &lt; depth; i++) node = [i, node];
+  return node;
+}
+
+for (const depth of [1000, 5000, 20000, 100000]) {
+  const data = makeDeep(depth);
+  let recursive;
+  try {
+    recursive = flattenRecursive(data).length + ' items';
+  } catch (err) {
+    recursive = err.message;
+  }
+  const iterative = flattenIterative(data).length + ' items';
+  console.log('depth ' + String(depth).padStart(6) +
+              '   recursive: ' + recursive.padEnd(34) +
+              '   iterative: ' + iterative);
+}
+
+console.log('');
+console.log('The exact limit depends on the engine, the frame size');
+console.log('and what else is on the stack -- which is precisely why');
+console.log('you should not rely on it. Real API data is rarely this');
+console.log('deep, but a cyclic or generated structure can be.');</code></pre>
+  </div>
+
+  <h3>4. Not handling a cycle</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; infinite recursion</span></div>
+<pre><code>const a = [1, 2];
+a.push(a);                       // a contains itself
+console.log('is a[2] === a ?', a[2] === a);
+
+function naive(arr) {
+  const out = [];
+  let guard = 0;
+  (function walk(list) {
+    if (++guard &gt; 20000) throw new Error('guard tripped -- infinite descent');
+    for (const item of list) {
+      if (Array.isArray(item)) walk(item);
+      else out.push(item);
+    }
+  })(arr);
+  return out;
+}
+
+try {
+  naive(a);
+} catch (err) {
+  console.log('naive :', err.message);
+}
+
+// The fix: remember which containers are already on the current path
+function safeFlatten(arr) {
+  const out = [];
+  const seen = new Set();
+
+  (function walk(list) {
+    if (seen.has(list)) return;      // already inside this one
+    seen.add(list);
+
+    for (const item of list) {
+      if (Array.isArray(item)) walk(item);
+      else out.push(item);
+    }
+
+    seen.delete(list);               // leaving it -- allow a sibling reference
+  })(arr);
+
+  return out;
+}
+
+console.log('safe  :', JSON.stringify(safeFlatten(a)));   // [1,2]
+
+// A shared (non-cyclic) reference should still appear twice:
+const shared = [7, 8];
+console.log('shared:', JSON.stringify(safeFlatten([shared, shared])));  // [7,8,7,8]
+
+// Note seen.delete on the way out. Without it you would also drop
+// the second copy of a legitimately shared array -- a different bug.</code></pre>
+  </div>
+
+  <h3>5. Losing key order or overwriting keys in the object version</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">two surprises worth knowing</span></div>
+<pre><code>function flattenObject(obj, prefix) {
+  if (prefix === undefined) prefix = '';
+  const out = {};
+  for (const key of Object.keys(obj)) {
+    const value = obj[key];
+    const path = prefix ? prefix + '.' + key : key;
+    if (value !== null &amp;&amp; typeof value === 'object' &amp;&amp; !Array.isArray(value)) {
+      const inner = flattenObject(value, path);
+      for (const k of Object.keys(inner)) out[k] = inner[k];
+    } else {
+      out[path] = value;
+    }
+  }
+  return out;
+}
+
+// SURPRISE 1: integer-like keys are reordered by the engine, always
+console.log(flattenObject({ b: 1, 2: 2, a: 3, 1: 4 }));
+// { '1': 4, '2': 2, b: 1, a: 3 }
+console.log('insertion order was b, 2, a, 1 -- integer keys jumped first');
+
+// SURPRISE 2: a key containing a dot collides with a nested path
+const collision = flattenObject({ 'a.b': 1, a: { b: 2 } });
+console.log('');
+console.log('collision:', collision);
+console.log('two distinct inputs, one output key -- the first value is lost');
+console.log('keys in result:', Object.keys(collision).length, '(was 2 inputs)');
+
+// The flatten/unflatten round trip is therefore NOT lossless in
+// general. If it must be, escape dots in keys, or use a separator
+// that cannot occur -- some codebases use " ".</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the six-line array version from memory.</strong> Then write the object version.
+    Then say which three shapes the object version branches on.</li>
+    <li><strong>Flatten to depth n.</strong> In Step 7 &mdash; one extra parameter, and the base case
+    becomes &ldquo;out of budget, keep as-is&rdquo;.</li>
+    <li><strong>The iterative version.</strong> Step 6b. Write it, and explain why children are pushed
+    in reverse.</li>
+    <li><strong>Unflatten</strong> &mdash; turn <code>{'a.b.c': 1}</code> back into
+    <code>{a:{b:{c:1}}}</code>. Split on dots and walk down, creating missing levels. It has its own
+    page later, and the collision case from Step 9 is exactly why.</li>
+    <li><strong>Flatten a tree of <code>{ id, children: [] }</code> nodes</strong> into a flat list
+    with a <code>parentId</code>. Same recursion, applied to the shape you will actually meet at work
+    &mdash; also its own page later.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>When data is self-similar, write one branch per shape it can take</strong> &mdash; and
+    the recursion writes itself. Then check the three things that always bite: <code>null</code> is
+    <code>typeof 'object'</code>; building output with <code>concat</code> turns O(n) into
+    O(n&middot;d); and the call stack has a limit that real data occasionally exceeds.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="04-generate-parentheses.html">&larr; Generate Parentheses</a>
+  <a href="../index.html">All problems &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

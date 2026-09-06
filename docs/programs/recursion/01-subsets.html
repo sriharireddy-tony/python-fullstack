@@ -1,0 +1,812 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subsets</title>
+<meta name="description" content="Take it or leave it — the simplest backtracking decision, and the shape every other one is built on.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Recursion &middot; Problem 01</p>
+  <h1>Subsets</h1>
+  <p class="standfirst">The first backtracking problem, and the easiest one to actually understand,
+  because each element poses a single yes-or-no question: <strong>is it in, or is it out?</strong>
+  Everything else in this topic is a variation on that decision.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Return every possible subset of the given array &mdash; the <strong>power set</strong>. The
+  input has distinct values, and any order of output is fine.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Count</th><th>Subsets</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[]</td><td class="mono">1</td><td class="mono">[[]]</td></tr>
+        <tr><td class="mono">[1]</td><td class="mono">2</td><td class="mono">[], [1]</td></tr>
+        <tr><td class="mono">[1,2]</td><td class="mono">4</td><td class="mono">[], [1], [2], [1,2]</td></tr>
+        <tr><td class="mono">[1,2,3]</td><td class="mono">8</td><td class="mono">[], [1], [2], [3], [1,2], [1,3], [2,3], [1,2,3]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why the count is exactly 2&#8319;</span>
+    <p>Each element is either <strong>in</strong> the subset or <strong>out</strong> of it &mdash;
+    two independent choices. With <code>n</code> elements that is
+    <code>2 &times; 2 &times; &hellip; &times; 2 = 2&#8319;</code> combinations.</p>
+    <p>Note that the empty subset and the whole array both count. An input of 20 elements produces
+    just over a million subsets; 30 elements produces a billion. The output size is the
+    <em>problem</em>, not the algorithm.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; build them up iteratively</h2>
+
+  <p>Before any recursion, here is an approach you can derive with no cleverness at all: start with
+  just the empty subset, then bring in one element at a time.</p>
+
+  <div class="note key">
+    <span class="t">The iterative insight</span>
+    <p>Every subset either <strong>contains</strong> the new element or does not. So when you add a
+    new element, the answer becomes: <em>everything you already had</em>, plus <em>every one of those
+    with the new element appended</em>. The list doubles each round &mdash; which is where 2&#8319;
+    comes from, visibly.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; iterative doubling</span></div>
+<pre><code>function subsetsIterative(nums) {
+  let result = [[]];              // the empty subset, always present
+
+  for (const n of nums) {
+    const withN = result.map(subset =&gt; [...subset, n]);
+    result = [...result, ...withN];
+    console.log('after adding ' + n + ':  ' + JSON.stringify(result));
+  }
+
+  return result;
+}
+
+console.log('ANSWER:', JSON.stringify(subsetsIterative([1, 2, 3])));
+console.log('');
+console.log('count for [1,2,3]:', subsetsIterative([1,2,3]).length);   // 8
+console.log('count for []     :', subsetsIterative([]).length);        // 1</code></pre>
+  </div>
+
+  <p>This is a complete, correct answer &mdash; and worth leading with, because it makes the
+  &ldquo;in or out&rdquo; structure visible before you have to hold a call stack in your head.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why bother with recursion at all?</h2>
+
+  <p>Both approaches are optimal &mdash; you cannot produce 2&#8319; subsets in less than 2&#8319;
+  time. So this is not a speed story. The reason to learn the recursive shape is that it
+  <strong>extends</strong>, and the iterative one mostly does not.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Variation</th><th>Iterative doubling</th><th>Recursive backtracking</th></tr></thead>
+      <tbody>
+        <tr><td>Subsets of distinct values</td><td>easy</td><td>easy</td></tr>
+        <tr><td>Subsets with duplicates in the input</td><td>awkward</td><td>one <code>if</code></td></tr>
+        <tr><td>Only subsets of size k</td><td>filter afterwards, wasteful</td><td>prune early</td></tr>
+        <tr><td>Only subsets summing to a target</td><td>filter afterwards</td><td>prune early</td></tr>
+        <tr><td>Permutations, parentheses, N-queens</td><td>does not apply</td><td>same skeleton</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Pruning</strong> is the real prize. Backtracking lets you abandon a branch the moment it
+  cannot lead to a valid answer, instead of generating everything and filtering.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; pruning versus filtering</span></div>
+<pre><code>const N = 20;
+const nums = [];
+for (let i = 1; i &lt;= N; i++) nums.push(i);
+const K = 3;      // we only want subsets of size 3
+
+// generate everything, then throw most of it away
+function generateThenFilter(nums, k) {
+  let result = [[]];
+  for (const n of nums) result = [...result, ...result.map(s =&gt; [...s, n])];
+  return result.filter(s =&gt; s.length === k);
+}
+
+// never build a subset that cannot reach size k
+function pruneEarly(nums, k) {
+  const out = [];
+  const path = [];
+
+  function go(start) {
+    if (path.length === k) { out.push([...path]); return; }
+
+    // not enough elements left to reach k -- abandon this branch
+    if (path.length + (nums.length - start) &lt; k) return;
+
+    for (let i = start; i &lt; nums.length; i++) {
+      path.push(nums[i]);
+      go(i + 1);
+      path.pop();
+    }
+  }
+
+  go(0);
+  return out;
+}
+
+let t = performance.now();
+const a = generateThenFilter(nums, K);
+const filterMs = performance.now() - t;
+
+t = performance.now();
+const b = pruneEarly(nums, K);
+const pruneMs = performance.now() - t;
+
+console.log('generate 2^' + N + ' = ' + (2 ** N).toLocaleString('en-US') +
+            ' then filter : ' + a.length + ' kept, ' + filterMs.toFixed(1) + ' ms');
+console.log('prune to size ' + K + ' directly              : ' +
+            b.length + ' built,  ' + pruneMs.toFixed(1) + ' ms');
+console.log('same count:', a.length === b.length);
+console.log('speed-up:', Math.round(filterMs / Math.max(pruneMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; take it or leave it</h2>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Walk the array one element at a time, carrying a <code>path</code> &mdash; the subset built so
+    far. At each element make <strong>both</strong> choices:</p>
+    <ol style="margin-bottom:0">
+      <li><strong>Take it.</strong> Push it onto the path and recurse to the next index.</li>
+      <li><strong>Leave it.</strong> Pop it back off and recurse to the next index.</li>
+    </ol>
+    <p>When you run out of elements, the path is a complete subset. Record it.</p>
+  </div>
+
+  <div class="trace">
+<pre>                          []
+                 take 1 /  \ leave 1
+                      [1]    []
+              take 2 / \      / \ leave 2
+                 [1,2]  [1]  [2]  []
+           take 3 /\    /\    /\   /\
+          [1,2,3][1,2][1,3][1][2,3][2][3][]
+
+  8 leaves = 8 subsets. Each level is one element's decision.
+</pre>
+  </div>
+
+  <h3>The two shapes, and why one is better</h3>
+
+  <p>There are two standard ways to write this, and they look different enough to confuse people.</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">shape A &mdash; explicit take / leave</span></div>
+<pre><code>function go(i) {
+  if (i === nums.length) { out.push([...path]); return; }
+
+  path.push(nums[i]);      // TAKE
+  go(i + 1);
+  path.pop();              // undo
+
+  go(i + 1);               // LEAVE
+}</code></pre>
+  </div>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">shape B &mdash; a loop over remaining choices</span></div>
+<pre><code>function go(start) {
+  out.push([...path]);     // EVERY node is a valid subset
+
+  for (let i = start; i &lt; nums.length; i++) {
+    path.push(nums[i]);
+    go(i + 1);
+    path.pop();
+  }
+}</code></pre>
+  </div>
+
+  <p>Shape A records only at the <em>leaves</em>. Shape B records at <em>every node</em>, which works
+  because a partial subset is itself a valid subset. Shape B is the one to learn:
+  <strong>it is the same skeleton as Permutations, Combination Sum and Generate Parentheses</strong>,
+  so learning it once covers the whole topic.</p>
+
+  <div class="note warn">
+    <span class="t">The two lines people get wrong</span>
+    <p><strong><code>out.push([...path])</code> &mdash; copy the path.</strong> Pushing
+    <code>path</code> itself stores a <em>reference</em>, and the very next
+    <code>push</code>/<code>pop</code> mutates it. You end up with an array of identical empty
+    arrays.</p>
+    <p><strong><code>path.pop()</code> after the recursive call &mdash; undo the choice.</strong> That
+    is what &ldquo;backtracking&rdquo; means. Without it the path only ever grows and every branch is
+    polluted by the one before it.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace the recursion</h2>
+
+  <p><code>nums = [1, 2, 3]</code>, using shape B.</p>
+
+  <div class="trace">
+<pre>go(0)  path=[]        record []
+  i=0  push 1  path=[1]
+    go(1)               record [1]
+      i=1  push 2  path=[1,2]
+        go(2)           record [1,2]
+          i=2  push 3  path=[1,2,3]
+            go(3)       record [1,2,3]
+            (loop ends -- no i beyond 2)
+          pop 3   path=[1,2]
+        (loop ends)
+      pop 2   path=[1]
+      i=2  push 3  path=[1,3]
+        go(3)           record [1,3]
+      pop 3   path=[1]
+    (loop ends)
+  pop 1   path=[]
+  i=1  push 2  path=[2]
+    go(2)               record [2]
+      i=2  push 3  path=[2,3]
+        go(3)           record [2,3]
+      pop 3   path=[2]
+  pop 2   path=[]
+  i=2  push 3  path=[3]
+    go(3)               record [3]
+  pop 3   path=[]
+
+recorded, in order:
+  []  [1]  [1,2]  [1,2,3]  [1,3]  [2]  [2,3]  [3]
+  = 8 subsets
+</pre>
+  </div>
+
+  <p>Follow the <code>path</code> column. It grows on the way down and shrinks on the way back up,
+  always returning to exactly what it was before the call. That invariant &mdash;
+  <em>every function leaves the path as it found it</em> &mdash; is what makes backtracking work.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function subsetsExplained(nums) {
+  const out = [];
+  const path = [];
+
+  function go(start, depth) {
+    const pad = '  '.repeat(depth);
+
+    out.push([...path]);
+    console.log(pad + 'go(' + start + ')  path=[' + path.join(',') + ']' +
+                '   RECORD [' + path.join(',') + ']');
+
+    for (let i = start; i &lt; nums.length; i++) {
+      path.push(nums[i]);
+      console.log(pad + '  take ' + nums[i] + '  ->  path=[' + path.join(',') + ']');
+
+      go(i + 1, depth + 1);
+
+      const removed = path.pop();
+      console.log(pad + '  undo ' + removed + '  ->  path=[' + path.join(',') + ']');
+    }
+  }
+
+  go(0, 0);
+  console.log('');
+  return out;
+}
+
+console.log('ANSWER:', JSON.stringify(subsetsExplained([1, 2, 3])));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; backtracking, no spread, no push</span></div>
+<pre><code>function subsetsManual(nums) {
+  const out = [];
+  let outCount = 0;
+
+  const path = [];
+  let pathLength = 0;
+
+  function copyPath() {
+    const copy = [];
+    for (let i = 0; i &lt; pathLength; i++) copy[i] = path[i];
+    return copy;
+  }
+
+  function go(start) {
+    // every node is a valid subset -- record a COPY
+    out[outCount] = copyPath();
+    outCount = outCount + 1;
+
+    for (let i = start; i &lt; nums.length; i++) {
+      path[pathLength] = nums[i];       // choose
+      pathLength = pathLength + 1;
+
+      go(i + 1);                        // explore
+
+      pathLength = pathLength - 1;      // un-choose
+    }
+  }
+
+  go(0);
+  return out;
+}
+
+console.log(JSON.stringify(subsetsManual([1, 2, 3])));
+console.log(JSON.stringify(subsetsManual([1, 2])));
+console.log(JSON.stringify(subsetsManual([1])));
+console.log(JSON.stringify(subsetsManual([])));
+console.log('count for 4 elements:', subsetsManual([1,2,3,4]).length);   // 16
+console.log('count for 5 elements:', subsetsManual([1,2,3,4,5]).length); // 32</code></pre>
+  </div>
+
+  <p>Notice <code>pathLength</code> doing the job of <code>push</code> and <code>pop</code>. Shrinking
+  the logical length <em>is</em> the un-choose step &mdash; the stale value is still physically in the
+  array, and it is simply never read. That is exactly what <code>pop</code> does underneath.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; the bit-mask version</span></div>
+<pre><code>// If each element is a yes/no choice, then a subset IS a binary
+// number. Subset number 5 = binary 101 = take elements 0 and 2.
+function subsetsBitmask(nums) {
+  const n = nums.length;
+  const total = 1 &lt;&lt; n;              // 2^n
+  const out = [];
+
+  for (let mask = 0; mask &lt; total; mask++) {
+    const subset = [];
+    for (let i = 0; i &lt; n; i++) {
+      // is bit i set in mask?
+      if ((mask &gt;&gt; i) &amp; 1) subset[subset.length] = nums[i];
+    }
+    out[mask] = subset;
+  }
+
+  return out;
+}
+
+console.log(JSON.stringify(subsetsBitmask([1, 2, 3])));
+console.log('');
+
+// show the correspondence explicitly
+const nums = ['a', 'b', 'c'];
+for (let mask = 0; mask &lt; 8; mask++) {
+  const bits = mask.toString(2).padStart(3, '0');
+  const subset = [];
+  for (let i = 0; i &lt; 3; i++) if ((mask &gt;&gt; i) &amp; 1) subset.push(nums[i]);
+  console.log('mask ' + mask + ' = ' + bits + '  ->  [' + subset.join(',') + ']');
+}
+
+// No recursion, no call stack, O(n * 2^n). Elegant, and it is the
+// idea behind bitmask dynamic programming. Its limit: 32 elements,
+// because JavaScript bitwise operators work on 32-bit integers.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function subsets(nums) {
+  const out = [];
+  const path = [];
+
+  function backtrack(start) {
+    out.push([...path]);              // copy, not the array itself
+
+    for (let i = start; i &lt; nums.length; i++) {
+      path.push(nums[i]);             // choose
+      backtrack(i + 1);               // explore
+      path.pop();                     // un-choose
+    }
+  }
+
+  backtrack(0);
+  return out;
+}
+
+console.log(JSON.stringify(subsets([1, 2, 3])));
+console.log(JSON.stringify(subsets([])));
+console.log(subsets([1,2,3,4,5]).length);   // 32</code></pre>
+  </div>
+
+  <p>Seven lines, and the <strong>choose / explore / un-choose</strong> triple in the middle is the
+  backtracking skeleton. Every problem in this topic is that triple with a different base case and a
+  different loop.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the variations, all one <code>if</code> apart</span></div>
+<pre><code>// 1. Subsets of exactly size k  ("combinations")
+function combinations(nums, k) {
+  const out = [], path = [];
+  function go(start) {
+    if (path.length === k) { out.push([...path]); return; }
+    // prune: not enough elements left to ever reach k
+    if (path.length + (nums.length - start) &lt; k) return;
+    for (let i = start; i &lt; nums.length; i++) {
+      path.push(nums[i]);
+      go(i + 1);
+      path.pop();
+    }
+  }
+  go(0);
+  return out;
+}
+console.log('size 2 of [1,2,3,4]:', JSON.stringify(combinations([1,2,3,4], 2)));
+
+// 2. Subsets when the INPUT has duplicates -- skip equal siblings
+function subsetsWithDup(nums) {
+  const sorted = [...nums].sort((a, b) =&gt; a - b);   // duplicates become adjacent
+  const out = [], path = [];
+  function go(start) {
+    out.push([...path]);
+    for (let i = start; i &lt; sorted.length; i++) {
+      // skip a value equal to the previous one AT THIS LEVEL
+      if (i &gt; start &amp;&amp; sorted[i] === sorted[i - 1]) continue;
+      path.push(sorted[i]);
+      go(i + 1);
+      path.pop();
+    }
+  }
+  go(0);
+  return out;
+}
+console.log('');
+console.log('with duplicates [1,2,2]:', JSON.stringify(subsetsWithDup([1,2,2])));
+// [], [1], [1,2], [1,2,2], [2], [2,2]   -- 6, not 8
+
+// 3. Subsets summing to a target -- prune when we overshoot
+function subsetsWithSum(nums, target) {
+  const out = [], path = [];
+  function go(start, sum) {
+    if (sum === target) out.push([...path]);
+    if (sum &gt;= target) return;                 // positives only: prune
+    for (let i = start; i &lt; nums.length; i++) {
+      path.push(nums[i]);
+      go(i + 1, sum + nums[i]);
+      path.pop();
+    }
+  }
+  go(0, 0);
+  return out;
+}
+console.log('');
+console.log('summing to 5 from [1,2,3,4]:', JSON.stringify(subsetsWithSum([1,2,3,4], 5)));</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Why the duplicate skip is <code>i &gt; start</code>, not <code>i &gt; 0</code></span>
+    <p>The rule is &ldquo;do not use the same value twice <em>as a choice at this level</em>&rdquo;.
+    The first iteration of a level (<code>i === start</code>) must always be allowed &mdash; that is
+    where a legitimate second copy of a value gets used, one level deeper. Writing
+    <code>i &gt; 0</code> blocks it and you lose <code>[2,2]</code> entirely.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the same problem, three ways, checked against each other</span></div>
+<pre><code>function backtracking(nums) {
+  const out = [], path = [];
+  (function go(start) {
+    out.push([...path]);
+    for (let i = start; i &lt; nums.length; i++) {
+      path.push(nums[i]); go(i + 1); path.pop();
+    }
+  })(0);
+  return out;
+}
+
+function iterative(nums) {
+  let result = [[]];
+  for (const n of nums) result = [...result, ...result.map(s =&gt; [...s, n])];
+  return result;
+}
+
+function bitmask(nums) {
+  const out = [];
+  for (let mask = 0; mask &lt; (1 &lt;&lt; nums.length); mask++) {
+    const s = [];
+    for (let i = 0; i &lt; nums.length; i++) if ((mask &gt;&gt; i) &amp; 1) s.push(nums[i]);
+    out.push(s);
+  }
+  return out;
+}
+
+// normalise: sort each subset, then sort the list, so order does
+// not affect the comparison
+const normalise = (list) =&gt;
+  JSON.stringify(list.map(s =&gt; [...s].sort((a, b) =&gt; a - b)).sort(
+    (a, b) =&gt; a.length - b.length || JSON.stringify(a).localeCompare(JSON.stringify(b))
+  ));
+
+let agree = 0;
+for (let n = 0; n &lt;= 8; n++) {
+  const nums = [];
+  for (let i = 1; i &lt;= n; i++) nums.push(i);
+
+  const a = normalise(backtracking(nums));
+  const b = normalise(iterative(nums));
+  const c = normalise(bitmask(nums));
+
+  if (a === b &amp;&amp; b === c) agree++;
+  else console.log('DISAGREE at n=' + n);
+}
+console.log('sizes 0 through 8, all three methods agree:', agree + '/9');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Iterative doubling</td><td class="mono">O(n &middot; 2&#8319;)</td><td class="mono">O(n &middot; 2&#8319;)</td></tr>
+        <tr><td>Bit mask</td><td class="mono">O(n &middot; 2&#8319;)</td><td class="mono">O(n &middot; 2&#8319;)</td></tr>
+        <tr><td><strong>Backtracking</strong></td><td class="mono">O(n &middot; 2&#8319;)</td><td class="mono">O(n) + output</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Why <code>n &middot; 2&#8319;</code> and not just <code>2&#8319;</code>:</strong> there are
+  2&#8319; subsets, and copying each one into the output costs up to <code>n</code>. The copying
+  dominates, so it is <code>n &middot; 2&#8319;</code>. Saying &ldquo;O(2&#8319;)&rdquo; is close
+  enough that most interviewers accept it, but the extra factor is real and worth naming.</p>
+
+  <p>The backtracking version&rsquo;s <em>working</em> space is only O(n) &mdash; the path plus the
+  call stack, both at most <code>n</code> deep. The output is O(n &middot; 2&#8319;) regardless of
+  approach, and by convention does not count against you.</p>
+
+  <p>All three are optimal: you cannot enumerate 2&#8319; things in less than 2&#8319; steps. This is
+  a problem where <strong>exponential is the correct answer</strong>, not a failure.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Each element is independently in or out, so there are 2&#8319; subsets and the output
+    size makes exponential unavoidable. I use backtracking: maintain a path, and at each index loop
+    over the remaining elements &mdash; choose, recurse with <code>i + 1</code>, un-choose. Every node
+    of the recursion is a valid subset, so I record on entry, pushing a <em>copy</em> of the path.
+    O(n&middot;2&#8319;) time, O(n) working space. I would use backtracking rather than the iterative
+    doubling because it extends to size-k, duplicate and sum-constrained variants with a single extra
+    condition, and lets me prune.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Pushing the path instead of a copy</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; every subset is the same array</span></div>
+<pre><code>function broken(nums) {
+  const out = [], path = [];
+  function go(start) {
+    out.push(path);                  // the ARRAY, not a copy -- bug
+    for (let i = start; i &lt; nums.length; i++) {
+      path.push(nums[i]);
+      go(i + 1);
+      path.pop();
+    }
+  }
+  go(0);
+  return out;
+}
+
+const result = broken([1, 2, 3]);
+console.log('length:', result.length);          // 8 -- the right count
+console.log(JSON.stringify(result));            // eight EMPTY arrays
+console.log('all the same object?', result[0] === result[7]);   // true
+
+// out holds eight references to ONE array. By the time we look at
+// it, every push has been undone by its matching pop, so it is
+// empty. push([...path]) takes a snapshot instead.</code></pre>
+  </div>
+
+  <h3>2. Forgetting to un-choose</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; no pop</span></div>
+<pre><code>function broken(nums) {
+  const out = [], path = [];
+  function go(start) {
+    out.push([...path]);
+    for (let i = start; i &lt; nums.length; i++) {
+      path.push(nums[i]);
+      go(i + 1);
+      // path.pop() missing -- bug
+    }
+  }
+  go(0);
+  return out;
+}
+
+console.log(JSON.stringify(broken([1, 2, 3])));
+// [[],[1],[1,2],[1,2,3],[1,2,3,3],[1,2,3,3,2],...]  -- garbage
+
+// The path never shrinks, so every branch inherits the choices of
+// the branch before it. The pop is not tidying up -- it is the
+// mechanism that makes the tree a tree.</code></pre>
+  </div>
+
+  <h3>3. Recursing with <code>start + 1</code> instead of <code>i + 1</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; duplicate and out-of-order subsets</span></div>
+<pre><code>function broken(nums) {
+  const out = [], path = [];
+  function go(start) {
+    out.push([...path]);
+    for (let i = start; i &lt; nums.length; i++) {
+      path.push(nums[i]);
+      go(start + 1);                 // should be i + 1 -- bug
+      path.pop();
+    }
+  }
+  go(0);
+  return out;
+}
+
+const r = broken([1, 2, 3]);
+console.log('count:', r.length);      // not 8
+console.log(JSON.stringify(r));
+// contains [2,1], [3,1] and repeats -- these are PERMUTATIONS of
+// subsets, not subsets
+
+// `i + 1` says "the next choice must come after the one I just
+// made", which is what keeps each subset in index order and
+// generates each one exactly once.</code></pre>
+  </div>
+
+  <h3>4. Forgetting the empty subset</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; recording only at the leaves, wrongly</span></div>
+<pre><code>function broken(nums) {
+  const out = [], path = [];
+  function go(start) {
+    if (path.length &gt; 0) out.push([...path]);    // skips [] -- bug
+    for (let i = start; i &lt; nums.length; i++) {
+      path.push(nums[i]);
+      go(i + 1);
+      path.pop();
+    }
+  }
+  go(0);
+  return out;
+}
+
+console.log('count:', broken([1,2,3]).length);   // 7, should be 8
+console.log('count:', broken([]).length);        // 0, should be 1
+console.log(JSON.stringify(broken([1,2,3])));
+
+// The empty set is a subset. The answer for [] is [[]] -- a list
+// containing one empty subset -- not [].</code></pre>
+  </div>
+
+  <h3>5. Duplicate handling: skipping at the wrong level</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; <code>i &gt; 0</code> instead of <code>i &gt; start</code></span></div>
+<pre><code>function broken(nums) {
+  const s = [...nums].sort((a, b) =&gt; a - b);
+  const out = [], path = [];
+  function go(start) {
+    out.push([...path]);
+    for (let i = start; i &lt; s.length; i++) {
+      if (i &gt; 0 &amp;&amp; s[i] === s[i - 1]) continue;    // should be i > start
+      path.push(s[i]);
+      go(i + 1);
+      path.pop();
+    }
+  }
+  go(0);
+  return out;
+}
+
+function correct(nums) {
+  const s = [...nums].sort((a, b) =&gt; a - b);
+  const out = [], path = [];
+  function go(start) {
+    out.push([...path]);
+    for (let i = start; i &lt; s.length; i++) {
+      if (i &gt; start &amp;&amp; s[i] === s[i - 1]) continue;
+      path.push(s[i]);
+      go(i + 1);
+      path.pop();
+    }
+  }
+  go(0);
+  return out;
+}
+
+console.log('broken  [1,2,2]:', JSON.stringify(broken([1,2,2])));
+console.log('correct [1,2,2]:', JSON.stringify(correct([1,2,2])));
+
+// The broken one loses [1,2,2] and [2,2] -- any subset that
+// legitimately uses BOTH copies of a repeated value.
+// i > start means "not the first choice at this level".</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the seven-line version from memory</strong> and say the triple out loud:
+    choose, explore, un-choose. Then say why the path must be copied.</li>
+    <li><strong>Combinations of size k.</strong> In Step 7 &mdash; write it from memory including the
+    pruning line, and check the count against <code>n! / (k!(n-k)!)</code>.</li>
+    <li><strong>Subsets with duplicates.</strong> Also in Step 7. Get <code>i &gt; start</code> right
+    and test on <code>[2,2,2]</code>, which should give four subsets, not eight.</li>
+    <li><strong>The bit-mask version.</strong> Write it from memory, and explain why it caps out at
+    around 32 elements.</li>
+    <li><strong>Subset sum: does any subset add to a target?</strong> Backtracking with pruning
+    answers it, and it is the gateway to the classic dynamic-programming version. Try both.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Choose, explore, un-choose.</strong> That triple, wrapped in a loop over the remaining
+    options, is the whole backtracking pattern &mdash; and the next four pages are the same code with
+    a different base case and a different pruning rule. Two habits go with it: <em>always record a
+    copy</em> of the path, and <em>always undo</em> after the recursive call returns.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="../searching-sorting/07-custom-comparator-sorting.html">&larr; Custom Comparator Sorting</a>
+  <a href="02-permutations.html">Next: Permutations &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

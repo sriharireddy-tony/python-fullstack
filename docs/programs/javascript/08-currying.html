@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Currying and sum(1)(2)(3)</title>
+<meta name="description" content="fn.length, partial application, and the infinite-arity trick with toString.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">JavaScript semantics &middot; Problem 08</p>
+  <h1>Currying &mdash; <code>sum(1)(2)(3)</code></h1>
+  <p class="standfirst">The generic <code>curry</code> is eight lines and turns on one property most
+  people have never used: <code>fn.length</code>. Then there is the trick version &mdash;
+  <code>sum(1)(2)(3)(4)&hellip;</code> forever &mdash; which is a completely different problem with a
+  genuinely strange answer.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p><strong>Currying</strong> turns a function of n arguments into a chain of n functions of one
+  argument each.</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">what curry does</span></div>
+<pre><code>function add(a, b, c) { return a + b + c; }
+
+add(1, 2, 3)              // 6      -- normal
+
+const curried = curry(add);
+curried(1)(2)(3)          // 6      -- fully curried
+curried(1, 2)(3)          // 6      -- and usually: partial in any grouping
+curried(1)(2, 3)          // 6
+curried(1, 2, 3)          // 6</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The question the implementation has to answer</span>
+    <p>&ldquo;Do I have enough arguments yet?&rdquo; &mdash; and the answer comes from
+    <code>fn.length</code>, the <strong>arity</strong>: how many parameters the function declares.</p>
+    <p>If <code>collected.length &gt;= fn.length</code>, call it. Otherwise return a function that
+    collects more.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">fn.length &mdash; and everything that breaks it</span></div>
+<pre><code>console.log('function (a, b, c)      ->', (function (a, b, c) {}).length);   // 3
+console.log('arrow (a, b)            ->', ((a, b) =&gt; {}).length);           // 2
+console.log('no parameters           ->', (function () {}).length);         // 0
+
+console.log('');
+console.log('Three things stop counting -- and this is the whole reason');
+console.log('a generic curry cannot handle every function:');
+console.log('  a DEFAULT value  (a, b = 1, c) ->',
+            (function (a, b = 1, c) {}).length);            // 1
+console.log('  a REST parameter (a, ...rest)  ->',
+            (function (a, ...rest) {}).length);             // 1
+console.log('  DESTRUCTURING is fine: ({a}, [b]) ->',
+            (function ({ a }, [b]) {}).length);             // 2
+
+console.log('');
+console.log('The rule: length counts parameters BEFORE the first one');
+console.log('with a default or a rest. Everything from there on is');
+console.log('invisible to it.');
+
+console.log('');
+console.log('Which is why these two are indistinguishable to curry:');
+const needsThree = (a, b, c) =&gt; a + b + c;
+const looksLikeOne = (a, ...rest) =&gt; a + rest.reduce((x, y) =&gt; x + y, 0);
+console.log('  needsThree.length   :', needsThree.length);
+console.log('  looksLikeOne.length :', looksLikeOne.length);
+console.log('  both compute the same sum:', needsThree(1, 2, 3), looksLikeOne(1, 2, 3));
+console.log('');
+console.log('A variadic function cannot be curried automatically. You');
+console.log('must pass the arity in by hand -- which is why good');
+console.log('implementations accept curry(fn, arity).');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; currying versus partial application</h2>
+
+  <p>Two related ideas that get used interchangeably and are not the same.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th></th><th>Currying</th><th>Partial application</th></tr></thead>
+      <tbody>
+        <tr><td>Transforms</td><td class="mono">(a,b,c) =&gt; x</td><td class="mono">(a,b,c) =&gt; x</td></tr>
+        <tr><td>Into</td><td class="mono">a =&gt; b =&gt; c =&gt; x</td><td class="mono">(b,c) =&gt; x</td></tr>
+        <tr><td>Fixes</td><td>nothing &mdash; it restructures</td><td>some arguments, now</td></tr>
+        <tr><td>Result</td><td>a chain of unary functions</td><td>one function of fewer arguments</td></tr>
+        <tr><td>In JavaScript</td><td class="mono">curry(fn)</td><td class="mono">fn.bind(null, a)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the two, side by side</span></div>
+<pre><code>function volume(l, w, h) { return l * w * h; }
+
+// partial application: fix `l` now, keep the rest as one function
+const partial = volume.bind(null, 2);
+console.log('partial(3, 4)     ->', partial(3, 4));
+console.log('partial.length    ->', partial.length, '-- still takes two at once');
+
+// currying: restructure into a chain
+const curried = (l) =&gt; (w) =&gt; (h) =&gt; volume(l, w, h);
+console.log('');
+console.log('curried(2)(3)(4)  ->', curried(2)(3)(4));
+console.log('curried(2).length ->', curried(2).length, '-- one at a time');
+
+console.log('');
+console.log('Currying enables partial application, which is why the');
+console.log('words get mixed up. But a curried function is a chain;');
+console.log('a partially applied one is a single function that has');
+console.log('already been given some of its arguments.');
+
+console.log('');
+console.log('Where it earns its keep -- pipelines:');
+const map = (fn) =&gt; (arr) =&gt; arr.map(fn);
+const filter = (fn) =&gt; (arr) =&gt; arr.filter(fn);
+const pipe = (...fns) =&gt; (x) =&gt; fns.reduce((v, f) =&gt; f(v), x);
+
+const double = map((x) =&gt; x * 2);
+const evens = filter((x) =&gt; x % 2 === 0);
+const doubleThenEvens = pipe(double, evens);
+
+console.log('  double([1,2,3])        :', double([1, 2, 3]));
+console.log('  doubleThenEvens([1..5]):', doubleThenEvens([1, 2, 3, 4, 5]));
+console.log('');
+console.log('`double` and `evens` are values. They can be named, stored,');
+console.log('passed and composed -- which is the actual point of');
+console.log('currying, not the funny call syntax.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it costs something</h2>
+
+  <p>Every partial call allocates a closure and an array. At normal sizes that is invisible; in a hot
+  loop it is not, and it is worth being able to say so.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; curried versus direct</span></div>
+<pre><code>function curry(fn) {
+  return function curried(...args) {
+    if (args.length &gt;= fn.length) return fn.apply(this, args);
+    return (...more) =&gt; curried.apply(this, [...args, ...more]);
+  };
+}
+
+function add3(a, b, c) { return a + b + c; }
+const cAdd3 = curry(add3);
+const N = 1000000;
+
+let t = performance.now();
+let s = 0;
+for (let i = 0; i &lt; N; i++) s += add3(1, 2, 3);
+const directMs = performance.now() - t;
+
+t = performance.now();
+s = 0;
+for (let i = 0; i &lt; N; i++) s += cAdd3(1, 2, 3);
+const allAtOnceMs = performance.now() - t;
+
+t = performance.now();
+s = 0;
+for (let i = 0; i &lt; N; i++) s += cAdd3(1)(2)(3);
+const chainedMs = performance.now() - t;
+
+// the sensible way to use it: curry ONCE outside the loop
+const addOneTwo = cAdd3(1)(2);
+t = performance.now();
+s = 0;
+for (let i = 0; i &lt; N; i++) s += addOneTwo(3);
+const preparedMs = performance.now() - t;
+
+console.log(N.toLocaleString('en-US') + ' calls');
+console.log('  add3(1,2,3)             : ' + directMs.toFixed(1) + ' ms');
+console.log('  curried(1,2,3)          : ' + allAtOnceMs.toFixed(1) + ' ms');
+console.log('  curried(1)(2)(3)        : ' + chainedMs.toFixed(1) + ' ms');
+console.log('  prepared once, then (3) : ' + preparedMs.toFixed(1) + ' ms');
+console.log('');
+console.log('The chained form allocates two closures and two arrays per');
+console.log('call. The prepared form pays that ONCE and is then almost');
+console.log('as cheap as the direct call.');
+console.log('');
+console.log('That is the practical rule: build your curried functions');
+console.log('at module load, not inside the loop that uses them.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; collect until you have enough</h2>
+
+  <div class="trace">
+<pre>  curry(fn):
+
+      return curried(...args):
+
+          if args.length >= fn.length:
+              enough -> fn(...args)
+
+          else:
+              not enough -> return a function that, when called,
+                            re-enters curried with the OLD args
+                            plus the NEW ones
+
+
+  curry(add3) where add3.length === 3:
+
+      curried(1)            1 &lt; 3   -> return g1, remembering [1]
+      g1(2)                         -> curried(1, 2)
+                            2 &lt; 3   -> return g2, remembering [1,2]
+      g2(3)                         -> curried(1, 2, 3)
+                            3 >= 3  -> add3(1, 2, 3) = 6
+
+  Each returned function closes over a DIFFERENT args array, so
+  a partial can be reused:
+
+      const addTo1 = curried(1)
+      addTo1(2)(3)   // 6
+      addTo1(5)(5)   // 11    -- addTo1 was not consumed
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why <code>[...args, ...more]</code> and not <code>args.push(...more)</code></span>
+    <p>Pushing mutates the array the partial closed over. Reuse that partial and it now carries the
+    previous call's arguments &mdash; a stateful bug in something that should be a pure value. Build a
+    new array every time. This is the mistake in Step 9.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace the collection</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function curryLoud(fn) {
+  const arity = fn.length;
+  console.log('curry(' + fn.name + ') -- arity is ' + arity);
+
+  return function curried(...args) {
+    console.log('  curried(' + args.join(', ') + ')  -- have ' +
+                args.length + ' of ' + arity);
+
+    if (args.length &gt;= arity) {
+      const result = fn.apply(this, args);
+      console.log('    enough -> calling ' + fn.name + ' -> ' + result);
+      return result;
+    }
+
+    console.log('    not enough -> returning a collector');
+    return function (...more) {
+      console.log('  collector called with (' + more.join(', ') + ')');
+      return curried.apply(this, [...args, ...more]);
+    };
+  };
+}
+
+function add3(a, b, c) { return a + b + c; }
+const c = curryLoud(add3);
+
+console.log('');
+console.log('--- c(1)(2)(3) ---');
+console.log('RESULT', c(1)(2)(3));
+
+console.log('');
+console.log('--- c(1, 2)(3) ---');
+console.log('RESULT', c(1, 2)(3));
+
+console.log('');
+console.log('--- c(1, 2, 3) ---');
+console.log('RESULT', c(1, 2, 3));
+
+console.log('');
+console.log('--- reusing a partial ---');
+const addTo1 = c(1);
+console.log('RESULT', addTo1(2)(3));
+console.log('RESULT', addTo1(5)(5), '-- addTo1 was not consumed');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without arrow functions or rest</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; ES5, arguments and concat</span></div>
+<pre><code>function curry(fn, arity) {
+  if (arity === undefined) arity = fn.length;
+
+  return function curried() {
+    // `arguments` is array-LIKE, not an array
+    var args = Array.prototype.slice.call(arguments);
+
+    if (args.length &gt;= arity) {
+      return fn.apply(this, args);
+    }
+
+    var self = this;
+    return function () {
+      var more = Array.prototype.slice.call(arguments);
+      // concat builds a NEW array -- never push into `args`
+      return curried.apply(self, args.concat(more));
+    };
+  };
+}
+
+function add3(a, b, c) { return a + b + c; }
+const c = curry(add3);
+
+console.log('c(1)(2)(3)  :', c(1)(2)(3));
+console.log('c(1, 2)(3)  :', c(1, 2)(3));
+console.log('c(1)(2, 3)  :', c(1)(2, 3));
+console.log('c(1, 2, 3)  :', c(1, 2, 3));
+
+// explicit arity, for a variadic function
+const sumAll = function () {
+  return Array.prototype.reduce.call(arguments, function (a, b) { return a + b; }, 0);
+};
+const c4 = curry(sumAll, 4);
+console.log('');
+console.log('explicit arity 4:');
+console.log('  c4(1)(2)(3)(4) :', c4(1)(2)(3)(4));
+console.log('  c4(1, 2)(3, 4) :', c4(1, 2)(3, 4));
+
+// `this` survives
+const obj = {
+  factor: 10,
+  scale: function (a, b) { return (a + b) * this.factor; },
+};
+obj.curriedScale = curry(obj.scale);
+console.log('');
+console.log('with a receiver:', obj.curriedScale(1)(2));   // (1+2)*10 = 30
+
+// extra arguments are passed straight through
+console.log('');
+console.log('c(1, 2, 3, 99):', c(1, 2, 3, 99), '-- the 4th is ignored by add3');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the modern one, and the trick question</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function curry(fn, arity = fn.length) {
+  return function curried(...args) {
+    return args.length &gt;= arity
+      ? fn.apply(this, args)
+      : (...more) =&gt; curried.apply(this, [...args, ...more]);
+  };
+}
+
+const add3 = (a, b, c) =&gt; a + b + c;
+const c = curry(add3);
+
+const forms = [
+  ['c(1)(2)(3)', () =&gt; c(1)(2)(3)],
+  ['c(1, 2)(3)', () =&gt; c(1, 2)(3)],
+  ['c(1)(2, 3)', () =&gt; c(1)(2, 3)],
+  ['c(1, 2, 3)', () =&gt; c(1, 2, 3)],
+  ['c()(1)(2)(3)', () =&gt; c()(1)(2)(3)],
+];
+for (const [label, run] of forms) {
+  console.log(label.padEnd(14) + '-> ' + run());
+}
+
+console.log('');
+console.log('Partials are reusable values, not one-shot:');
+const addTo10 = c(10);
+console.log('  addTo10(1)(2):', addTo10(1)(2));
+console.log('  addTo10(5)(5):', addTo10(5)(5));
+console.log('  addTo10(0)(0):', addTo10(0)(0));
+
+console.log('');
+console.log('The right-to-left variant, for when the LAST argument is');
+console.log('the one that varies:');
+function curryRight(fn, arity = fn.length) {
+  return function curried(...args) {
+    return args.length &gt;= arity
+      ? fn.apply(this, args.slice().reverse())
+      : (...more) =&gt; curried.apply(this, [...args, ...more]);
+  };
+}
+const divide = (a, b) =&gt; a / b;
+console.log('  curry(divide)(10)(2)      :', curry(divide)(10)(2));      // 5
+console.log('  curryRight(divide)(10)(2) :', curryRight(divide)(10)(2)); // 0.2
+
+// placeholders -- what lodash calls _
+const _ = Symbol('placeholder');
+function curryWithPlaceholder(fn, arity = fn.length) {
+  return function curried(...args) {
+    const filled = args.filter((a) =&gt; a !== _).length;
+    if (filled &gt;= arity &amp;&amp; !args.slice(0, arity).includes(_)) {
+      return fn.apply(this, args.slice(0, arity));
+    }
+    return (...more) =&gt; {
+      const merged = args.slice();
+      let mi = 0;
+      for (let i = 0; i &lt; merged.length &amp;&amp; mi &lt; more.length; i++) {
+        if (merged[i] === _) merged[i] = more[mi++];
+      }
+      return curried.apply(this, [...merged, ...more.slice(mi)]);
+    };
+  };
+}
+const greet = (greeting, name, mark) =&gt; greeting + ', ' + name + mark;
+const cg = curryWithPlaceholder(greet);
+console.log('');
+console.log('placeholders:');
+console.log('  cg("Hi", _, "!")("Ada")  :', cg('Hi', _, '!')('Ada'));
+console.log('  cg(_, "Ada")("Hello")("!") :', cg(_, 'Ada')('Hello')('!'));</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The trick question: <code>sum(1)(2)(3)(4)&hellip;</code> forever</span>
+    <p>This is <strong>not</strong> currying, because there is no arity to reach &mdash; the chain never
+    ends. So the returned function must be able to act as both a function <em>and</em> a number.</p>
+    <p>The answer: give the returned function a <code>toString</code> (and
+    <code>valueOf</code>, and <code>Symbol.toPrimitive</code>) that produces the running total. When
+    JavaScript needs a primitive &mdash; printing it, adding it, comparing it &mdash; it calls one of
+    those.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">the infinite-arity version</span></div>
+<pre><code>function sum(first) {
+  let total = first;
+
+  function collect(next) {
+    total += next;
+    return collect;                 // always returns itself
+  }
+
+  // this is the whole trick
+  collect.toString = () =&gt; String(total);
+  collect.valueOf = () =&gt; total;
+  collect[Symbol.toPrimitive] = () =&gt; total;
+
+  return collect;
+}
+
+const three = sum(1)(2)(3);
+console.log('typeof the result :', typeof three);
+console.log('');
+console.log('It is a FUNCTION -- but every operation that needs a');
+console.log('primitive gets a number:');
+console.log('  String()      :', String(three));
+console.log('  + 0           :', three + 0);
+console.log('  * 2           :', three * 2);
+console.log('  `${...}`      :', `${three}`);
+console.log('  == 6          :', three == 6);
+console.log('  &lt; 10          :', three &lt; 10);
+console.log('  JSON.stringify:', JSON.stringify({ v: +three }));
+
+console.log('');
+console.log('and the chain has no end:');
+console.log('  sum(1)(2)(3)(4)(5)(6)(7)(8)(9)(10) =',
+            +sum(1)(2)(3)(4)(5)(6)(7)(8)(9)(10));
+
+console.log('');
+console.log('The catch, and the follow-up question:');
+console.log('  three === 6   :', three === 6);
+console.log('');
+console.log('Strict equality does NOT coerce. There is no way to make');
+console.log('an object === a number, so the honest answer is "it works');
+console.log('for every operation except ===, and if you need === you');
+console.log('need a terminating call like sum(1)(2)(3)()".');
+
+// the terminating-call variant, which is usually what production wants
+function sumUntilEmpty(first) {
+  let total = first;
+  return function next(x) {
+    if (x === undefined) return total;      // sum(1)(2)() -> 3
+    total += x;
+    return next;
+  };
+}
+console.log('');
+console.log('with an explicit terminator:');
+const t = sumUntilEmpty(1)(2)(3)();
+console.log('  sumUntilEmpty(1)(2)(3)() =', t, ' and === 6 is', t === 6);</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">which coercion hook actually fires</span></div>
+<pre><code>function probe(label, hooks) {
+  const f = () =&gt; f;
+  const called = [];
+  if (hooks.includes('toString')) f.toString = () =&gt; { called.push('toString'); return '42'; };
+  if (hooks.includes('valueOf')) f.valueOf = () =&gt; { called.push('valueOf'); return 42; };
+  if (hooks.includes('toPrimitive')) {
+    f[Symbol.toPrimitive] = (hint) =&gt; {
+      called.push('toPrimitive(' + hint + ')');
+      return hint === 'string' ? '42' : 42;
+    };
+  }
+  return { f, called, label };
+}
+
+const scenarios = [
+  ['all three          ', ['toString', 'valueOf', 'toPrimitive']],
+  ['toString + valueOf ', ['toString', 'valueOf']],
+  ['valueOf only       ', ['valueOf']],
+  ['toString only      ', ['toString']],
+];
+
+for (const [label, hooks] of scenarios) {
+  const results = [];
+  for (const [op, run] of [
+    ['String(f)', (f) =&gt; String(f)],
+    ['f + 0    ', (f) =&gt; f + 0],
+    ['f * 2    ', (f) =&gt; f * 2],
+  ]) {
+    const { f, called } = probe(label, hooks);
+    const value = run(f);
+    results.push(op + ' -> ' + value + ' via ' + (called[0] || 'none'));
+  }
+  console.log(label + ':');
+  results.forEach((r) =&gt; console.log('    ' + r));
+}
+
+console.log('');
+console.log('Symbol.toPrimitive wins whenever it exists. Otherwise:');
+console.log('  a STRING hint (String(), template literals) tries');
+console.log('    toString first;');
+console.log('  a NUMBER or DEFAULT hint (arithmetic, +) tries');
+console.log('    valueOf first.');
+console.log('');
+console.log('Define all three and the answer is right in every');
+console.log('context. Miss one and look at what happens above:');
+console.log('  valueOf only  -> String(f) printed the SOURCE CODE,');
+console.log('                   because there was no toString to use.');
+console.log('  toString only -> f + 0 gave "420", a STRING');
+console.log('                   concatenation, because + with a string');
+console.log('                   operand concatenates.');
+console.log('');
+console.log('That second one is the nastiest: f * 2 was fine (84) and');
+console.log('f + 0 was silently wrong. Define all three.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Operation</th><th>Cost</th></tr></thead>
+      <tbody>
+        <tr><td>Calling a curried function fully applied</td><td class="mono">O(n) to spread, then the original</td></tr>
+        <tr><td>Each partial application</td><td class="mono">O(k) &mdash; a new array of k collected arguments</td></tr>
+        <tr><td>A full n-step chain</td><td class="mono">O(n<sup>2</sup>) copies in total</td></tr>
+        <tr><td>Space per partial</td><td class="mono">one closure plus the args array</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>That <code>O(n&sup2;)</code> is real but almost never relevant: <code>n</code> is the number of
+  <em>parameters</em>, which is three or four. It becomes a genuine problem only with a large explicit
+  arity &mdash; <code>curry(fn, 1000)</code> copies the growing array a thousand times.</p>
+
+  <p>The cost that actually matters in practice is the one from Step 3: a partial built inside a hot
+  loop allocates on every iteration. Build it once, outside.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;<code>curry</code> returns a collector that compares how many arguments it has against
+    <code>fn.length</code>. Enough, and it calls through; not enough, and it returns another collector
+    closing over what it has so far. I always build a new array rather than pushing, so a partial can
+    be reused. The limitation to mention is that <code>fn.length</code> stops counting at the first
+    default or rest parameter, so variadic functions need the arity passed in explicitly. And
+    <code>sum(1)(2)(3)</code> with no fixed arity is a different problem &mdash; there you return the
+    function itself and give it a <code>toString</code>, <code>valueOf</code> and
+    <code>Symbol.toPrimitive</code> so it coerces to the running total.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Mutating the collected arguments</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; a partial that remembers the last call</span></div>
+<pre><code>function brokenCurry(fn) {
+  return function curried(...args) {
+    if (args.length &gt;= fn.length) return fn.apply(this, args);
+    return (...more) =&gt; {
+      args.push(...more);              // MUTATES the closed-over array
+      return curried.apply(this, args);
+    };
+  };
+}
+
+function goodCurry(fn) {
+  return function curried(...args) {
+    if (args.length &gt;= fn.length) return fn.apply(this, args);
+    return (...more) =&gt; curried.apply(this, [...args, ...more]);
+  };
+}
+
+const add3 = (a, b, c) =&gt; a + b + c;
+
+const bad = brokenCurry(add3);
+const badPartial = bad(1);
+console.log('broken, first use :', badPartial(2)(3));    // 6, correct
+try {
+  console.log('broken, reused    :', badPartial(2)(3));
+} catch (e) {
+  console.log('broken, reused    :', e.constructor.name + ':', e.message);
+  console.log('  The first use mutated the collected array from [1] to');
+  console.log('  [1, 2, 3]. The second use pushed another 2, giving');
+  console.log('  [1, 2, 3, 2] -- already past the arity -- so');
+  console.log('  badPartial(2) returned', badPartial(2), 'instead of a');
+  console.log('  collector, and you cannot call a number.');
+}
+
+const good = goodCurry(add3);
+const goodPartial = good(1);
+console.log('');
+console.log('good, first use   :', goodPartial(2)(3));
+console.log('good, reused      :', goodPartial(2)(3));
+console.log('good, different   :', goodPartial(10)(100));
+
+console.log('');
+console.log('The broken partial accumulated arguments across calls.');
+console.log('A partially applied function is supposed to be a VALUE --');
+console.log('reusable, and identical every time you call it.');</code></pre>
+  </div>
+
+  <h3>2. Assuming <code>fn.length</code> knows about defaults or rest</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; curry fires too early</span></div>
+<pre><code>function curry(fn, arity = fn.length) {
+  return function curried(...args) {
+    return args.length &gt;= arity
+      ? fn.apply(this, args)
+      : (...more) =&gt; curried.apply(this, [...args, ...more]);
+  };
+}
+
+// a default value hides the parameters after it
+const greet = (greeting, name, mark = '!') =&gt; greeting + ', ' + name + mark;
+console.log('greet.length      :', greet.length, '-- says 2, actually takes 3');
+
+const cg = curry(greet);
+console.log('cg("Hi")("Ada")   :', cg('Hi')('Ada'));
+console.log('  fine -- 2 arguments was genuinely enough');
+
+// but a default in the MIDDLE is a disaster
+const middle = (a, b = 2, c) =&gt; [a, b, c];
+console.log('');
+console.log('middle.length     :', middle.length, '-- says 1!');
+const cm = curry(middle);
+console.log('cm(1)             :', cm(1), '-- fired immediately, b and c undefined');
+
+// rest is the same story
+const variadic = (first, ...rest) =&gt; [first, rest];
+console.log('');
+console.log('variadic.length   :', variadic.length);
+console.log('curry(variadic)(1):', curry(variadic)(1), '-- fired at once');
+
+console.log('');
+console.log('The fix is always the same: pass the arity explicitly.');
+console.log('  curry(middle, 3)(1)(2)(3) :', curry(middle, 3)(1)(2)(3));
+console.log('  curry(variadic, 3)(1)(2)(3):',
+            JSON.stringify(curry(variadic, 3)(1)(2)(3)));</code></pre>
+  </div>
+
+  <h3>3. Losing <code>this</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the receiver disappears at the second call</span></div>
+<pre><code>function brokenCurry(fn) {
+  return function curried(...args) {
+    if (args.length &gt;= fn.length) return fn(...args);       // fn(), not fn.apply
+    return (...more) =&gt; curried(...args, ...more);          // no `this` either
+  };
+}
+
+function goodCurry(fn) {
+  return function curried(...args) {
+    if (args.length &gt;= fn.length) return fn.apply(this, args);
+    return (...more) =&gt; curried.apply(this, [...args, ...more]);
+  };
+}
+
+const makeObj = (curry) =&gt; ({
+  factor: 10,
+  scale: curry(function (a, b) {
+    return this &amp;&amp; this.factor ? (a + b) * this.factor : 'this was lost';
+  }),
+});
+
+const bad = makeObj(brokenCurry);
+const good = makeObj(goodCurry);
+
+console.log('broken: bad.scale(1, 2) ->', bad.scale(1, 2));
+console.log('good  : good.scale(1, 2) ->', good.scale(1, 2));
+console.log('');
+console.log('broken: bad.scale(1)(2)  ->', bad.scale(1)(2));
+console.log('good  : good.scale(1)(2) ->', good.scale(1)(2));
+
+console.log('');
+console.log('The good version works in BOTH forms. On the chained call');
+console.log('it survives for a subtle reason: the arrow captures `this`');
+console.log('lexically from `curried`, which was the receiver at the');
+console.log('first call -- so it is still there two links later.');
+console.log('');
+console.log('The broken one never captured it at all: `fn(...args)`');
+console.log('is a plain call, and a plain call has no receiver.');
+console.log('');
+console.log('If the curried function will ever be a method, use');
+console.log('.apply(this, ...) everywhere and test the chained form,');
+console.log('not just the all-at-once form.');</code></pre>
+  </div>
+
+  <h3>4. Expecting <code>===</code> to work on the infinite-sum trick</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">works everywhere except the one place people test</span></div>
+<pre><code>function sum(first) {
+  let total = first;
+  const collect = (next) =&gt; { total += next; return collect; };
+  collect.toString = () =&gt; String(total);
+  collect.valueOf = () =&gt; total;
+  collect[Symbol.toPrimitive] = () =&gt; total;
+  return collect;
+}
+
+const r = sum(1)(2)(3);
+
+const checks = [
+  ['r == 6           ', r == 6],
+  ['r === 6          ', r === 6],
+  ['+r === 6         ', +r === 6],
+  ['Number(r) === 6  ', Number(r) === 6],
+  ['r &gt; 5            ', r &gt; 5],
+  ['`${r}` === "6"   ', `${r}` === '6'],
+  ['[r].join() === "6"', [r].join() === '6'],
+  ['typeof r         ', typeof r],
+  ['Array.isArray(r) ', Array.isArray(r)],
+  ['JSON of {v:r}    ', JSON.stringify({ v: r })],
+];
+checks.forEach(([label, v]) =&gt; console.log('  ' + label + ' -> ' + v));
+
+console.log('');
+console.log('Two to notice:');
+console.log('  === is false and can never be made true. Strict equality');
+console.log('    does no coercion at all -- that is its definition.');
+console.log('  JSON.stringify DROPS it, because a function is not JSON.');
+console.log('    Neither toString nor valueOf is consulted; only');
+console.log('    toJSON would be, so add one if you need it:');
+
+const r2 = sum(1)(2)(3);
+r2.toJSON = function () { return +this; };
+console.log('    with toJSON  :', JSON.stringify({ v: r2 }));
+
+console.log('');
+console.log('Say all of this out loud when you present the trick. The');
+console.log('interviewer is checking whether you know its limits, not');
+console.log('whether you can write it.');</code></pre>
+  </div>
+
+  <h3>5. Currying something that should just be a function</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct, and worse than the obvious version</span></div>
+<pre><code>const users = [
+  { name: 'Ada', age: 36, city: 'London' },
+  { name: 'Grace', age: 45, city: 'New York' },
+  { name: 'Alan', age: 41, city: 'London' },
+];
+
+// curried "point-free" style
+const prop = (key) =&gt; (obj) =&gt; obj[key];
+const equals = (a) =&gt; (b) =&gt; a === b;
+const compose = (...fns) =&gt; (x) =&gt; fns.reduceRight((v, f) =&gt; f(v), x);
+const inLondon = compose(equals('London'), prop('city'));
+
+console.log('curried :', users.filter(inLondon).map(prop('name')));
+
+// the direct version
+console.log('direct  :', users.filter((u) =&gt; u.city === 'London').map((u) =&gt; u.name));
+
+console.log('');
+console.log('Same answer. The second one can be read by anyone; the');
+console.log('first needs three helper definitions and a mental stack.');
+console.log('');
+console.log('Currying earns its place when a function is genuinely');
+console.log('reused with the same leading arguments:');
+
+const logger = (level) =&gt; (module) =&gt; (msg) =&gt; '[' + level + '] ' + module + ': ' + msg;
+const authError = logger('ERROR')('auth');
+console.log(' ', authError('token expired'));
+console.log(' ', authError('invalid signature'));
+console.log('');
+console.log('That is a real win -- one configured function, used many');
+console.log('times. Currying a one-off predicate is not.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the four-line <code>curry</code> from memory.</strong> Then say what
+    <code>fn.length</code> is and the two things that stop it counting.</li>
+    <li><strong>Write <code>sum(1)(2)(3)</code></strong> with <code>toString</code>,
+    <code>valueOf</code> and <code>Symbol.toPrimitive</code>, and state its limitation before you are
+    asked.</li>
+    <li><strong>Write the terminating variant</strong> <code>sum(1)(2)(3)()</code> and explain why it
+    is the better answer for real code.</li>
+    <li><strong>Write <code>partial</code></strong> &mdash; <code>partial(fn, ...preset)</code> &mdash;
+    and say how it differs from <code>curry</code>. It is three lines, and it is what
+    <code>bind</code> already does.</li>
+    <li><strong>Add placeholder support.</strong> Step 7. It is the feature that makes
+    <code>curry</code> genuinely useful, and the merging logic is a good exercise.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Two different questions wear the same name.</strong> Generic currying is about
+    <code>fn.length</code> and collecting arguments &mdash; a closure exercise. The infinite
+    <code>sum(1)(2)(3)</code> is about <em>coercion</em> &mdash; a type-conversion exercise dressed as a
+    function. Work out which one is being asked before you start writing.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="07-closures-counter.html">&larr; Closures &amp; the Counter Factory</a>
+  <a href="09-memoize.html">Next: Memoize a Function &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

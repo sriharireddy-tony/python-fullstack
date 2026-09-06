@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ransom Note and Character Counting</title>
+<meta name="description" content="The frequency map, on its own, done properly — the single most reused tool in string and array problems.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Hash map &middot; Problem 06</p>
+  <h1>Ransom Note &amp; Character Counting</h1>
+  <p class="standfirst">The simplest problem in this collection, and the one whose technique you will
+  use most often. This page is really about the <strong>frequency map</strong> itself &mdash; how to
+  build one, how to spend one, and the four small ways people get it wrong.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>You have a magazine and want to cut out letters to spell a ransom note. Each letter in the
+  magazine can be used <strong>at most once</strong>. Can you build the note?</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Note</th><th>Magazine</th><th>Answer</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">"a"</td><td class="mono">"b"</td><td class="mono">false</td><td>no <code>a</code> available</td></tr>
+        <tr><td class="mono">"aa"</td><td class="mono">"ab"</td><td class="mono">false</td><td>only one <code>a</code></td></tr>
+        <tr><td class="mono">"aa"</td><td class="mono">"aab"</td><td class="mono">true</td><td>two a&rsquo;s, one spare <code>b</code></td></tr>
+        <tr><td class="mono">""</td><td class="mono">"anything"</td><td class="mono">true</td><td>an empty note needs nothing</td></tr>
+        <tr><td class="mono">"abc"</td><td class="mono">""</td><td class="mono">false</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">How this differs from Valid Anagram</span>
+    <p>Valid Anagram: the two strings must use <strong>exactly</strong> the same letters, so the
+    lengths must match and the budget must land on zero.</p>
+    <p>Ransom Note: the magazine may have <strong>spare</strong> letters. So there is no length check,
+    and leftover budget is fine. It is the same build-and-spend, minus one condition.</p>
+  </div>
+
+  <p>Row two is the row that matters. <code>"aa"</code> needs <em>two</em> a&rsquo;s. Any solution
+  based on &ldquo;does the magazine contain this character?&rdquo; passes it and is wrong.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the two obvious answers</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0a &mdash; the one-liner that is wrong</span></div>
+<pre><code>function tempting(note, magazine) {
+  for (const ch of note) {
+    if (!magazine.includes(ch)) return false;
+  }
+  return true;
+}
+
+console.log(tempting('a', 'b'));       // false   correct
+console.log(tempting('abc', ''));      // false   correct
+console.log(tempting('aa', 'aab'));    // true    correct
+console.log(tempting('aa', 'ab'));     // TRUE    WRONG, should be false
+
+// `includes` answers "is there at least one?" -- it never runs out.
+// The note needs two a's; the magazine has one; the check passes
+// twice because it never consumes anything.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0b &mdash; consume as you go</span></div>
+<pre><code>function byRemoving(note, magazine) {
+  let remaining = magazine;
+
+  for (const ch of note) {
+    const at = remaining.indexOf(ch);
+    if (at === -1) return false;                      // ran out
+    remaining = remaining.slice(0, at) + remaining.slice(at + 1);   // cut it out
+  }
+
+  return true;
+}
+
+console.log(byRemoving('a', 'b'));       // false
+console.log(byRemoving('aa', 'ab'));     // false   correct now
+console.log(byRemoving('aa', 'aab'));    // true
+console.log(byRemoving('', 'anything')); // true
+
+// Correct -- it literally cuts each letter out of the magazine.
+// And it rebuilds the whole magazine string on every letter, so it
+// is O(note x magazine).</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>Both <code>includes</code> and <code>indexOf</code> scan the magazine, and the removing version
+  also allocates a fresh string each time. With a note of length <code>m</code> and a magazine of
+  length <code>n</code> that is <strong>O(m &times; n)</strong>.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// The letters the note needs are all at the END of the magazine,
+// so every indexOf has to scan past the whole first half.
+const M = 2000;                                  // note length
+const N = 20000;                                 // filler length
+
+const note = 'z'.repeat(M);
+const magazine = 'a'.repeat(N) + 'z'.repeat(M);
+
+function scanning(n, m) {
+  let rest = m;
+  for (const ch of n) {
+    const at = rest.indexOf(ch);
+    if (at === -1) return false;
+    rest = rest.slice(0, at) + rest.slice(at + 1);
+  }
+  return true;
+}
+
+function counting(n, m) {
+  const budget = new Map();
+  for (const ch of m) budget.set(ch, (budget.get(ch) || 0) + 1);
+  for (const ch of n) {
+    const left = budget.get(ch);
+    if (!left) return false;
+    budget.set(ch, left - 1);
+  }
+  return true;
+}
+
+let t = performance.now();
+const a = scanning(note, magazine);
+const scanMs = performance.now() - t;
+
+t = performance.now();
+const b = counting(note, magazine);
+const countMs = performance.now() - t;
+
+console.log('scan and cut out :', a, 'in', scanMs.toFixed(1) + ' ms');
+console.log('count and spend  :', b, 'in', countMs.toFixed(2) + ' ms');
+console.log('same answer:', a === b);
+console.log('speed-up:', Math.round(scanMs / Math.max(countMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; count once, then spend</h2>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p><strong>Pass 1:</strong> count every character of the magazine into a map. That is your budget.<br>
+    <strong>Pass 2:</strong> walk the note, decrementing. If a character is missing or the count has
+    already reached zero, you cannot afford the note.</p>
+  </div>
+
+  <p>The magazine is scanned <em>once</em> instead of once per letter of the note. Each lookup is
+  constant time. Total: O(m + n).</p>
+
+  <div class="trace">
+<pre>  note = "aa"    magazine = "aab"
+
+  PASS 1 -- the budget
+    a -> {a:1}
+    a -> {a:2}
+    b -> {a:2, b:1}
+
+  PASS 2 -- spend it
+    'a'  budget has 2  ->  spend, now 1
+    'a'  budget has 1  ->  spend, now 0
+
+  never overdrawn -> TRUE
+  (the leftover b is fine -- spare letters are allowed)
+
+
+  note = "aa"    magazine = "ab"
+
+  PASS 1 -- budget {a:1, b:1}
+
+  PASS 2
+    'a'  budget has 1  ->  spend, now 0
+    'a'  budget has 0  ->  OVERDRAWN  ->  FALSE
+</pre>
+  </div>
+
+  <h3>Which string gets counted</h3>
+
+  <p>Count the <strong>magazine</strong>, spend the <strong>note</strong>. Getting it backwards
+  produces a subtly different question &mdash; &ldquo;can the note supply the magazine?&rdquo; &mdash;
+  which is the wrong way round and gives wrong answers whenever the magazine has spare letters.</p>
+
+  <div class="note">
+    <span class="t">A cheap early exit</span>
+    <p>If the note is longer than the magazine, it is impossible &mdash; return false immediately.
+    One line, and it short-circuits a large class of negative cases before any counting happens.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>note = "aabb"</code>, <code>magazine = "aabbcc"</code>.</p>
+
+  <div class="trace">
+<pre>PASS 1 -- count the magazine "aabbcc"
+  a -> {a:1}
+  a -> {a:2}
+  b -> {a:2, b:1}
+  b -> {a:2, b:2}
+  c -> {a:2, b:2, c:1}
+  c -> {a:2, b:2, c:2}
+
+PASS 2 -- spend with the note "aabb"
+  'a'  has 2  ->  spend   {a:1, b:2, c:2}
+  'a'  has 1  ->  spend   {a:0, b:2, c:2}
+  'b'  has 2  ->  spend   {a:0, b:1, c:2}
+  'b'  has 1  ->  spend   {a:0, b:0, c:2}
+
+never overdrawn -> TRUE
+leftover: two c's, which nobody asked about
+</pre>
+  </div>
+
+  <p>A failing case, <code>note = "aab"</code>, <code>magazine = "ab"</code>:</p>
+
+  <div class="trace">
+<pre>note length 3, magazine length 2  ->  3 > 2, impossible.
+
+The early exit catches it before any counting. Without the early
+exit:
+
+PASS 1 -- budget {a:1, b:1}
+PASS 2
+  'a'  has 1  ->  spend   {a:0, b:1}
+  'a'  has 0  ->  OVERDRAWN  ->  FALSE
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function canBuildExplained(note, magazine) {
+  console.log('note = "' + note + '"   magazine = "' + magazine + '"');
+
+  if (note.length &gt; magazine.length) {
+    console.log('note is longer than the magazine -> FALSE');
+    console.log('');
+    return false;
+  }
+
+  const budget = new Map();
+
+  console.log('PASS 1 -- count the magazine');
+  for (const ch of magazine) {
+    budget.set(ch, (budget.get(ch) || 0) + 1);
+    console.log("  '" + ch + "'  ->  " + JSON.stringify([...budget]));
+  }
+
+  console.log('PASS 2 -- spend it with the note');
+  for (const ch of note) {
+    const left = budget.get(ch) || 0;
+
+    if (left === 0) {
+      console.log("  '" + ch + "'  budget has 0  ->  OVERDRAWN, FALSE");
+      console.log('');
+      return false;
+    }
+
+    budget.set(ch, left - 1);
+    console.log("  '" + ch + "'  had " + left + ", spend one  ->  " +
+                JSON.stringify([...budget]));
+  }
+
+  console.log('never overdrawn -> TRUE');
+  console.log('');
+  return true;
+}
+
+console.log('ANSWER:', canBuildExplained('aabb', 'aabbcc'));
+console.log('==========================================');
+console.log('ANSWER:', canBuildExplained('aa', 'ab'));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; a 26-slot counter array</span></div>
+<pre><code>function canConstructManual(note, magazine) {
+  if (note.length &gt; magazine.length) return false;
+
+  const counts = [];
+  for (let i = 0; i &lt; 26; i++) counts[i] = 0;
+
+  // PASS 1: the magazine is the budget
+  for (let i = 0; i &lt; magazine.length; i++) {
+    const idx = magazine.charCodeAt(i) - 97;
+    counts[idx] = counts[idx] + 1;
+  }
+
+  // PASS 2: the note spends it
+  for (let i = 0; i &lt; note.length; i++) {
+    const idx = note.charCodeAt(i) - 97;
+
+    if (counts[idx] === 0) return false;    // ran out of this letter
+
+    counts[idx] = counts[idx] - 1;
+  }
+
+  return true;
+}
+
+console.log(canConstructManual('a', 'b'));           // false
+console.log(canConstructManual('aa', 'ab'));         // false
+console.log(canConstructManual('aa', 'aab'));        // true
+console.log(canConstructManual('', 'anything'));     // true
+console.log(canConstructManual('abc', ''));          // false
+console.log(canConstructManual('abc', 'cba'));       // true
+console.log(canConstructManual('aabbcc', 'abcabc')); // true
+console.log(canConstructManual('', ''));             // true</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the frequency map, as a reusable helper</span></div>
+<pre><code>// This is the function you will write again and again. Worth being
+// able to produce it without thinking.
+function countBy(items, keyOf = x =&gt; x) {
+  const counts = new Map();
+  for (const item of items) {
+    const key = keyOf(item);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return counts;
+}
+
+console.log(countBy('hello'));                          // h,e,l x2,o
+console.log(countBy([1, 2, 2, 3, 3, 3]));               // 1,2x2,3x3
+console.log(countBy(['apple', 'avocado', 'banana'], w =&gt; w[0]));   // a x2, b
+console.log(countBy([1,2,3,4,5,6], n =&gt; n % 2 ? 'odd' : 'even'));  // odd x3, even x3
+
+// Everything on this page, and half of the string problems in this
+// collection, is countBy plus one loop.
+function canConstruct(note, magazine) {
+  const budget = countBy(magazine);
+  for (const ch of note) {
+    const left = budget.get(ch);
+    if (!left) return false;
+    budget.set(ch, left - 1);
+  }
+  return true;
+}
+
+console.log('');
+console.log(canConstruct('aa', 'aab'));   // true
+console.log(canConstruct('aa', 'ab'));    // false</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function canConstruct(note, magazine) {
+  if (note.length &gt; magazine.length) return false;
+
+  const budget = new Map();
+  for (const ch of magazine) budget.set(ch, (budget.get(ch) || 0) + 1);
+
+  for (const ch of note) {
+    const left = budget.get(ch);
+    if (!left) return false;          // undefined or 0, both mean "cannot afford"
+    budget.set(ch, left - 1);
+  }
+
+  return true;
+}
+
+console.log(canConstruct('a', 'b'));            // false
+console.log(canConstruct('aa', 'ab'));          // false
+console.log(canConstruct('aa', 'aab'));         // true
+console.log(canConstruct('', 'anything'));      // true
+console.log(canConstruct('Hi!', '!Hi there'));  // true  -- any characters
+console.log(canConstruct('a b', 'b a'));        // true  -- spaces count</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the family of questions one frequency map answers</span></div>
+<pre><code>const countBy = (items) =&gt; {
+  const m = new Map();
+  for (const x of items) m.set(x, (m.get(x) || 0) + 1);
+  return m;
+};
+
+const text = 'the quick brown fox jumps over the lazy dog the end';
+
+// 1. word frequencies
+const words = countBy(text.split(' '));
+console.log('word counts:', [...words].filter(([, n]) =&gt; n &gt; 1));
+
+// 2. the most common item
+function mostCommon(items) {
+  let best = null, bestCount = 0;
+  for (const [k, n] of countBy(items)) if (n &gt; bestCount) { best = k; bestCount = n; }
+  return { value: best, count: bestCount };
+}
+console.log('most common word:', mostCommon(text.split(' ')));
+
+// 3. anything appearing exactly once
+const letters = countBy([...text.replace(/ /g, '')]);
+console.log('letters used once:', [...letters].filter(([, n]) =&gt; n === 1).map(([c]) =&gt; c));
+
+// 4. do two collections have the same contents?
+function sameContents(a, b) {
+  const ca = countBy(a), cb = countBy(b);
+  if (ca.size !== cb.size) return false;
+  for (const [k, n] of ca) if (cb.get(k) !== n) return false;
+  return true;
+}
+console.log('same contents:', sameContents('listen', 'silent'));   // true
+console.log('same contents:', sameContents('aabb', 'abbb'));       // false
+
+// 5. can a be built from b? (this page)
+function canBuild(a, b) {
+  const budget = countBy(b);
+  for (const x of a) {
+    const left = budget.get(x);
+    if (!left) return false;
+    budget.set(x, left - 1);
+  }
+  return true;
+}
+console.log('canBuild:', canBuild('cat', 'tactful'));   // true
+console.log('canBuild:', canBuild('cattt', 'tactful')); // false</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">counting things that are not characters</span></div>
+<pre><code>// The technique does not care what it counts, as long as the key
+// is something a Map can hold.
+const orders = [
+  { id: 1, status: 'shipped',  region: 'north' },
+  { id: 2, status: 'pending',  region: 'south' },
+  { id: 3, status: 'shipped',  region: 'north' },
+  { id: 4, status: 'cancelled',region: 'north' },
+  { id: 5, status: 'shipped',  region: 'south' }
+];
+
+function countByKey(items, keyOf) {
+  const m = new Map();
+  for (const item of items) {
+    const k = keyOf(item);
+    m.set(k, (m.get(k) || 0) + 1);
+  }
+  return m;
+}
+
+console.log('by status:', [...countByKey(orders, o =&gt; o.status)]);
+console.log('by region:', [...countByKey(orders, o =&gt; o.region)]);
+console.log('by both  :', [...countByKey(orders, o =&gt; o.region + '/' + o.status)]);
+
+// That last one -- a composite key built by joining fields -- is how
+// you count by more than one dimension without nesting maps. Pick a
+// separator that cannot appear in the values.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>Correct?</th></tr></thead>
+      <tbody>
+        <tr><td><code>includes</code> per character</td><td class="mono">O(m &middot; n)</td><td class="mono">O(1)</td><td><strong>no</strong></td></tr>
+        <tr><td>Cut letters out</td><td class="mono">O(m &middot; n)</td><td class="mono">O(n)</td><td>yes</td></tr>
+        <tr><td><strong>Count then spend</strong></td><td class="mono">O(m + n)</td><td class="mono">O(k)</td><td>yes</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><code>m</code> is the note length, <code>n</code> the magazine length, <code>k</code> the number
+  of distinct characters.</p>
+
+  <p>One pass over each string, and every map operation is constant time. Sequential passes add:
+  m + n, which is O(m + n) &mdash; linear in the total input.</p>
+
+  <p>Space is O(k), bounded by the alphabet. For lowercase letters that is 26 counters no matter how
+  long the magazine is &mdash; effectively O(1).</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;<code>includes</code> per character is O(m&middot;n) and, worse, it never consumes a
+    letter &mdash; so <code>"aa"</code> passes against a magazine with one <code>a</code>. I count the
+    magazine into a frequency map once, then walk the note decrementing, returning false if a count is
+    missing or already zero. O(m + n) time, O(k) space. Unlike Valid Anagram there is no length
+    equality and no final zero check, because spare letters are allowed.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Using <code>includes</code> or a Set</h3>
+
+  <p>Shown in Step 2. Both answer &ldquo;is it present?&rdquo; when the question is &ldquo;how
+  many?&rdquo;. <code>"aa"</code> against <code>"ab"</code> is the test case that exposes it, and it is
+  the first thing an interviewer will try.</p>
+
+  <h3>2. Counting the note instead of the magazine</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; backwards</span></div>
+<pre><code>function broken(note, magazine) {
+  const budget = new Map();
+  for (const ch of note) budget.set(ch, (budget.get(ch) || 0) + 1);   // counted the NOTE
+  for (const ch of magazine) {
+    const left = budget.get(ch);
+    if (!left) return false;
+    budget.set(ch, left - 1);
+  }
+  return true;
+}
+
+console.log(broken('aa', 'aab'));        // false  WRONG, should be true
+console.log(broken('abc', 'cba'));       // true   right, by luck
+console.log(broken('a', 'aaaa'));        // false  WRONG, should be true
+
+// It asks "can the NOTE supply the MAGAZINE?", which fails the
+// moment the magazine has anything spare -- and having spare
+// letters is the normal case.</code></pre>
+  </div>
+
+  <h3>3. Adding a length-equality check</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; Valid Anagram's rule, wrong problem</span></div>
+<pre><code>function broken(note, magazine) {
+  if (note.length !== magazine.length) return false;   // copied from anagrams -- bug
+  const budget = new Map();
+  for (const ch of magazine) budget.set(ch, (budget.get(ch) || 0) + 1);
+  for (const ch of note) {
+    const left = budget.get(ch);
+    if (!left) return false;
+    budget.set(ch, left - 1);
+  }
+  return true;
+}
+
+console.log(broken('abc', 'cba'));        // true   fine
+console.log(broken('aa', 'aab'));         // false  WRONG, should be true
+console.log(broken('', 'anything'));      // false  WRONG, should be true
+
+// The magazine is allowed to be bigger. The correct guard is
+// note.length > magazine.length, and it is an optimisation, not a
+// requirement.</code></pre>
+  </div>
+
+  <h3>4. Not decrementing at all</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; checks but never spends</span></div>
+<pre><code>function broken(note, magazine) {
+  const budget = new Map();
+  for (const ch of magazine) budget.set(ch, (budget.get(ch) || 0) + 1);
+  for (const ch of note) {
+    if (!budget.has(ch)) return false;     // checks presence, never spends
+  }
+  return true;
+}
+
+console.log(broken('aa', 'ab'));     // TRUE   WRONG, should be false
+console.log(broken('aaa', 'a'));     // TRUE   WRONG, should be false
+
+// Building the counts and then not using them is the same bug as
+// `includes`, with extra steps. The DECREMENT is the whole point.</code></pre>
+  </div>
+
+  <h3>5. Using <code>if (budget[ch])</code> with a 26-slot array</h3>
+
+  <p>Falsy checks are safe here <em>only</em> because 0 and <code>undefined</code> both mean
+  &ldquo;cannot afford&rdquo;. That is a happy coincidence, not a rule. In the general
+  <code>countBy</code> helper, where a stored value could legitimately be 0 or an empty string, use
+  <code>has()</code> instead. The habit that always works: ask whether the key exists, then compare
+  the value explicitly.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write <code>countBy</code> from memory.</strong> It is four lines and you will use it
+    in a dozen other problems. Then build this page&rsquo;s answer on top of it.</li>
+    <li><strong>Return what is missing</strong>, not just true or false. &ldquo;You need two more
+    a&rsquo;s and one z&rdquo; is far more useful, and it is a small change: keep going instead of
+    returning early, and collect the shortfalls.</li>
+    <li><strong>Case-insensitive, ignoring spaces and punctuation.</strong> Normalise both strings
+    first &mdash; the same <code>clean</code> helper from Valid Anagram.</li>
+    <li><strong>Word-level ransom note.</strong> Can you build a sentence from a bag of words? Split
+    on whitespace and count words instead of characters. The algorithm does not change at all.</li>
+    <li><strong>How many complete copies of the note can you make?</strong> For each character,
+    divide the magazine count by the note count, and take the minimum. Two lines with two frequency
+    maps.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>The frequency map is the workhorse of this entire subject.</strong> Build one, then do
+    exactly one of four things with it: compare two of them (anagrams), spend one down (this page),
+    scan for a particular count (first unique), or slide a window and keep one in sync (permutation
+    in string). Almost every counting problem is one of those four, and recognising which saves you
+    from deriving the same idea from scratch each time.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="05-four-sum-ii.html">&larr; Four Sum II</a>
+  <a href="../two-pointers/01-remove-duplicates-sorted.html">Next topic: Two pointers &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

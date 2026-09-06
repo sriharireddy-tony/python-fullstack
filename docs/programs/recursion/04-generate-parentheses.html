@@ -1,0 +1,898 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generate Parentheses</title>
+<meta name="description" content="Two counters replace a candidate list — and the pruning rule is the whole problem.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Recursion &middot; Problem 04</p>
+  <h1>Generate Parentheses</h1>
+  <p class="standfirst">The first backtracking problem with <strong>no input array at all</strong>.
+  There is nothing to loop over &mdash; just two choices at every step, and two counters that decide
+  which of them is legal. Getting the pruning rule right <em>is</em> the problem.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Given <code>n</code>, generate every well-formed string of <code>n</code> pairs of parentheses.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>n</th><th>Count</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">0</td><td class="mono">1</td><td class="mono">[""]</td></tr>
+        <tr><td class="mono">1</td><td class="mono">1</td><td class="mono">["()"]</td></tr>
+        <tr><td class="mono">2</td><td class="mono">2</td><td class="mono">["(())", "()()"]</td></tr>
+        <tr><td class="mono">3</td><td class="mono">5</td><td class="mono">["((()))", "(()())", "(())()", "()(())", "()()()"]</td></tr>
+        <tr><td class="mono">4</td><td class="mono">14</td><td class="mono">&hellip;</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Well-formed</strong> means exactly two things, and both matter:</p>
+  <ol>
+    <li>Every prefix has at least as many <code>(</code> as <code>)</code>. You can never close
+    something that was never opened.</li>
+    <li>The whole string balances &mdash; <code>n</code> of each.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">Those counts are the Catalan numbers</span>
+    <p>1, 1, 2, 5, 14, 42, 132, 429, 1430&hellip; They come up everywhere combinatorial:
+    valid parenthesisations, binary tree shapes, ways to triangulate a polygon, monotonic lattice
+    paths that stay under the diagonal.</p>
+    <p>Roughly <code>4<sup>n</sup> / n<sup>1.5</sup></code> &mdash; exponential, but noticeably
+    smaller than the <code>2<sup>2n</sup></code> strings you would get by ignoring validity. The
+    ratio between those two is exactly what pruning buys you.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">how much pruning is available</span></div>
+<pre><code>// Catalan(n) = C(2n, n) / (n + 1)
+function catalan(n) {
+  let c = 1;
+  for (let i = 0; i &lt; n; i++) c = c * 2 * (2 * i + 1) / (i + 2);
+  return Math.round(c);
+}
+
+console.log('n   all 2^2n strings   valid (Catalan)   fraction valid');
+for (let n = 1; n &lt;= 12; n++) {
+  const all = 2 ** (2 * n);
+  const valid = catalan(n);
+  console.log(String(n).padEnd(4) +
+              all.toLocaleString('en-US').padEnd(19) +
+              valid.toLocaleString('en-US').padEnd(18) +
+              (100 * valid / all).toFixed(3) + '%');
+}
+console.log('');
+console.log('At n=12, only a tiny fraction of all strings are valid.');
+console.log('Generating all of them and filtering wastes almost all the work.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; generate everything, then check</h2>
+
+  <p>The straightforward idea: build every string of length <code>2n</code> over the alphabet
+  <code>{ (, ) }</code>, then keep the valid ones.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; brute force, correct but wasteful</span></div>
+<pre><code>function isValid(s) {
+  let depth = 0;
+  for (const ch of s) {
+    depth += (ch === '(') ? 1 : -1;
+    if (depth &lt; 0) return false;      // closed something never opened
+  }
+  return depth === 0;                  // and everything got closed
+}
+
+function bruteForce(n) {
+  const out = [];
+  let generated = 0;
+
+  function build(current) {
+    if (current.length === 2 * n) {
+      generated++;
+      if (isValid(current)) out.push(current);
+      return;
+    }
+    build(current + '(');
+    build(current + ')');
+  }
+
+  build('');
+  console.log('n=' + n + ': generated ' + generated + ', kept ' + out.length);
+  return out;
+}
+
+console.log(bruteForce(1));
+console.log(bruteForce(2));
+console.log(bruteForce(3));
+console.log('');
+bruteForce(6);
+console.log('4096 strings built to find 132. The validity check only');
+console.log('runs at the very end -- long after the string became');
+console.log('unfixable.');</code></pre>
+  </div>
+
+  <p>Correct, and a fine thing to say out loud first. Now look at the last line of that output and ask
+  the obvious question: <em>why did we keep building a string that was already broken?</em></p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>Once a prefix has more <code>)</code> than <code>(</code>, no suffix can save it. Brute force
+  keeps going anyway, doubling the wasted work at every remaining position.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; filter at the end versus prune as you go</span></div>
+<pre><code>const N = 11;
+
+function isValid(s) {
+  let d = 0;
+  for (const ch of s) { d += ch === '(' ? 1 : -1; if (d &lt; 0) return false; }
+  return d === 0;
+}
+
+let bruteNodes = 0;
+function bruteForce(n) {
+  const out = [];
+  (function build(cur) {
+    bruteNodes++;
+    if (cur.length === 2 * n) { if (isValid(cur)) out.push(cur); return; }
+    build(cur + '(');
+    build(cur + ')');
+  })('');
+  return out;
+}
+
+let prunedNodes = 0;
+function pruned(n) {
+  const out = [], path = [];
+  (function build(open, close) {
+    prunedNodes++;
+    if (path.length === 2 * n) { out.push(path.join('')); return; }
+    if (open &lt; n) { path.push('('); build(open + 1, close); path.pop(); }
+    if (close &lt; open) { path.push(')'); build(open, close + 1); path.pop(); }
+  })(0, 0);
+  return out;
+}
+
+let t = performance.now();
+const a = bruteForce(N);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const b = pruned(N);
+const prunedMs = performance.now() - t;
+
+console.log('n = ' + N);
+console.log('build all then filter : ' + a.length + ' kept, ' +
+            bruteNodes.toLocaleString('en-US') + ' nodes, ' + bruteMs.toFixed(1) + ' ms');
+console.log('prune while building  : ' + b.length + ' kept, ' +
+            prunedNodes.toLocaleString('en-US') + ' nodes, ' + prunedMs.toFixed(1) + ' ms');
+console.log('same answers:', JSON.stringify(a) === JSON.stringify(b));
+console.log('speed-up:', Math.round(bruteMs / Math.max(prunedMs, 0.01)) + 'x');
+console.log('nodes avoided:', ((1 - prunedNodes / bruteNodes) * 100).toFixed(1) + '%');</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">Two separate wins in that number</span>
+    <p>Fewer nodes visited, and no <code>isValid</code> scan &mdash; the pruned version never needs a
+    validity check at all, because it is <em>incapable</em> of building an invalid string. Pruning
+    that strong removes the verification step entirely.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; two counters, two rules</h2>
+
+  <p>Track how many of each bracket you have placed: <code>open</code> and <code>close</code>. At
+  every step there are only two possible moves, and each has exactly one condition.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Move</th><th>Allowed when</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">add '('</td><td class="mono">open &lt; n</td><td>we have not used up our n opening brackets</td></tr>
+        <tr><td class="mono">add ')'</td><td class="mono">close &lt; open</td><td>there is an unmatched '(' waiting to be closed</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">The rule to memorise</span>
+    <p><code>close &lt; open</code>, <strong>not</strong> <code>close &lt; n</code>.</p>
+    <p><code>close &lt; n</code> only enforces the final count and lets you write <code>)(</code>.
+    <code>close &lt; open</code> enforces the prefix condition, which is the actual definition of
+    well-formed. This one comparison is the difference between the right answer and garbage.</p>
+  </div>
+
+  <p>The base case is <code>open === n &amp;&amp; close === n</code> &mdash; or equivalently
+  <code>path.length === 2 * n</code>, since the rules guarantee it is balanced when it is full.</p>
+
+  <p>And note what is <em>missing</em> compared to the last three pages: there is no
+  <code>for</code> loop and no <code>start</code> index. The choices are not drawn from a list; they
+  are hard-coded, and the counters decide which are legal. Same choose / explore / un-choose triple,
+  written as two <code>if</code> blocks instead of a loop body.</p>
+
+  <div class="trace">
+<pre>  n = 2                     (open, close)
+
+                    (0,0) ""
+                      |  add '(' since open &lt; n
+                    (1,0) "("
+              add '(' /     \ add ')' since close &lt; open
+          (2,0) "(("          (1,1) "()"
+     close &lt; open |             | add '(' -- cannot add ')', close==open
+          (2,1) "(()"         (2,1) "()("
+     close &lt; open |             | close &lt; open
+          (2,2) "(())"        (2,2) "()()"
+              RECORD              RECORD
+
+  Notice: at (1,1) the ')' branch is BLOCKED by close &lt; open.
+  That is the pruning -- ")" as a prefix never even gets built.
+</pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; watch the two rules fire</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function generateExplained(n) {
+  const out = [];
+  const path = [];
+
+  function build(open, close, depth) {
+    const pad = '  '.repeat(depth);
+    const soFar = path.join('') || '""';
+
+    if (path.length === 2 * n) {
+      out.push(path.join(''));
+      console.log(pad + soFar + '   open=' + open + ' close=' + close +
+                  '  ->  FULL, RECORD');
+      return;
+    }
+
+    console.log(pad + soFar + '   open=' + open + ' close=' + close);
+
+    if (open &lt; n) {
+      path.push('(');
+      build(open + 1, close, depth + 1);
+      path.pop();
+    } else {
+      console.log(pad + '  cannot add "(" -- open ' + open + ' == n ' + n);
+    }
+
+    if (close &lt; open) {
+      path.push(')');
+      build(open, close + 1, depth + 1);
+      path.pop();
+    } else {
+      console.log(pad + '  cannot add ")" -- close ' + close +
+                  ' is not less than open ' + open);
+    }
+  }
+
+  build(0, 0, 0);
+  console.log('');
+  return out;
+}
+
+console.log('ANSWER:', JSON.stringify(generateExplained(2)));
+console.log('==========================================');
+console.log('ANSWER:', JSON.stringify(generateExplained(3)));</code></pre>
+  </div>
+
+  <p>Read the &ldquo;cannot add&rdquo; lines. Each one is a whole subtree that brute force would have
+  explored to the bottom.</p>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; a character buffer, no push or join</span></div>
+<pre><code>function generateParenthesisManual(n) {
+  const out = [];
+  let outCount = 0;
+
+  const buf = [];              // fixed-size character buffer
+  const total = 2 * n;
+
+  function bufToString() {
+    let s = '';
+    for (let i = 0; i &lt; total; i++) s = s + buf[i];
+    return s;
+  }
+
+  function build(pos, open, close) {
+    if (pos === total) {
+      out[outCount] = bufToString();
+      outCount = outCount + 1;
+      return;
+    }
+
+    if (open &lt; n) {
+      buf[pos] = '(';                    // choose
+      build(pos + 1, open + 1, close);   // explore
+      // no un-choose needed: the next write to buf[pos] overwrites it,
+      // and we never read past `pos`
+    }
+
+    if (close &lt; open) {
+      buf[pos] = ')';
+      build(pos + 1, open, close + 1);
+    }
+  }
+
+  if (n === 0) return [''];
+  build(0, 0, 0);
+  return out;
+}
+
+console.log('n=0:', JSON.stringify(generateParenthesisManual(0)));
+console.log('n=1:', JSON.stringify(generateParenthesisManual(1)));
+console.log('n=2:', JSON.stringify(generateParenthesisManual(2)));
+console.log('n=3:', JSON.stringify(generateParenthesisManual(3)));
+console.log('n=4:', JSON.stringify(generateParenthesisManual(4)));
+console.log('');
+console.log('counts:', [0,1,2,3,4,5,6,7].map(function (k) {
+  return generateParenthesisManual(k).length;
+}).join(', '));
+// 1, 1, 2, 5, 14, 42, 132, 429  -- the Catalan numbers</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Why this one needs no un-choose</span>
+    <p>Because <code>pos</code> is passed down rather than being a shared length. The buffer slot gets
+    overwritten by the sibling branch, and nothing ever reads beyond the current <code>pos</code>. It
+    is the same trick as passing <code>pathLength</code> instead of calling <code>pop()</code>.</p>
+    <p>Do <strong>not</strong> generalise this. The moment you record by <em>reference</em> rather than
+    by copying, or read the whole buffer at a node rather than at a leaf, the missing un-choose becomes
+    a real bug &mdash; which is exactly the mistake in Step 9.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 1b &mdash; string concatenation, no arrays at all</span></div>
+<pre><code>// Strings are immutable in JavaScript, so cur + '(' creates a NEW
+// string. That means the recursion needs no un-choose at all --
+// each branch holds its own copy.
+function generateParenthesisStrings(n) {
+  const out = [];
+
+  function build(cur, open, close) {
+    if (cur.length === 2 * n) { out[out.length] = cur; return; }
+    if (open &lt; n)      build(cur + '(', open + 1, close);
+    if (close &lt; open)  build(cur + ')', open, close + 1);
+  }
+
+  build('', 0, 0);
+  return out;
+}
+
+console.log('n=3:', JSON.stringify(generateParenthesisStrings(3)));
+console.log('n=4 count:', generateParenthesisStrings(4).length);
+
+// On paper this looks worse: every node builds a NEW string, which
+// sounds like O(n) copying per node instead of O(1) push/pop.
+// Measure it before you believe it.
+const N = 13;
+let t = performance.now();
+generateParenthesisStrings(N);
+const strMs = performance.now() - t;
+
+function withBuffer(n) {
+  const out = [], path = [];
+  (function build(open, close) {
+    if (path.length === 2 * n) { out.push(path.join('')); return; }
+    if (open &lt; n) { path.push('('); build(open + 1, close); path.pop(); }
+    if (close &lt; open) { path.push(')'); build(open, close + 1); path.pop(); }
+  })(0, 0);
+  return out;
+}
+
+t = performance.now();
+withBuffer(N);
+const bufMs = performance.now() - t;
+
+console.log('');
+console.log('n=' + N + ' by string concat : ' + strMs.toFixed(1) + ' ms');
+console.log('n=' + N + ' by push/pop      : ' + bufMs.toFixed(1) + ' ms');
+console.log('');
+console.log('The "worse" version wins. Two reasons:');
+console.log('  1. V8 does not actually copy on `a + b`. It builds a');
+console.log('     rope -- a small node pointing at both halves -- and');
+console.log('     flattens it only when someone reads the characters.');
+console.log('     So cur + "(" is closer to O(1) than O(n).');
+console.log('  2. The push/pop version still pays O(n) at every leaf');
+console.log('     for path.join(""), plus two array operations per');
+console.log('     node. Nothing was saved.');
+console.log('');
+console.log('Write whichever you can get right. Just do not claim the');
+console.log('push/pop version is faster -- on this problem it is not.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function generateParenthesis(n) {
+  const out = [];
+  const path = [];
+
+  function backtrack(open, close) {
+    if (path.length === 2 * n) {
+      out.push(path.join(''));
+      return;
+    }
+
+    if (open &lt; n) {                 // can still open
+      path.push('(');
+      backtrack(open + 1, close);
+      path.pop();
+    }
+
+    if (close &lt; open) {             // something is waiting to be closed
+      path.push(')');
+      backtrack(open, close + 1);
+      path.pop();
+    }
+  }
+
+  backtrack(0, 0);
+  return out;
+}
+
+console.log(generateParenthesis(1));
+console.log(generateParenthesis(2));
+console.log(generateParenthesis(3));
+console.log('n=5 count:', generateParenthesis(5).length);   // 42</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the same problem, three other ways</span></div>
+<pre><code>// 1. Different counters. Track how many '(' are still unplaced and
+//    how many are currently unclosed. Equivalent, and some people
+//    find it clearer.
+function twoRemaining(n) {
+  const out = [], path = [];
+  (function build(remainingOpens, unclosed) {
+    if (remainingOpens === 0 &amp;&amp; unclosed === 0) { out.push(path.join('')); return; }
+    if (remainingOpens &gt; 0) {
+      path.push('('); build(remainingOpens - 1, unclosed + 1); path.pop();
+    }
+    if (unclosed &gt; 0) {
+      path.push(')'); build(remainingOpens, unclosed - 1); path.pop();
+    }
+  })(n, 0);
+  return out;
+}
+
+// 2. Build from smaller answers. Every valid string of k pairs is
+//    "(" + A + ")" + B where A has i pairs and B has k-1-i.
+//    This is the Catalan recurrence made literal.
+function byComposition(n) {
+  const memo = new Map();
+
+  function solve(k) {
+    if (k === 0) return [''];
+    if (memo.has(k)) return memo.get(k);
+
+    const result = [];
+    for (let i = 0; i &lt; k; i++) {
+      for (const inner of solve(i)) {
+        for (const rest of solve(k - 1 - i)) {
+          result.push('(' + inner + ')' + rest);
+        }
+      }
+    }
+
+    memo.set(k, result);
+    return result;
+  }
+
+  return solve(n);
+}
+
+// 3. Iterative -- build level by level, keeping only valid prefixes
+function byLevels(n) {
+  let level = [{ s: '', open: 0, close: 0 }];
+  for (let step = 0; step &lt; 2 * n; step++) {
+    const next = [];
+    for (const state of level) {
+      if (state.open &lt; n)
+        next.push({ s: state.s + '(', open: state.open + 1, close: state.close });
+      if (state.close &lt; state.open)
+        next.push({ s: state.s + ')', open: state.open, close: state.close + 1 });
+    }
+    level = next;
+  }
+  return level.map(function (x) { return x.s; });
+}
+
+function reference(n) {
+  const out = [], path = [];
+  (function b(o, c) {
+    if (path.length === 2 * n) { out.push(path.join('')); return; }
+    if (o &lt; n) { path.push('('); b(o + 1, c); path.pop(); }
+    if (c &lt; o) { path.push(')'); b(o, c + 1); path.pop(); }
+  })(0, 0);
+  return out;
+}
+
+const sortKey = function (list) { return JSON.stringify([...list].sort()); };
+
+for (let n = 0; n &lt;= 7; n++) {
+  const r = sortKey(reference(n));
+  const results = {
+    'two counters': sortKey(twoRemaining(n)),
+    'by composition': sortKey(byComposition(n)),
+    'by levels': sortKey(byLevels(n)),
+  };
+  const bad = Object.keys(results).filter(function (k) { return results[k] !== r; });
+  console.log('n=' + n + '  count ' + String(reference(n).length).padStart(4) +
+              '   ' + (bad.length === 0 ? 'all four agree' : 'DISAGREE: ' + bad));
+}
+
+console.log('');
+console.log('n=3 by composition:', byComposition(3));
+console.log('n=3 by levels     :', byLevels(3));</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the cousins you will actually be asked</span></div>
+<pre><code>// A. Is this string balanced, with three bracket types?
+//    Counters no longer work -- you need a stack, because ([)] must
+//    be rejected. (This is the Valid Parentheses page.)
+function isBalanced(s) {
+  const pairs = { ')': '(', ']': '[', '}': '{' };
+  const stack = [];
+  for (const ch of s) {
+    if (ch === '(' || ch === '[' || ch === '{') stack.push(ch);
+    else if (pairs[ch]) {
+      if (stack.pop() !== pairs[ch]) return false;
+    }
+  }
+  return stack.length === 0;
+}
+console.log('"([)]" balanced?', isBalanced('([)]'));      // false
+console.log('"([])" balanced?', isBalanced('([])'));      // true
+
+// B. Minimum insertions to make a string valid
+function minInsertions(s) {
+  let unclosed = 0, needed = 0;
+  for (const ch of s) {
+    if (ch === '(') unclosed++;
+    else if (unclosed &gt; 0) unclosed--;
+    else needed++;              // a ')' with nothing open: insert a '('
+  }
+  return needed + unclosed;     // plus a ')' for each still-open '('
+}
+console.log('');
+console.log('minInsertions "())"    :', minInsertions('())'));
+console.log('minInsertions "((("    :', minInsertions('((('));
+console.log('minInsertions ")))((("  :', minInsertions(')))((('));
+console.log('minInsertions "()"     :', minInsertions('()'));
+
+// C. Longest valid substring -- the depth counter again, but scanned
+//    from both ends so a leftover '(' cannot fool it
+function longestValid(s) {
+  let best = 0;
+
+  for (const dir of ['ltr', 'rtl']) {
+    let open = 0, close = 0;
+    for (let k = 0; k &lt; s.length; k++) {
+      const ch = dir === 'ltr' ? s[k] : s[s.length - 1 - k];
+      if (ch === '(') open++; else close++;
+
+      // going left to right, ')' is the one that can go over budget
+      const a = dir === 'ltr' ? close : open;
+      const b = dir === 'ltr' ? open : close;
+      if (a === b) best = Math.max(best, a + b);
+      else if (a &gt; b) { open = 0; close = 0; }
+    }
+  }
+
+  return best;
+}
+console.log('');
+console.log('longestValid "(()"      :', longestValid('(()'));
+console.log('longestValid ")()())"   :', longestValid(')()())'));
+console.log('longestValid "()(()"    :', longestValid('()(()'));
+console.log('longestValid "(()())"   :', longestValid('(()())'));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Working space</th></tr></thead>
+      <tbody>
+        <tr><td>Build all, then filter</td><td class="mono">O(n &middot; 2<sup>2n</sup>)</td><td class="mono">O(n)</td></tr>
+        <tr><td><strong>Backtracking with pruning</strong></td><td class="mono">O(n &middot; Catalan(n))</td><td class="mono">O(n)</td></tr>
+        <tr><td>By composition, memoised</td><td class="mono">O(n &middot; Catalan(n))</td><td class="mono">O(n &middot; Catalan(n))</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The honest statement is <strong>O(4<sup>n</sup> / n<sup>1.5</sup>)</strong>, which is
+  <code>Catalan(n)</code> answers times <code>O(n)</code> to assemble each string. It is still
+  exponential &mdash; there are exponentially many answers, and nothing can change that. What pruning
+  changes is that <em>every</em> node of the tree now leads to at least one real answer, so no work is
+  thrown away.</p>
+
+  <p>Working space is O(n): the path and the recursion stack, both bounded by <code>2n</code>. The
+  output is O(n &middot; Catalan(n)) and unavoidable.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;There is no array to loop over &mdash; at each position there are only two candidate
+    characters, and I keep two counters to decide which are legal. I can add <code>(</code> while
+    <code>open &lt; n</code>, and <code>)</code> while <code>close &lt; open</code>. That second
+    condition is the important one: <code>close &lt; n</code> would let me write <code>)(</code>.
+    Because the rules make an invalid string impossible to build, I never need a validity check, and
+    every leaf is an answer. Output size is the Catalan number, so O(n &middot; 4<sup>n</sup> /
+    n<sup>1.5</sup>) time with O(n) working space.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. <code>close &lt; n</code> instead of <code>close &lt; open</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; produces invalid strings</span></div>
+<pre><code>function broken(n) {
+  const out = [], path = [];
+  function build(open, close) {
+    if (path.length === 2 * n) { out.push(path.join('')); return; }
+    if (open &lt; n) { path.push('('); build(open + 1, close); path.pop(); }
+    if (close &lt; n) { path.push(')'); build(open, close + 1); path.pop(); }
+    //     ^^^ bug: should be close &lt; open
+  }
+  build(0, 0);
+  return out;
+}
+
+console.log('n=2:', JSON.stringify(broken(2)));
+
+console.log('n=2 count:', broken(2).length, '(should be 2)');
+console.log('n=3 count:', broken(3).length, '(should be 5)');
+
+function isValid(s) {
+  let d = 0;
+  for (const ch of s) { d += ch === '(' ? 1 : -1; if (d &lt; 0) return false; }
+  return d === 0;
+}
+console.log('');
+console.log('invalid strings produced at n=2:',
+            broken(2).filter(function (s) { return !isValid(s); }));
+
+// close &lt; n only guarantees the FINAL counts match. It says nothing
+// about the prefix. The definition of well-formed is a statement
+// about every prefix, so the condition must be too.</code></pre>
+  </div>
+
+  <h3>2. Forgetting the <code>pop()</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the path never shrinks</span></div>
+<pre><code>function broken(n) {
+  const out = [], path = [];
+  function build(open, close) {
+    if (path.length === 2 * n) { out.push(path.join('')); return; }
+    if (open &lt; n) { path.push('('); build(open + 1, close); /* no pop */ }
+    if (close &lt; open) { path.push(')'); build(open, close + 1); /* no pop */ }
+  }
+  build(0, 0);
+  return out;
+}
+
+console.log('n=2:', JSON.stringify(broken(2)));
+console.log('n=3:', JSON.stringify(broken(3)));
+console.log('n=4:', JSON.stringify(broken(4)));
+
+// One answer instead of 2, 5 and 14. The first branch runs to full
+// length, and after it returns the path is STILL full -- so every
+// sibling branch immediately hits the base case, or the length
+// check blocks it entirely.
+// The un-choose is what makes the siblings independent.</code></pre>
+  </div>
+
+  <h3>3. Pushing the array instead of a copy or a joined string</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; every answer is the same live array</span></div>
+<pre><code>function broken(n) {
+  const out = [], path = [];
+  function build(open, close) {
+    if (path.length === 2 * n) { out.push(path); return; }   // no copy -- bug
+    if (open &lt; n) { path.push('('); build(open + 1, close); path.pop(); }
+    if (close &lt; open) { path.push(')'); build(open, close + 1); path.pop(); }
+  }
+  build(0, 0);
+  return out;
+}
+
+const r = broken(3);
+console.log('length:', r.length);          // 5 -- the right count
+console.log(JSON.stringify(r));            // all empty
+console.log('all the same object?', r.every(function (x) { return x === r[0]; }));
+
+// Five references to ONE array, which the pops emptied on the way
+// back up. Either out.push(path.join('')) or out.push([...path]).
+// This is the same bug as Subsets pushing `path` instead of a copy,
+// and it is the single most common backtracking mistake.</code></pre>
+  </div>
+
+  <h3>4. Using <code>else if</code> for the second choice</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; only one answer</span></div>
+<pre><code>function broken(n) {
+  const out = [], path = [];
+  function build(open, close) {
+    if (path.length === 2 * n) { out.push(path.join('')); return; }
+    if (open &lt; n) { path.push('('); build(open + 1, close); path.pop(); }
+    else if (close &lt; open) { path.push(')'); build(open, close + 1); path.pop(); }
+    //  ^^^^ bug
+  }
+  build(0, 0);
+  return out;
+}
+
+console.log('n=2:', JSON.stringify(broken(2)));
+console.log('n=3:', JSON.stringify(broken(3)));
+console.log('n=4:', JSON.stringify(broken(4)));
+
+// `else if` means "close only if you could not open", so it opens
+// greedily until it runs out and then closes -- exactly one answer,
+// the maximally nested one.
+// Both branches must be explored. In backtracking, sibling choices
+// are never mutually exclusive -- that is the whole point.</code></pre>
+  </div>
+
+  <h3>5. Checking validity at the end anyway</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct, and reveals a misunderstanding</span></div>
+<pre><code>function redundant(n) {
+  const out = [], path = [];
+  function isValid(s) {
+    let d = 0;
+    for (const ch of s) { d += ch === '(' ? 1 : -1; if (d &lt; 0) return false; }
+    return d === 0;
+  }
+  function build(open, close) {
+    if (path.length === 2 * n) {
+      const s = path.join('');
+      if (isValid(s)) out.push(s);       // this can never be false
+      return;
+    }
+    if (open &lt; n) { path.push('('); build(open + 1, close); path.pop(); }
+    if (close &lt; open) { path.push(')'); build(open, close + 1); path.pop(); }
+  }
+  build(0, 0);
+  return out;
+}
+
+// Prove the check is dead code: count how often it rejects anything
+let rejected = 0;
+function instrumented(n) {
+  const path = [];
+  let leaves = 0;
+  function isValid(s) {
+    let d = 0;
+    for (const ch of s) { d += ch === '(' ? 1 : -1; if (d &lt; 0) return false; }
+    return d === 0;
+  }
+  (function build(open, close) {
+    if (path.length === 2 * n) {
+      leaves++;
+      if (!isValid(path.join(''))) rejected++;
+      return;
+    }
+    if (open &lt; n) { path.push('('); build(open + 1, close); path.pop(); }
+    if (close &lt; open) { path.push(')'); build(open, close + 1); path.pop(); }
+  })(0, 0);
+  return leaves;
+}
+
+let totalLeaves = 0;
+for (let n = 1; n &lt;= 12; n++) totalLeaves += instrumented(n);
+
+console.log('n=3:', JSON.stringify(redundant(3)));
+console.log('');
+console.log('leaves reached for n=1..12 :', totalLeaves.toLocaleString('en-US'));
+console.log('rejected by the check      :', rejected);
+console.log('');
+console.log('Zero. The pruning rules make an invalid string');
+console.log('unreachable, so the check is unreachable too.');
+console.log('If you feel you need it, you do not trust your pruning --');
+console.log('and in an interview that is exactly what will be probed.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the ten-line version from memory</strong> and then say the two conditions out
+    loud, including <em>why</em> the second is <code>close &lt; open</code>.</li>
+    <li><strong>Valid Parentheses with three bracket types.</strong> In Step 7 &mdash; counters are not
+    enough, you need a stack. Understand precisely why.</li>
+    <li><strong>Minimum insertions to balance a string.</strong> Also Step 7 &mdash; a single pass with
+    two counters, no recursion. A good reminder that not every bracket problem is a search.</li>
+    <li><strong>Longest valid parentheses substring.</strong> Step 7 again, and genuinely harder. The
+    two-direction scan is worth working out on paper.</li>
+    <li><strong>Letter Combinations of a Phone Number.</strong> The natural next step: like this page
+    there is no shared candidate pool, but unlike this page the choices at each position come from a
+    lookup table rather than being hard-coded.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>The strongest pruning makes the invalid state unreachable.</strong> Weak pruning skips
+    some bad branches; strong pruning means a bad branch cannot be constructed at all, and then the
+    validity check disappears. When you design a backtracking solution, ask what condition would make
+    the illegal move impossible &mdash; not what test would catch it later.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="03-combination-sum.html">&larr; Combination Sum</a>
+  <a href="05-flatten-nested.html">Next: Flatten a Nested Structure &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

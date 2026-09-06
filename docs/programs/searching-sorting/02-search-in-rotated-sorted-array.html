@@ -1,0 +1,795 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Search in Rotated Sorted Array</title>
+<meta name="description" content="One half is always still sorted — find out which, and binary search survives the rotation.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Searching &amp; sorting &middot; Problem 02</p>
+  <h1>Search in Rotated Sorted Array</h1>
+  <p class="standfirst">The array was sorted, then somebody rotated it. Binary search seems dead
+  &mdash; and it is not, because of one saving observation: <strong>however you cut a rotated sorted
+  array in half, at least one of the two halves is still sorted</strong>.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>An array of <strong>distinct</strong> values was sorted ascending, then rotated at some unknown
+  pivot. Find the index of a target in O(log n), or return <code>-1</code>.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Array</th><th>Target</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[4,5,6,7,0,1,2]</td><td class="mono">0</td><td class="mono">4</td></tr>
+        <tr><td class="mono">[4,5,6,7,0,1,2]</td><td class="mono">3</td><td class="mono">-1</td></tr>
+        <tr><td class="mono">[4,5,6,7,0,1,2]</td><td class="mono">6</td><td class="mono">2</td></tr>
+        <tr><td class="mono">[1]</td><td class="mono">0</td><td class="mono">-1</td></tr>
+        <tr><td class="mono">[1,2,3,4,5]</td><td class="mono">4</td><td class="mono">3</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Picture what rotation does. The array is two sorted runs stuck together, and everything in the
+  first run is larger than everything in the second:</p>
+
+  <div class="trace">
+<pre>  originally sorted:   0  1  2  4  5  6  7
+  rotated by 3:        4  5  6  7 | 0  1  2
+                       \________/   \_____/
+                        run A         run B
+
+  Both runs are sorted. Every value in A is bigger than every
+  value in B. The "cliff" between 7 and 0 is the pivot.
+</pre>
+  </div>
+
+  <div class="note">
+    <span class="t">Note the last row</span>
+    <p>A rotation by 0 &mdash; or by the full length &mdash; leaves the array untouched. So a normally
+    sorted array is a valid input, and your solution must handle it. It is the case where the
+    &ldquo;second run&rdquo; is empty.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answers</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0a &mdash; just scan it</span></div>
+<pre><code>function searchLinear(nums, target) {
+  for (let i = 0; i &lt; nums.length; i++) {
+    if (nums[i] === target) return i;
+  }
+  return -1;
+}
+
+console.log(searchLinear([4,5,6,7,0,1,2], 0));   // 4
+console.log(searchLinear([4,5,6,7,0,1,2], 3));   // -1
+console.log(searchLinear([1], 0));               // -1
+
+// O(n). Completely correct, and completely ignores the structure
+// the problem handed you. Say it out loud, then beat it.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0b &mdash; find the pivot, then search a half</span></div>
+<pre><code>// Two binary searches: one to locate the rotation point, one to
+// search the correct half.
+function findPivot(nums) {
+  // the index of the SMALLEST value -- where the cliff lands
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt; hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] &gt; nums[hi]) lo = mid + 1;   // the cliff is to the right
+    else hi = mid;                             // mid could be the smallest
+  }
+  return lo;
+}
+
+function plainBinary(nums, target, lo, hi) {
+  while (lo &lt;= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] === target) return mid;
+    if (nums[mid] &lt; target) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return -1;
+}
+
+function searchTwoPass(nums, target) {
+  if (nums.length === 0) return -1;
+
+  const pivot = findPivot(nums);
+
+  // the target is in whichever half its value belongs to
+  if (target &gt;= nums[pivot] &amp;&amp; target &lt;= nums[nums.length - 1]) {
+    return plainBinary(nums, target, pivot, nums.length - 1);
+  }
+  return plainBinary(nums, target, 0, pivot - 1);
+}
+
+console.log(findPivot([4,5,6,7,0,1,2]));            // 4  (the 0)
+console.log(findPivot([1,2,3,4,5]));                // 0  (no rotation)
+console.log('');
+console.log(searchTwoPass([4,5,6,7,0,1,2], 0));     // 4
+console.log(searchTwoPass([4,5,6,7,0,1,2], 6));     // 2
+console.log(searchTwoPass([4,5,6,7,0,1,2], 3));     // -1
+console.log(searchTwoPass([1,2,3,4,5], 4));         // 3
+console.log(searchTwoPass([1], 0));                 // -1
+console.log(searchTwoPass([5,1,3], 3));             // 2
+
+// Two O(log n) passes, so still O(log n). Perfectly good, and a
+// genuinely easier thing to reason about than the one-pass version.</code></pre>
+  </div>
+
+  <p>The two-pass version is worth knowing well. &ldquo;Find the pivot, then binary search the right
+  half&rdquo; is easy to explain and easy to get right &mdash; and it is a complete answer to the
+  question.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why the scan is not good enough</h2>
+
+  <p>Not slow in absolute terms &mdash; O(n) is fine for a thousand elements. But the problem
+  explicitly asks for O(log n), and the rotation is a hint, not an obstacle.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 2000000;
+const sorted = [];
+for (let i = 0; i &lt; N; i++) sorted.push(i * 2);
+const cut = Math.floor(N * 0.7);
+const nums = [...sorted.slice(cut), ...sorted.slice(0, cut)];
+
+const targets = [];
+for (let i = 0; i &lt; 2000; i++) targets.push(Math.floor(Math.random() * N) * 2);
+
+function linear(a, t) {
+  for (let i = 0; i &lt; a.length; i++) if (a[i] === t) return i;
+  return -1;
+}
+
+function rotatedBinary(a, t) {
+  let lo = 0, hi = a.length - 1;
+  while (lo &lt;= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (a[mid] === t) return mid;
+
+    if (a[lo] &lt;= a[mid]) {                       // left half is sorted
+      if (t &gt;= a[lo] &amp;&amp; t &lt; a[mid]) hi = mid - 1;
+      else lo = mid + 1;
+    } else {                                      // right half is sorted
+      if (t &gt; a[mid] &amp;&amp; t &lt;= a[hi]) lo = mid + 1;
+      else hi = mid - 1;
+    }
+  }
+  return -1;
+}
+
+let t = performance.now();
+let s1 = 0;
+for (const x of targets) s1 += linear(nums, x);
+const linMs = performance.now() - t;
+
+t = performance.now();
+let s2 = 0;
+for (const x of targets) s2 += rotatedBinary(nums, x);
+const binMs = performance.now() - t;
+
+console.log('2000 linear scans   :', linMs.toFixed(1) + ' ms');
+console.log('2000 binary searches:', binMs.toFixed(2) + ' ms');
+console.log('same results:', s1 === s2);
+console.log('speed-up:', Math.round(linMs / Math.max(binMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; one half is always sorted</h2>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Cut the array anywhere. The cliff can only be in <em>one</em> of the two halves &mdash; so the
+    other half is a plain sorted run. Identify the sorted half, and you can test in O(1) whether the
+    target lies inside it. If it does, search there. If it does not, search the other half.</p>
+  </div>
+
+  <div class="trace">
+<pre>  [4, 5, 6, 7, 0, 1, 2]      lo=0  hi=6  mid=3 (value 7)
+
+  left half:  4 5 6 7     nums[lo]=4 &lt;= nums[mid]=7   -> SORTED
+  right half: 0 1 2       contains the cliff
+
+  Because the left half is sorted, "is the target in it?" is a
+  single range check:  target >= 4 AND target &lt; 7
+
+
+  [6, 7, 0, 1, 2, 4, 5]      lo=0  hi=6  mid=3 (value 1)
+
+  left half:  6 7 0 1     nums[lo]=6 > nums[mid]=1    -> NOT sorted
+  right half: 2 4 5       -> SORTED
+
+  So check:  target > 1 AND target &lt;= 5
+</pre>
+  </div>
+
+  <h3>The test for which half is sorted</h3>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">one comparison decides it</span></div>
+<pre><code>if (nums[lo] &lt;= nums[mid]) {
+  // the left half [lo..mid] is sorted
+} else {
+  // the right half [mid..hi] is sorted
+}</code></pre>
+  </div>
+
+  <p>Why <code>&lt;=</code> and not <code>&lt;</code>? Because <code>lo</code> can equal
+  <code>mid</code> &mdash; a range of one or two elements &mdash; and a single element is trivially
+  sorted. With <code>&lt;</code>, that case falls into the wrong branch and the search goes astray on
+  small ranges.</p>
+
+  <div class="note warn">
+    <span class="t">Get the range checks right, and use both ends</span>
+    <p>Once you know the left half <code>[lo..mid]</code> is sorted, the target is inside it exactly
+    when <code>target &gt;= nums[lo] &amp;&amp; target &lt; nums[mid]</code>. Both bounds matter
+    &mdash; checking only <code>target &lt; nums[mid]</code> would send a target smaller than
+    everything in the left half into the wrong half.</p>
+    <p>The comparison against <code>nums[mid]</code> is strict because <code>mid</code> itself was
+    already tested and did not match.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>nums = [4,5,6,7,0,1,2]</code>, <code>target = 0</code>.</p>
+
+  <div class="trace">
+<pre>indexes:  0  1  2  3  4  5  6
+values:   4  5  6  7  0  1  2
+
+lo=0 hi=6   mid=3  nums[3]=7   not the target
+            nums[0]=4 &lt;= nums[3]=7  ->  LEFT half [4,5,6,7] is sorted
+            is 0 in [4, 7)?   0 >= 4?  no
+            -> the target is NOT in the sorted left half
+            -> go right:  lo = 4
+
+lo=4 hi=6   mid=5  nums[5]=1   not the target
+            nums[4]=0 &lt;= nums[5]=1  ->  LEFT half [0,1] is sorted
+            is 0 in [0, 1)?   0 >= 0 yes, 0 &lt; 1 yes   ->  YES
+            -> go left:  hi = 4
+
+lo=4 hi=4   mid=4  nums[4]=0   MATCH  ->  return 4
+</pre>
+  </div>
+
+  <p>Now a miss, <code>target = 3</code>:</p>
+
+  <div class="trace">
+<pre>lo=0 hi=6   mid=3  value 7
+            left [4..7] sorted.  is 3 in [4,7)?  no  ->  lo = 4
+
+lo=4 hi=6   mid=5  value 1
+            nums[4]=0 &lt;= 1  ->  left [0,1] sorted.
+            is 3 in [0,1)?  no  ->  lo = 6
+
+lo=6 hi=6   mid=6  value 2
+            nums[6]=2 &lt;= 2  ->  left half is just [2], sorted.
+            is 3 in [2,2)?  3 &lt; 2 is false  ->  no  ->  lo = 7
+
+lo(7) > hi(6)  ->  range empty  ->  return -1
+</pre>
+  </div>
+
+  <p>Note the third step: <code>lo === mid === hi</code>, and the <code>&lt;=</code> in the
+  sorted-half test is what makes that single-element range behave.</p>
+
+  <p>And one where the right half is the sorted one, <code>nums = [6,7,0,1,2,4,5]</code>,
+  <code>target = 4</code>:</p>
+
+  <div class="trace">
+<pre>lo=0 hi=6   mid=3  nums[3]=1   not the target
+            nums[0]=6 &lt;= 1?  NO  ->  the RIGHT half [1,2,4,5] is sorted
+            is 4 in (1, 5]?   4 > 1 yes, 4 &lt;= 5 yes   ->  YES
+            -> go right:  lo = 4
+
+lo=4 hi=6   mid=5  nums[5]=4   MATCH  ->  return 5
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function searchExplained(nums, target) {
+  console.log('nums =', nums, '  target =', target);
+
+  let lo = 0, hi = nums.length - 1;
+
+  while (lo &lt;= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    console.log('  lo=' + lo + ' hi=' + hi + ' mid=' + mid +
+                '   nums[mid]=' + nums[mid]);
+
+    if (nums[mid] === target) {
+      console.log('  MATCH -> return ' + mid);
+      console.log('');
+      return mid;
+    }
+
+    if (nums[lo] &lt;= nums[mid]) {
+      console.log('        nums[lo]=' + nums[lo] + ' &lt;= nums[mid]=' + nums[mid] +
+                  '  ->  LEFT half is sorted [' + nums[lo] + '..' + nums[mid] + ']');
+      if (target &gt;= nums[lo] &amp;&amp; target &lt; nums[mid]) {
+        console.log('        target is inside it -> go left');
+        hi = mid - 1;
+      } else {
+        console.log('        target is not inside it -> go right');
+        lo = mid + 1;
+      }
+    } else {
+      console.log('        nums[lo]=' + nums[lo] + ' &gt; nums[mid]=' + nums[mid] +
+                  '  ->  RIGHT half is sorted [' + nums[mid] + '..' + nums[hi] + ']');
+      if (target &gt; nums[mid] &amp;&amp; target &lt;= nums[hi]) {
+        console.log('        target is inside it -> go right');
+        lo = mid + 1;
+      } else {
+        console.log('        target is not inside it -> go left');
+        hi = mid - 1;
+      }
+    }
+  }
+
+  console.log('  range empty -> -1');
+  console.log('');
+  return -1;
+}
+
+console.log('RESULT:', searchExplained([4,5,6,7,0,1,2], 0));
+console.log('==========================================');
+console.log('RESULT:', searchExplained([4,5,6,7,0,1,2], 3));
+console.log('==========================================');
+console.log('RESULT:', searchExplained([6,7,0,1,2,4,5], 4));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; one pass, loops only</span></div>
+<pre><code>function searchRotatedManual(nums, target) {
+  let lo = 0;
+  let hi = nums.length - 1;
+
+  while (lo &lt;= hi) {
+    const mid = lo + ((hi - lo) - ((hi - lo) % 2)) / 2;
+
+    if (nums[mid] === target) {
+      return mid;
+    }
+
+    // &lt;= because lo can equal mid, and one element is sorted
+    if (nums[lo] &lt;= nums[mid]) {
+      // the LEFT half is a plain sorted run
+      if (target &gt;= nums[lo] &amp;&amp; target &lt; nums[mid]) {
+        hi = mid - 1;         // the target lies inside it
+      } else {
+        lo = mid + 1;         // it must be in the other half
+      }
+    } else {
+      // the RIGHT half is a plain sorted run
+      if (target &gt; nums[mid] &amp;&amp; target &lt;= nums[hi]) {
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+  }
+
+  return -1;
+}
+
+console.log(searchRotatedManual([4,5,6,7,0,1,2], 0));    // 4
+console.log(searchRotatedManual([4,5,6,7,0,1,2], 3));    // -1
+console.log(searchRotatedManual([4,5,6,7,0,1,2], 4));    // 0
+console.log(searchRotatedManual([4,5,6,7,0,1,2], 2));    // 6
+console.log(searchRotatedManual([1], 0));                // -1
+console.log(searchRotatedManual([1], 1));                // 0
+console.log(searchRotatedManual([1,2,3,4,5], 4));        // 3
+console.log(searchRotatedManual([5,1,2,3,4], 1));        // 1
+console.log(searchRotatedManual([3,1], 1));              // 1
+console.log(searchRotatedManual([], 5));                 // -1</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">an exhaustive check &mdash; every rotation, every target</span></div>
+<pre><code>function search(nums, target) {
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt;= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] === target) return mid;
+    if (nums[lo] &lt;= nums[mid]) {
+      if (target &gt;= nums[lo] &amp;&amp; target &lt; nums[mid]) hi = mid - 1;
+      else lo = mid + 1;
+    } else {
+      if (target &gt; nums[mid] &amp;&amp; target &lt;= nums[hi]) lo = mid + 1;
+      else hi = mid - 1;
+    }
+  }
+  return -1;
+}
+
+// try every array size, every rotation, every target in range
+let checks = 0, failures = 0;
+
+for (let n = 1; n &lt;= 12; n++) {
+  const base = [];
+  for (let i = 0; i &lt; n; i++) base.push(i * 2);      // 0,2,4,... distinct
+
+  for (let r = 0; r &lt; n; r++) {
+    const rotated = [...base.slice(r), ...base.slice(0, r)];
+
+    for (let t = -1; t &lt;= n * 2; t++) {
+      checks++;
+      const expected = rotated.indexOf(t);
+      const actual = search(rotated, t);
+      if (expected !== actual) {
+        failures++;
+        if (failures &lt; 4) {
+          console.log('FAIL', JSON.stringify(rotated), 'target', t,
+                      'expected', expected, 'got', actual);
+        }
+      }
+    }
+  }
+}
+
+console.log(checks + ' cases checked,  ' + failures + ' failures');</code></pre>
+  </div>
+
+  <p>Exhaustive testing is worth doing on this problem specifically. The four branches interact, and
+  a subtle boundary error survives hand-written tests easily &mdash; but never survives every
+  rotation of every size.</p>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function search(nums, target) {
+  let lo = 0;
+  let hi = nums.length - 1;
+
+  while (lo &lt;= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+
+    if (nums[mid] === target) return mid;
+
+    if (nums[lo] &lt;= nums[mid]) {
+      // left half sorted
+      if (target &gt;= nums[lo] &amp;&amp; target &lt; nums[mid]) hi = mid - 1;
+      else lo = mid + 1;
+    } else {
+      // right half sorted
+      if (target &gt; nums[mid] &amp;&amp; target &lt;= nums[hi]) lo = mid + 1;
+      else hi = mid - 1;
+    }
+  }
+
+  return -1;
+}
+
+console.log(search([4,5,6,7,0,1,2], 0));   // 4
+console.log(search([4,5,6,7,0,1,2], 3));   // -1
+console.log(search([1], 0));               // -1
+console.log(search([1,3], 3));             // 1
+console.log(search([3,1], 1));             // 1</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the related problems this unlocks</span></div>
+<pre><code>// 1. Find the minimum in a rotated sorted array -- the pivot itself
+function findMin(nums) {
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt; hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    // compare with the RIGHT end, not the left -- see the note below
+    if (nums[mid] &gt; nums[hi]) lo = mid + 1;
+    else hi = mid;
+  }
+  return nums[lo];
+}
+
+console.log(findMin([4,5,6,7,0,1,2]));   // 0
+console.log(findMin([3,4,5,1,2]));       // 1
+console.log(findMin([11,13,15,17]));     // 11  -- not rotated
+console.log(findMin([2,1]));             // 1
+
+// 2. How many places was it rotated by?
+function rotationAmount(nums) {
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt; hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] &gt; nums[hi]) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+console.log(rotationAmount([4,5,6,7,0,1,2]));   // 4
+console.log(rotationAmount([1,2,3]));           // 0
+
+// 3. With DUPLICATES allowed, O(log n) becomes impossible.
+// [1,1,1,0,1,1,1]: nums[lo], nums[mid] and nums[hi] are all 1,
+// so you cannot tell which half is sorted. The fix is to shrink
+// the range by one and fall back towards O(n) in the worst case.
+function searchWithDuplicates(nums, target) {
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt;= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] === target) return true;
+
+    if (nums[lo] === nums[mid] &amp;&amp; nums[mid] === nums[hi]) {
+      lo++; hi--;                       // cannot decide -- shrink by one
+    } else if (nums[lo] &lt;= nums[mid]) {
+      if (target &gt;= nums[lo] &amp;&amp; target &lt; nums[mid]) hi = mid - 1;
+      else lo = mid + 1;
+    } else {
+      if (target &gt; nums[mid] &amp;&amp; target &lt;= nums[hi]) lo = mid + 1;
+      else hi = mid - 1;
+    }
+  }
+  return false;
+}
+
+console.log(searchWithDuplicates([2,5,6,0,0,1,2], 0));   // true
+console.log(searchWithDuplicates([2,5,6,0,0,1,2], 3));   // false
+console.log(searchWithDuplicates([1,1,1,0,1,1,1], 0));   // true</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Why <code>findMin</code> compares with <code>nums[hi]</code></span>
+    <p>Comparing <code>nums[mid]</code> with <code>nums[lo]</code> does not work for finding the
+    minimum, because on an unrotated array <code>nums[mid] &gt; nums[lo]</code> is true and would send
+    you right &mdash; away from the answer. Comparing with the <em>right</em> end is unambiguous:
+    if <code>nums[mid] &gt; nums[hi]</code> the cliff must be to the right of <code>mid</code>;
+    otherwise <code>mid</code> is in the second run and could itself be the minimum.</p>
+    <p>Two very similar problems, two different reference points. Trace both by hand once.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Linear scan</td><td class="mono">O(n)</td><td class="mono">O(1)</td></tr>
+        <tr><td>Find pivot, then binary search</td><td class="mono">O(log n)</td><td class="mono">O(1)</td></tr>
+        <tr><td><strong>One-pass modified binary search</strong></td><td class="mono">O(log n)</td><td class="mono">O(1)</td></tr>
+        <tr><td>With duplicates allowed</td><td class="mono">O(n) worst case</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Every iteration still discards half the range, so it is O(log n) exactly as plain binary search
+  is. The extra branch costs one comparison, not an extra pass.</p>
+
+  <p>The duplicates row is the honest caveat. When <code>nums[lo]</code>, <code>nums[mid]</code> and
+  <code>nums[hi]</code> are all equal you cannot tell which half is sorted, so you shrink by one and
+  the worst case &mdash; an array of all equal values &mdash; degrades to O(n). That is not a flaw in
+  the solution; it is provably unavoidable.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Wherever I cut it, the rotation point can only be in one half, so at least one half is
+    plainly sorted. I detect which by comparing <code>nums[lo]</code> with <code>nums[mid]</code>
+    &mdash; using <code>&lt;=</code> so a single-element range counts as sorted. Then I check in O(1)
+    whether the target falls inside that sorted half&rsquo;s value range: if so I search it, otherwise
+    I search the other half. Either way half the range is discarded, so O(log n) time and O(1) space.
+    With duplicates the sortedness test becomes ambiguous and the worst case degrades to
+    O(n).&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Using <code>&lt;</code> instead of <code>&lt;=</code> in the sortedness test</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; single-element ranges misclassified</span></div>
+<pre><code>function broken(nums, target) {
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt;= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] === target) return mid;
+    if (nums[lo] &lt; nums[mid]) {                  // &lt; instead of &lt;=
+      if (target &gt;= nums[lo] &amp;&amp; target &lt; nums[mid]) hi = mid - 1;
+      else lo = mid + 1;
+    } else {
+      if (target &gt; nums[mid] &amp;&amp; target &lt;= nums[hi]) lo = mid + 1;
+      else hi = mid - 1;
+    }
+  }
+  return -1;
+}
+
+console.log(broken([4,5,6,7,0,1,2], 0));   // 4   fine
+console.log(broken([3,1], 1));             // -1  WRONG, should be 1
+console.log(broken([5,1,3], 3));           // -1  WRONG, should be 2
+console.log(broken([1,3], 3));             // 1   fine
+
+// On [3,1] with target 1: lo=0, hi=1, mid=0. nums[0]=3 and
+// nums[0]=3, so 3 &lt; 3 is FALSE -- it takes the "right half sorted"
+// branch, checks 1 > 3, and goes left. The answer is lost.
+// A range where lo === mid must count as sorted.</code></pre>
+  </div>
+
+  <h3>2. Checking only one end of the sorted range</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; incomplete range test</span></div>
+<pre><code>function broken(nums, target) {
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt;= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] === target) return mid;
+    if (nums[lo] &lt;= nums[mid]) {
+      if (target &lt; nums[mid]) hi = mid - 1;      // missing target >= nums[lo]
+      else lo = mid + 1;
+    } else {
+      if (target &gt; nums[mid]) lo = mid + 1;      // missing target &lt;= nums[hi]
+      else hi = mid - 1;
+    }
+  }
+  return -1;
+}
+
+console.log(broken([4,5,6,7,0,1,2], 6));   // 2   fine
+console.log(broken([4,5,6,7,0,1,2], 0));   // -1  WRONG, should be 4
+console.log(broken([4,5,6,7,0,1,2], 1));   // -1  WRONG, should be 5
+
+// Target 0 is smaller than everything in the sorted left half
+// [4,5,6,7], so "0 &lt; 7" sends it left -- into the half it is not in.
+// The range check needs BOTH bounds.</code></pre>
+  </div>
+
+  <h3>3. Trying to search both halves</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct but no longer logarithmic</span></div>
+<pre><code>function bothHalves(nums, target, lo = 0, hi = nums.length - 1) {
+  if (lo &gt; hi) return -1;
+  const mid = lo + Math.floor((hi - lo) / 2);
+  if (nums[mid] === target) return mid;
+
+  const left = bothHalves(nums, target, lo, mid - 1);
+  if (left !== -1) return left;
+  return bothHalves(nums, target, mid + 1, hi);
+}
+
+console.log(bothHalves([4,5,6,7,0,1,2], 0));   // 4   correct
+console.log(bothHalves([4,5,6,7,0,1,2], 3));   // -1  correct
+
+// It works because it eventually visits everything -- which is
+// exactly the problem. Recursing into BOTH halves is O(n), not
+// O(log n). The whole point is deciding which half to discard.</code></pre>
+  </div>
+
+  <h3>4. Assuming the array is rotated at all</h3>
+
+  <p><code>[1,2,3,4,5]</code> is a valid input. The left half is always sorted for it, the branch
+  reduces to plain binary search, and it works &mdash; but only if the <code>&lt;=</code> in the
+  sortedness test is right. Always include an unrotated array in your tests.</p>
+
+  <h3>5. Applying it to an array with duplicates</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; duplicates defeat the sortedness test</span></div>
+<pre><code>function search(nums, target) {
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt;= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] === target) return mid;
+    if (nums[lo] &lt;= nums[mid]) {
+      if (target &gt;= nums[lo] &amp;&amp; target &lt; nums[mid]) hi = mid - 1;
+      else lo = mid + 1;
+    } else {
+      if (target &gt; nums[mid] &amp;&amp; target &lt;= nums[hi]) lo = mid + 1;
+      else hi = mid - 1;
+    }
+  }
+  return -1;
+}
+
+console.log('distinct   :', search([4,5,6,7,0,1,2], 0));   // 4   correct
+console.log('duplicates :', search([1,1,1,0,1,1,1], 0));   // 3   lucky -- mid landed on it
+console.log('duplicates :', search([1,0,1,1,1], 0));       // -1  WRONG, 0 is at index 1
+console.log('duplicates :', search([1,1,0,1,1,1,1], 0));   // -1  WRONG, 0 is at index 2
+
+// On [1,0,1,1,1]: nums[lo]=1 and nums[mid]=1, so it believes the
+// left half is the sorted run [1..1] -- and 0 is not in that range,
+// so it goes right and never looks left again.
+// With duplicates you need the extra
+// "cannot decide, shrink by one" branch, and you lose the O(log n)
+// guarantee.</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the two-pass version first</strong> &mdash; find the pivot, then binary search
+    the right half. It is easier to defend, and it is a complete O(log n) answer.</li>
+    <li><strong>Then write the one-pass version from memory</strong> and run the exhaustive test in
+    Step 6. If it passes every rotation of every size, you have it.</li>
+    <li><strong>Find Minimum in Rotated Sorted Array.</strong> In Step 7 &mdash; and work out why it
+    compares with <code>nums[hi]</code> rather than <code>nums[lo]</code>.</li>
+    <li><strong>Search in Rotated Sorted Array II</strong> (duplicates allowed). Add the
+    &ldquo;cannot decide&rdquo; branch and explain why O(log n) is no longer possible.</li>
+    <li><strong>Find how many times the array was rotated.</strong> It is the index of the minimum.
+    One line once you have <code>findMin</code>.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Binary search survives as long as you can decide which half to discard.</strong> The
+    array does not have to be fully sorted &mdash; it only has to be structured enough that one
+    comparison rules out half the possibilities. That is the same insight behind Find Peak Element,
+    binary search on the answer, and searching a 2D sorted matrix. When a problem looks like
+    &ldquo;binary search does not apply here&rdquo;, ask instead: <em>what single test would let me
+    throw away half?</em></p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="01-binary-search.html">&larr; Binary Search</a>
+  <a href="03-find-peak-element.html">Next: Find Peak Element &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

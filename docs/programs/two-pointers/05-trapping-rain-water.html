@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trapping Rain Water</title>
+<meta name="description" content="Water above a bar is min(tallest left, tallest right) minus its height — from prefix arrays to two pointers.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Two pointers &middot; Problem 05 &middot; stretch</p>
+  <h1>Trapping Rain Water</h1>
+  <p class="standfirst">A famously hard problem that becomes easy once you ask the right question.
+  Not <em>&ldquo;how much water is in this pool?&rdquo;</em> but <strong>&ldquo;how much water sits
+  above this one bar?&rdquo;</strong> &mdash; because that has a one-line answer.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>An array of bar heights, each of width 1. After rain, how much water is trapped between them?</p>
+
+  <div class="trace">
+<pre>height = [0,1,0,2,1,0,1,3,2,1,2,1]
+
+3               |#|
+2         |#|~~~|#|~~~|#|
+1   |#|~~~|#|#|~|#|#|#|#|#|
+0 |#|#|#|#|#|#|#|#|#|#|#|#|
+   0 1 2 3 4 5 6 7 8 9 10 11
+
+~ = trapped water.   total = 6
+</pre>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[0,1,0,2,1,0,1,3,2,1,2,1]</td><td class="mono">6</td></tr>
+        <tr><td class="mono">[4,2,0,3,2,5]</td><td class="mono">9</td></tr>
+        <tr><td class="mono">[3,2,1]</td><td class="mono">0</td></tr>
+        <tr><td class="mono">[1,2,3]</td><td class="mono">0</td></tr>
+        <tr><td class="mono">[5]</td><td class="mono">0</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Not the same as Container With Most Water</span>
+    <p>There you pick <strong>two</strong> lines and ignore everything between them. Here
+    <strong>every</strong> bar has width and blocks water, and you total the water across the whole
+    array. Same picture, different question, different answer &mdash; on
+    <code>[1,8,6,2,5,4,8,3,7]</code> the container answer is 49 and the trapped answer is 19.</p>
+  </div>
+
+  <p>Notice rows three and four: a strictly decreasing or strictly increasing array traps nothing.
+  Water needs a wall on <em>both</em> sides.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; ask about one bar at a time</h2>
+
+  <p>Trying to identify pools is hopeless &mdash; they nest and merge. So change the question.
+  Stand on a single position and ask: <em>how deep is the water directly above me?</em></p>
+
+  <div class="note key">
+    <span class="t">The unlock &mdash; the whole problem in one line</span>
+    <p><code>water above i = min(tallest to the left, tallest to the right) &minus; height[i]</code></p>
+    <p>Water rises until it spills over the lower of the two walls containing it. If that number is
+    negative &mdash; you are taller than one of your walls &mdash; there is no water, so clamp at 0.</p>
+  </div>
+
+  <div class="trace">
+<pre>  height = [0,1,0,2,1,0,1,3,2,1,2,1]
+  position 5, height 0
+
+  tallest to the left  (indexes 0..5) : 2
+  tallest to the right (indexes 5..11): 3
+
+  water = min(2, 3) - 0 = 2
+
+  and indeed there are two units of water above index 5.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; brute force, scan both ways per bar</span></div>
+<pre><code>function trapBrute(height) {
+  let total = 0;
+
+  for (let i = 0; i &lt; height.length; i++) {
+    // tallest bar at or left of i
+    let leftMax = 0;
+    for (let j = 0; j &lt;= i; j++) leftMax = Math.max(leftMax, height[j]);
+
+    // tallest bar at or right of i
+    let rightMax = 0;
+    for (let j = i; j &lt; height.length; j++) rightMax = Math.max(rightMax, height[j]);
+
+    total += Math.min(leftMax, rightMax) - height[i];
+  }
+
+  return total;
+}
+
+console.log(trapBrute([0,1,0,2,1,0,1,3,2,1,2,1]));   // 6
+console.log(trapBrute([4,2,0,3,2,5]));               // 9
+console.log(trapBrute([3,2,1]));                     // 0
+console.log(trapBrute([1,2,3]));                     // 0
+console.log(trapBrute([5]));                         // 0
+console.log(trapBrute([]));                          // 0
+
+// No clamp needed: leftMax and rightMax both INCLUDE height[i],
+// so min(leftMax, rightMax) is never below height[i].</code></pre>
+  </div>
+
+  <p>Including index <code>i</code> itself in both maxima is a small but real convenience: it makes
+  the subtraction non-negative automatically, so <code>Math.max(0, ...)</code> is unnecessary.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>Every bar rescans the entire array twice: <strong>O(n&sup2;)</strong>. And the waste is obvious
+  &mdash; the tallest bar to the left of position 6 is almost the same computation as the tallest to
+  the left of position 5.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 20000;
+const height = [];
+for (let i = 0; i &lt; N; i++) height.push(Math.floor(Math.random() * 100));
+
+function brute(h) {
+  let total = 0;
+  for (let i = 0; i &lt; h.length; i++) {
+    let l = 0, r = 0;
+    for (let j = 0; j &lt;= i; j++) if (h[j] &gt; l) l = h[j];
+    for (let j = i; j &lt; h.length; j++) if (h[j] &gt; r) r = h[j];
+    total += Math.min(l, r) - h[i];
+  }
+  return total;
+}
+
+function twoPointer(h) {
+  let lo = 0, hi = h.length - 1;
+  let leftMax = 0, rightMax = 0, total = 0;
+  while (lo &lt; hi) {
+    if (h[lo] &lt; h[hi]) {
+      leftMax = Math.max(leftMax, h[lo]);
+      total += leftMax - h[lo];
+      lo++;
+    } else {
+      rightMax = Math.max(rightMax, h[hi]);
+      total += rightMax - h[hi];
+      hi--;
+    }
+  }
+  return total;
+}
+
+let t = performance.now();
+const a = brute(height);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const b = twoPointer(height);
+const ptrMs = performance.now() - t;
+
+console.log('scan both ways per bar :', a, 'in', bruteMs.toFixed(1) + ' ms');
+console.log('two pointers           :', b, 'in', ptrMs.toFixed(2) + ' ms');
+console.log('same answer:', a === b);
+console.log('speed-up:', Math.round(bruteMs / Math.max(ptrMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; twice</h2>
+
+  <h3>First improvement: precompute the maxima</h3>
+
+  <p>&ldquo;Tallest to my left&rdquo; is a running maximum &mdash; exactly the prefix sweep from
+  Product of Array Except Self. One forward pass computes every left maximum; one backward pass
+  computes every right maximum.</p>
+
+  <div class="trace">
+<pre>  height   0  1  0  2  1  0  1  3  2  1  2  1
+  leftMax  0  1  1  2  2  2  2  3  3  3  3  3
+  rightMax 3  3  3  3  3  3  3  3  2  2  2  1
+  min      0  1  1  2  2  2  2  3  2  2  2  1
+  - height 0  0  1  0  1  2  1  0  0  1  0  0
+                                            = 6
+</pre>
+  </div>
+
+  <p>Three passes, all O(n). Two extra arrays, so O(n) space. That is already a complete answer and
+  the one that is easiest to explain.</p>
+
+  <h3>Second improvement: two pointers, O(1) space</h3>
+
+  <p>The insight that removes the arrays is subtle and worth reading twice.</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Walk two pointers inwards, tracking <code>leftMax</code> and <code>rightMax</code> as you go.
+    <strong>Process the side whose current bar is shorter.</strong></p>
+    <p>Why that is safe: if <code>height[lo] &lt; height[hi]</code>, then there is definitely some bar
+    on the right at least as tall as <code>height[lo]</code> &mdash; namely <code>height[hi]</code>
+    itself. So the true <code>rightMax</code> for position <code>lo</code> is at least
+    <code>height[lo]</code>, which means the <code>min</code> is decided entirely by
+    <code>leftMax</code>. You do not need to know the actual <code>rightMax</code> at all.</p>
+  </div>
+
+  <p>Say that again in plain terms: <em>the shorter side is the one whose water level you can already
+  determine</em>, because the taller side guarantees a wall at least that high. So you compute its
+  water and move on, and you never need the other side&rsquo;s exact maximum.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>height = [4,2,0,3,2,5]</code>, answer 9.</p>
+
+  <div class="trace">
+<pre>lo=0 hi=5   leftMax=0  rightMax=0  total=0
+
+h[0]=4  h[5]=5   4 &lt; 5  ->  work on the LEFT
+   leftMax = max(0, 4) = 4
+   water = 4 - 4 = 0                     total=0    lo=1
+
+h[1]=2  h[5]=5   2 &lt; 5  ->  LEFT
+   leftMax = max(4, 2) = 4
+   water = 4 - 2 = 2                     total=2    lo=2
+
+h[2]=0  h[5]=5   0 &lt; 5  ->  LEFT
+   leftMax = max(4, 0) = 4
+   water = 4 - 0 = 4                     total=6    lo=3
+
+h[3]=3  h[5]=5   3 &lt; 5  ->  LEFT
+   leftMax = max(4, 3) = 4
+   water = 4 - 3 = 1                     total=7    lo=4
+
+h[4]=2  h[5]=5   2 &lt; 5  ->  LEFT
+   leftMax = max(4, 2) = 4
+   water = 4 - 2 = 2                     total=9    lo=5
+
+lo === hi  ->  stop
+
+answer: 9
+</pre>
+  </div>
+
+  <p>Every step took the left branch, because the 5 on the right dominated throughout. The algorithm
+  never needed to know what <code>rightMax</code> actually was &mdash; only that it was at least 5,
+  which the comparison guaranteed.</p>
+
+  <p>Now one that alternates, <code>height = [0,1,0,2,1,0,1,3,2,1,2,1]</code>:</p>
+
+  <div class="trace">
+<pre>lo=0 hi=11  leftMax=0 rightMax=0 total=0
+
+h[0]=0 h[11]=1   0 &lt; 1  LEFT   leftMax=0   water 0    total=0   lo=1
+h[1]=1 h[11]=1   1 &lt; 1? NO     RIGHT  rightMax=1  water 0  total=0   hi=10
+h[1]=1 h[10]=2   1 &lt; 2  LEFT   leftMax=1   water 0    total=0   lo=2
+h[2]=0 h[10]=2   0 &lt; 2  LEFT   leftMax=1   water 1    total=1   lo=3
+h[3]=2 h[10]=2   2 &lt; 2? NO     RIGHT  rightMax=2  water 0  total=1   hi=9
+h[3]=2 h[9]=1    2 &lt; 1? NO     RIGHT  rightMax=2  water 1  total=2   hi=8
+h[3]=2 h[8]=2    2 &lt; 2? NO     RIGHT  rightMax=2  water 0  total=2   hi=7
+h[3]=2 h[7]=3    2 &lt; 3  LEFT   leftMax=2   water 0    total=2   lo=4
+h[4]=1 h[7]=3    1 &lt; 3  LEFT   leftMax=2   water 1    total=3   lo=5
+h[5]=0 h[7]=3    0 &lt; 3  LEFT   leftMax=2   water 2    total=5   lo=6
+h[6]=1 h[7]=3    1 &lt; 3  LEFT   leftMax=2   water 1    total=6   lo=7
+
+lo === hi  ->  stop.   answer: 6
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function trapExplained(height) {
+  let lo = 0, hi = height.length - 1;
+  let leftMax = 0, rightMax = 0, total = 0;
+
+  console.log('height =', height);
+  console.log('');
+
+  while (lo &lt; hi) {
+    if (height[lo] &lt; height[hi]) {
+      leftMax = Math.max(leftMax, height[lo]);
+      const water = leftMax - height[lo];
+      total += water;
+      console.log('lo=' + lo + '(h' + height[lo] + ')  hi=' + hi + '(h' + height[hi] + ')' +
+                  '   left is shorter -> leftMax=' + leftMax +
+                  '   water ' + water + '   total=' + total);
+      lo++;
+    } else {
+      rightMax = Math.max(rightMax, height[hi]);
+      const water = rightMax - height[hi];
+      total += water;
+      console.log('lo=' + lo + '(h' + height[lo] + ')  hi=' + hi + '(h' + height[hi] + ')' +
+                  '   right is shorter -> rightMax=' + rightMax +
+                  '  water ' + water + '   total=' + total);
+      hi--;
+    }
+  }
+
+  console.log('');
+  return total;
+}
+
+console.log('ANSWER:', trapExplained([4,2,0,3,2,5]));
+console.log('==========================================');
+console.log('ANSWER:', trapExplained([0,1,0,2,1,0,1,3,2,1,2,1]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; prefix and suffix arrays</span></div>
+<pre><code>function trapPrefixSuffix(height) {
+  const n = height.length;
+  if (n === 0) return 0;
+
+  const leftMax = [];
+  const rightMax = [];
+
+  // forward pass: tallest bar at or left of i
+  leftMax[0] = height[0];
+  for (let i = 1; i &lt; n; i++) {
+    leftMax[i] = leftMax[i - 1] &gt; height[i] ? leftMax[i - 1] : height[i];
+  }
+
+  // backward pass: tallest bar at or right of i
+  rightMax[n - 1] = height[n - 1];
+  for (let i = n - 2; i &gt;= 0; i--) {
+    rightMax[i] = rightMax[i + 1] &gt; height[i] ? rightMax[i + 1] : height[i];
+  }
+
+  // third pass: total the water
+  let total = 0;
+  for (let i = 0; i &lt; n; i++) {
+    const wall = leftMax[i] &lt; rightMax[i] ? leftMax[i] : rightMax[i];
+    total = total + (wall - height[i]);
+  }
+
+  return total;
+}
+
+console.log(trapPrefixSuffix([0,1,0,2,1,0,1,3,2,1,2,1]));   // 6
+console.log(trapPrefixSuffix([4,2,0,3,2,5]));               // 9
+console.log(trapPrefixSuffix([3,2,1]));                     // 0
+console.log(trapPrefixSuffix([1,2,3]));                     // 0
+console.log(trapPrefixSuffix([5]));                         // 0
+console.log(trapPrefixSuffix([]));                          // 0
+console.log(trapPrefixSuffix([2,0,2]));                     // 2
+console.log(trapPrefixSuffix([5,0,0,0,5]));                 // 15</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; two pointers, O(1) space</span></div>
+<pre><code>function trapManual(height) {
+  let lo = 0;
+  let hi = height.length - 1;
+
+  let leftMax = 0;
+  let rightMax = 0;
+  let total = 0;
+
+  while (lo &lt; hi) {
+
+    if (height[lo] &lt; height[hi]) {
+      // the right side has a bar at least as tall as height[lo],
+      // so leftMax alone decides the water level here
+      if (height[lo] &gt; leftMax) leftMax = height[lo];
+      total = total + (leftMax - height[lo]);
+      lo = lo + 1;
+
+    } else {
+      // symmetric: the left side guarantees a tall enough wall
+      if (height[hi] &gt; rightMax) rightMax = height[hi];
+      total = total + (rightMax - height[hi]);
+      hi = hi - 1;
+    }
+  }
+
+  return total;
+}
+
+console.log(trapManual([0,1,0,2,1,0,1,3,2,1,2,1]));   // 6
+console.log(trapManual([4,2,0,3,2,5]));               // 9
+console.log(trapManual([3,2,1]));                     // 0
+console.log(trapManual([1,2,3]));                     // 0
+console.log(trapManual([5]));                         // 0
+console.log(trapManual([]));                          // 0
+console.log(trapManual([2,0,2]));                     // 2
+console.log(trapManual([5,0,0,0,5]));                 // 15
+console.log(trapManual([4,2,3]));                     // 1</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">check they agree, on many random inputs</span></div>
+<pre><code>function reference(h) {                    // obviously correct
+  let total = 0;
+  for (let i = 0; i &lt; h.length; i++) {
+    let l = 0, r = 0;
+    for (let j = 0; j &lt;= i; j++) if (h[j] &gt; l) l = h[j];
+    for (let j = i; j &lt; h.length; j++) if (h[j] &gt; r) r = h[j];
+    total += Math.min(l, r) - h[i];
+  }
+  return total;
+}
+
+function pointers(h) {
+  let lo = 0, hi = h.length - 1, lm = 0, rm = 0, total = 0;
+  while (lo &lt; hi) {
+    if (h[lo] &lt; h[hi]) { lm = Math.max(lm, h[lo]); total += lm - h[lo]; lo++; }
+    else { rm = Math.max(rm, h[hi]); total += rm - h[hi]; hi--; }
+  }
+  return total;
+}
+
+let agree = 0;
+for (let trial = 0; trial &lt; 500; trial++) {
+  const len = Math.floor(Math.random() * 15);
+  const h = [];
+  for (let i = 0; i &lt; len; i++) h.push(Math.floor(Math.random() * 6));
+  if (reference(h) === pointers(h)) agree++;
+  else console.log('DISAGREE on', JSON.stringify(h), reference(h), pointers(h));
+}
+console.log('500 random heightmaps, both methods agree:', agree + '/500');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function trap(height) {
+  let lo = 0;
+  let hi = height.length - 1;
+  let leftMax = 0, rightMax = 0, total = 0;
+
+  while (lo &lt; hi) {
+    if (height[lo] &lt; height[hi]) {
+      leftMax = Math.max(leftMax, height[lo]);
+      total += leftMax - height[lo];
+      lo++;
+    } else {
+      rightMax = Math.max(rightMax, height[hi]);
+      total += rightMax - height[hi];
+      hi--;
+    }
+  }
+
+  return total;
+}
+
+console.log(trap([0,1,0,2,1,0,1,3,2,1,2,1]));   // 6
+console.log(trap([4,2,0,3,2,5]));               // 9
+console.log(trap([2,0,2]));                     // 2
+console.log(trap([5,0,0,0,5]));                 // 15
+console.log(trap([]));                          // 0</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the stack version &mdash; filling pools layer by layer</span></div>
+<pre><code>// A third approach worth seeing: a stack of indexes with decreasing
+// heights. When a taller bar arrives, it closes off a pool.
+function trapStack(height) {
+  const stack = [];      // indexes, heights decreasing
+  let total = 0;
+
+  for (let i = 0; i &lt; height.length; i++) {
+    // this bar is taller than the top -- it forms the right wall
+    while (stack.length &amp;&amp; height[i] &gt; height[stack[stack.length - 1]]) {
+      const bottom = stack.pop();          // the floor of the pool
+
+      if (stack.length === 0) break;       // no left wall, no pool
+
+      const left = stack[stack.length - 1];
+      const width = i - left - 1;
+      const depth = Math.min(height[left], height[i]) - height[bottom];
+      total += width * depth;
+    }
+    stack.push(i);
+  }
+
+  return total;
+}
+
+console.log(trapStack([0,1,0,2,1,0,1,3,2,1,2,1]));   // 6
+console.log(trapStack([4,2,0,3,2,5]));               // 9
+console.log(trapStack([3,2,1]));                     // 0
+console.log(trapStack([2,0,2]));                     // 2
+
+// O(n) time, O(n) space. It computes water in HORIZONTAL layers
+// rather than vertical columns, which is a genuinely different way
+// to see the problem. Know it exists; write the two-pointer one.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">and the neighbouring problem, side by side</span></div>
+<pre><code>const h = [1,8,6,2,5,4,8,3,7];
+
+function trap(a) {
+  let lo = 0, hi = a.length - 1, lm = 0, rm = 0, t = 0;
+  while (lo &lt; hi) {
+    if (a[lo] &lt; a[hi]) { lm = Math.max(lm, a[lo]); t += lm - a[lo]; lo++; }
+    else { rm = Math.max(rm, a[hi]); t += rm - a[hi]; hi--; }
+  }
+  return t;
+}
+
+function maxArea(a) {
+  let lo = 0, hi = a.length - 1, best = 0;
+  while (lo &lt; hi) {
+    best = Math.max(best, (hi - lo) * Math.min(a[lo], a[hi]));
+    if (a[lo] &lt; a[hi]) lo++; else hi--;
+  }
+  return best;
+}
+
+console.log('trapped water     :', trap(h));      // 19
+console.log('largest container :', maxArea(h));   // 49
+
+// Both use two pointers moving inwards, both move the shorter side,
+// and they answer completely different questions. Read the problem
+// statement twice before deciding which one you are solving.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Scan both ways per bar</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td></tr>
+        <tr><td>Prefix and suffix arrays</td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+        <tr><td>Monotonic stack</td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+        <tr><td><strong>Two pointers</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The two-pointer version is optimal on both axes. Each iteration advances one pointer, they start
+  <code>n - 1</code> apart, so at most <code>n</code> iterations &mdash; and it holds five numbers,
+  whatever the input size.</p>
+
+  <p>Do not skip past the prefix/suffix version in an interview, though. It is far easier to explain
+  and to get right, and going <em>prefix arrays first, then collapse them into two pointers</em> is a
+  much more convincing narrative than producing the clever version cold.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;The water above bar <em>i</em> is <code>min(maxLeft, maxRight) - height[i]</code>.
+    Computing those maxima per bar is O(n&sup2;), but they are running maxima, so two sweeps give me
+    prefix and suffix arrays &mdash; O(n) time, O(n) space. To get O(1) space I walk two pointers
+    inwards and always process the shorter side: if <code>height[lo] &lt; height[hi]</code>, then some
+    bar on the right is at least that tall, so <code>leftMax</code> alone determines the water at
+    <code>lo</code> and I do not need the exact right maximum. O(n) time, O(1) space.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Updating the maximum after using it</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; negative water</span></div>
+<pre><code>function broken(height) {
+  let lo = 0, hi = height.length - 1;
+  let leftMax = 0, rightMax = 0, total = 0;
+  while (lo &lt; hi) {
+    if (height[lo] &lt; height[hi]) {
+      total += leftMax - height[lo];              // used BEFORE updating -- bug
+      leftMax = Math.max(leftMax, height[lo]);
+      lo++;
+    } else {
+      total += rightMax - height[hi];
+      rightMax = Math.max(rightMax, height[hi]);
+      hi--;
+    }
+  }
+  return total;
+}
+
+console.log(broken([0,1,0,2,1,0,1,3,2,1,2,1]));   // 3   WRONG, should be 6
+console.log(broken([4,2,0,3,2,5]));               // 5   WRONG, should be 9
+
+// A bar taller than everything before it produces NEGATIVE water,
+// which quietly subtracts from the total. Update the running
+// maximum first, THEN compute the water -- exactly the rule from
+// Product of Array Except Self, in reverse.</code></pre>
+  </div>
+
+  <h3>2. Moving the taller side</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the guarantee is gone</span></div>
+<pre><code>function broken(height) {
+  let lo = 0, hi = height.length - 1;
+  let leftMax = 0, rightMax = 0, total = 0;
+  while (lo &lt; hi) {
+    if (height[lo] &gt; height[hi]) {                // > instead of &lt; -- bug
+      leftMax = Math.max(leftMax, height[lo]);
+      total += leftMax - height[lo];
+      lo++;
+    } else {
+      rightMax = Math.max(rightMax, height[hi]);
+      total += rightMax - height[hi];
+      hi--;
+    }
+  }
+  return total;
+}
+
+console.log(broken([0,1,0,2,1,0,1,3,2,1,2,1]));   // 5   WRONG, should be 6
+console.log(broken([4,2,0,3,2,5]));               // 2   WRONG, should be 9
+
+// Processing the TALLER side means the other side offers no
+// guarantee about the wall height, so leftMax/rightMax alone is not
+// enough to decide the water level. The whole correctness argument
+// depends on taking the shorter side.</code></pre>
+  </div>
+
+  <h3>3. Forgetting that a bar taller than its walls holds no water</h3>
+
+  <p>In the prefix/suffix version, <code>leftMax[i]</code> and <code>rightMax[i]</code> both include
+  <code>height[i]</code> itself, so the subtraction is never negative. If you write them to
+  <em>exclude</em> <code>i</code> &mdash; strictly to the left and strictly to the right &mdash; you
+  must clamp with <code>Math.max(0, ...)</code>. Both conventions work; pick one and be consistent.</p>
+
+  <h3>4. Confusing it with Container With Most Water</h3>
+
+  <p>Shown in Step 7: same input, answers 19 and 49. The tell is in the wording &mdash; &ldquo;how
+  much rain is trapped&rdquo; versus &ldquo;choose two lines&rdquo;. Read the question, not the
+  picture.</p>
+
+  <h3>5. Trying to identify pools</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; finds only one pool</span></div>
+<pre><code>function broken(height) {
+  // "find the tallest bar, then fill from each side towards it"
+  let peak = 0;
+  for (let i = 1; i &lt; height.length; i++) if (height[i] &gt; height[peak]) peak = i;
+
+  let total = 0, wall = 0;
+  for (let i = 0; i &lt; peak; i++) {
+    wall = Math.max(wall, height[i]);
+    total += wall - height[i];
+  }
+  wall = 0;
+  for (let i = height.length - 1; i &gt; peak; i--) {
+    wall = Math.max(wall, height[i]);
+    total += wall - height[i];
+  }
+  return total;
+}
+
+console.log(broken([0,1,0,2,1,0,1,3,2,1,2,1]));   // 6   correct!
+console.log(broken([4,2,0,3,2,5]));               // 9   correct!
+console.log(broken([2,0,2]));                     // 2   correct!
+
+// This one actually WORKS -- splitting at the global maximum is a
+// valid fourth solution, because everything left of the peak is
+// bounded on the right by the peak itself. It is O(n) time and
+// O(1) space, and it needs two passes plus a search for the peak.
+// Mentioned here because people often assume it is wrong. It is not
+// -- but "find the tallest, fill both ways" is easy to get subtly
+// wrong with ties, so the two-pointer version is still the safer
+// answer.</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the prefix/suffix version first, from memory</strong>, then collapse it into two
+    pointers. That is the order to present it in an interview too.</li>
+    <li><strong>Say the correctness argument out loud:</strong> why is it safe to process the shorter
+    side? If you cannot, you have memorised it.</li>
+    <li><strong>Return the water level at each index</strong>, not just the total. The prefix/suffix
+    version gives it directly; the two-pointer version does too, if you record as you go.</li>
+    <li><strong>Trapping Rain Water II.</strong> A 2D grid instead of a row of bars. Water escapes in
+    any direction, so the two-pointer trick collapses &mdash; it needs a min-heap starting from the
+    border. A genuinely hard problem, and a good demonstration that a technique&rsquo;s reach has
+    limits.</li>
+    <li><strong>Largest Rectangle in Histogram.</strong> The monotonic stack from Step 7, used for a
+    different question. Doing both makes the stack pattern stick.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Decompose a global question into a local one.</strong> &ldquo;How much water is
+    trapped?&rdquo; has no obvious handle; &ldquo;how much water sits above <em>this</em> bar?&rdquo;
+    has a one-line answer, and summing those answers solves the original. That reframe &mdash; the
+    same move that turned Maximum Subarray into &ldquo;best subarray <em>ending here</em>&rdquo;
+    &mdash; is one of the most reliable ways into a hard problem.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="04-sort-0s-1s-2s.html">&larr; Sort 0s, 1s and 2s</a>
+  <a href="../sliding-window/01-max-sum-subarray-size-k.html">Next topic: Sliding window &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Group Anagrams</title>
+<meta name="description" content="Finding a canonical key: the idea that turns an all-pairs comparison into a single grouping pass.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Strings &middot; Problem 02</p>
+  <h1>Group Anagrams</h1>
+  <p class="standfirst">The whole problem is one question: <em>what could I compute from a word that
+  is identical for all its anagrams and different for everything else?</em> Find that, and the
+  grouping is a four-line loop. This idea is called a <strong>canonical key</strong>.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Given a list of words, group together the ones that are anagrams of each other &mdash; same
+  letters, same counts, different order.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">["eat","tea","tan","ate","nat","bat"]</td><td class="mono">[["eat","tea","ate"], ["tan","nat"], ["bat"]]</td></tr>
+        <tr><td class="mono">[""]</td><td class="mono">[[""]]</td></tr>
+        <tr><td class="mono">["a"]</td><td class="mono">[["a"]]</td></tr>
+        <tr><td class="mono">["abc","cba","xyz"]</td><td class="mono">[["abc","cba"], ["xyz"]]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>A word with no anagram partner still forms a group of one &mdash; <code>"bat"</code> above.
+  The order of the groups usually does not matter, and neither does the order within a group, but
+  ask if you are unsure.</p>
+
+  <div class="note">
+    <span class="t">What makes two words anagrams</span>
+    <p>Exactly one thing: the <strong>multiset of characters</strong> is equal.
+    <code>"eat"</code> and <code>"tea"</code> both have one e, one a, one t. Length must match
+    too, but that follows automatically from the counts matching.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <p>Take the first word, scan the rest for its anagrams, pull them into a group, repeat with what is
+  left.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; compare every pair</span></div>
+<pre><code>function isAnagram(a, b) {
+  if (a.length !== b.length) return false;
+  const counts = {};
+  for (const ch of a) counts[ch] = (counts[ch] || 0) + 1;
+  for (const ch of b) {
+    if (!counts[ch]) return false;
+    counts[ch]--;
+  }
+  return true;
+}
+
+function groupAnagramsBrute(words) {
+  const used = new Array(words.length).fill(false);
+  const groups = [];
+
+  for (let i = 0; i &lt; words.length; i++) {
+    if (used[i]) continue;
+
+    const group = [words[i]];
+    used[i] = true;
+
+    for (let j = i + 1; j &lt; words.length; j++) {
+      if (!used[j] &amp;&amp; isAnagram(words[i], words[j])) {
+        group.push(words[j]);
+        used[j] = true;
+      }
+    }
+
+    groups.push(group);
+  }
+
+  return groups;
+}
+
+console.log(groupAnagramsBrute(["eat","tea","tan","ate","nat","bat"]));
+// [["eat","tea","ate"], ["tan","nat"], ["bat"]]
+console.log(groupAnagramsBrute(["abc","cba","xyz"]));
+console.log(groupAnagramsBrute([""]));</code></pre>
+  </div>
+
+  <p>The <code>isAnagram</code> helper is worth reading on its own: count the letters of the first
+  word, then <em>spend</em> them against the second. If you ever need a letter that is not in the
+  budget, they are not anagrams. That is the whole of the next problem on this list.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>Every word is compared against every other word, and each comparison walks both words. With
+  <code>n</code> words of average length <code>k</code> that is <strong>O(n&sup2; &middot; k)</strong>.
+  Ten thousand words means fifty million comparisons, each doing real work.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// 6,000 words, each a shuffle of one of 300 base words
+const bases = [];
+for (let i = 0; i &lt; 300; i++) {
+  let w = '';
+  for (let k = 0; k &lt; 8; k++) w += String.fromCharCode(97 + ((i * 7 + k * 3) % 26));
+  bases.push(w);
+}
+const words = [];
+for (let i = 0; i &lt; 6000; i++) {
+  const chars = [...bases[i % bases.length]];
+  for (let j = chars.length - 1; j &gt; 0; j--) {
+    const k = Math.floor(Math.random() * (j + 1));
+    [chars[j], chars[k]] = [chars[k], chars[j]];
+  }
+  words.push(chars.join(''));
+}
+
+function same(a, b) {
+  if (a.length !== b.length) return false;
+  const c = {};
+  for (const ch of a) c[ch] = (c[ch] || 0) + 1;
+  for (const ch of b) { if (!c[ch]) return false; c[ch]--; }
+  return true;
+}
+
+function brute(list) {
+  const used = new Array(list.length).fill(false);
+  const groups = [];
+  for (let i = 0; i &lt; list.length; i++) {
+    if (used[i]) continue;
+    const g = [list[i]]; used[i] = true;
+    for (let j = i + 1; j &lt; list.length; j++)
+      if (!used[j] &amp;&amp; same(list[i], list[j])) { g.push(list[j]); used[j] = true; }
+    groups.push(g);
+  }
+  return groups;
+}
+
+function byKey(list) {
+  const map = new Map();
+  for (const w of list) {
+    const key = [...w].sort().join('');
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(w);
+  }
+  return [...map.values()];
+}
+
+let t = performance.now();
+const a = brute(words);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const b = byKey(words);
+const fastMs = performance.now() - t;
+
+console.log('all pairs   :', a.length, 'groups in', bruteMs.toFixed(1) + ' ms');
+console.log('canonical key:', b.length, 'groups in', fastMs.toFixed(1) + ' ms');
+console.log('same grouping:', a.length === b.length);
+console.log('speed-up:', Math.round(bruteMs / Math.max(fastMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; a canonical key</h2>
+
+  <p>Comparing everything to everything is the shape of a problem that should be a hash map. But a
+  hash map needs a <em>key</em>, and words that are anagrams are all different strings. So invent a
+  key they share.</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Compute something from each word that is <strong>identical for all its anagrams</strong>.
+    The simplest such thing: <strong>sort its letters</strong>.</p>
+    <p><code>"eat"</code>, <code>"tea"</code> and <code>"ate"</code> all sort to <code>"aet"</code>.
+    <code>"tan"</code> and <code>"nat"</code> both sort to <code>"ant"</code>. Now just bucket the
+    words by that key.</p>
+  </div>
+
+  <div class="trace">
+<pre>  word    sorted key    bucket
+
+  eat  ->   aet         aet: [eat]
+  tea  ->   aet         aet: [eat, tea]
+  tan  ->   ant         ant: [tan]
+  ate  ->   aet         aet: [eat, tea, ate]
+  nat  ->   ant         ant: [tan, nat]
+  bat  ->   abt         abt: [bat]
+
+  answer = the bucket values
+</pre>
+  </div>
+
+  <p>One pass over the words, and each word is touched once. The comparison between words has
+  vanished entirely &mdash; that is what a good key buys you.</p>
+
+  <h3>A second key: the letter counts</h3>
+
+  <p>Sorting a word of length <code>k</code> costs <code>k log k</code>. You can do better with a
+  count signature &mdash; how many of each letter, written as a string:</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">two keys for the same word</span></div>
+<pre><code>"eat"   sorted key:  "aet"
+        count key:   "1#0#0#0#1#0#...#1#0#0#0#0#0#0"
+                      a b c d e         t
+                      one a, one e, one t, zero everywhere else</code></pre>
+  </div>
+
+  <p>Building that is O(k) instead of O(k log k). For short words it does not matter; for long ones,
+  or a restricted alphabet, it does. Both are legitimate answers &mdash; mention both and say which
+  you would pick.</p>
+
+  <div class="note warn">
+    <span class="t">Why the separator in the count key matters</span>
+    <p>Without one, a word with 11 a&rsquo;s and a word with 1 a and 1 b would both produce
+    <code>"11..."</code>. Joining the counts with <code>#</code> or <code>,</code> keeps them apart.
+    This is a real bug that only shows up on inputs with repeated letters &mdash; exactly the kind
+    that never makes it into a hand-written test.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>["eat","tea","tan","ate","nat","bat"]</code>, using the sorted key.</p>
+
+  <div class="trace">
+<pre>map = {}
+
+"eat"   key "aet"    not in map -> create      map = { aet: ["eat"] }
+"tea"   key "aet"    already there -> append   map = { aet: ["eat","tea"] }
+"tan"   key "ant"    not in map -> create      map = { aet: [...], ant: ["tan"] }
+"ate"   key "aet"    append                    map = { aet: ["eat","tea","ate"], ant: ["tan"] }
+"nat"   key "ant"    append                    map = { aet: [...], ant: ["tan","nat"] }
+"bat"   key "abt"    not in map -> create      map = { aet:[...], ant:[...], abt:["bat"] }
+
+answer = the map's values:
+  [["eat","tea","ate"], ["tan","nat"], ["bat"]]
+</pre>
+  </div>
+
+  <p>The groups come out in the order their <em>first</em> member appeared, because JavaScript&rsquo;s
+  <code>Map</code> preserves insertion order. That is a genuinely useful property and one reason to
+  prefer <code>Map</code> over a plain object here.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function groupExplained(words) {
+  const map = new Map();
+
+  console.log('words =', words);
+  console.log('');
+
+  for (const word of words) {
+    const key = [...word].sort().join('');
+
+    if (!map.has(key)) {
+      map.set(key, []);
+      console.log('"' + word + '"  key "' + key + '"   new key -> create bucket');
+    } else {
+      console.log('"' + word + '"  key "' + key + '"   existing  -> append');
+    }
+
+    map.get(key).push(word);
+    console.log('        map now: ' + JSON.stringify([...map]));
+  }
+
+  console.log('');
+  return [...map.values()];
+}
+
+console.log('ANSWER:', groupExplained(["eat","tea","tan","ate","nat","bat"]));
+console.log('==========================================');
+console.log('ANSWER:', groupExplained(["listen","silent","enlist","google","gogole"]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <p>No <code>sort</code>, no <code>split</code>, no <code>Map</code>. The count-signature key,
+  built by hand, which conveniently avoids needing a sort at all.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; count signature, plain object</span></div>
+<pre><code>function groupAnagramsManual(words) {
+  const buckets = {};      // key -> array of words
+  const keyOrder = [];     // remember insertion order ourselves
+
+  for (let i = 0; i &lt; words.length; i++) {
+    const word = words[i];
+
+    // count the 26 lowercase letters
+    const counts = [];
+    for (let k = 0; k &lt; 26; k++) counts[k] = 0;
+
+    for (let c = 0; c &lt; word.length; c++) {
+      const code = word.charCodeAt(c) - 97;    // 'a' is 97
+      counts[code] = counts[code] + 1;
+    }
+
+    // turn the counts into a string, with separators
+    let key = '';
+    for (let k = 0; k &lt; 26; k++) {
+      key = key + counts[k] + '#';
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(buckets, key)) {
+      buckets[key] = [];
+      keyOrder[keyOrder.length] = key;
+    }
+
+    buckets[key][buckets[key].length] = word;
+  }
+
+  // collect the buckets in the order the keys first appeared
+  const result = [];
+  for (let i = 0; i &lt; keyOrder.length; i++) {
+    result[i] = buckets[keyOrder[i]];
+  }
+
+  return result;
+}
+
+console.log(groupAnagramsManual(["eat","tea","tan","ate","nat","bat"]));
+// [["eat","tea","ate"], ["tan","nat"], ["bat"]]
+console.log(groupAnagramsManual(["abc","cba","xyz"]));
+console.log(groupAnagramsManual([""]));            // [[""]]
+console.log(groupAnagramsManual(["a"]));           // [["a"]]
+console.log(groupAnagramsManual(["aab","aba","baa","ab"]));
+// [["aab","aba","baa"], ["ab"]]</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">Why <code>keyOrder</code> exists</span>
+    <p>A plain object does <em>not</em> reliably preserve insertion order: keys that look like
+    non-negative integers get sorted numerically and listed first. Our keys start with digits, so
+    this is a real risk. Tracking the order in a separate array removes the doubt entirely &mdash;
+    or use a <code>Map</code>, which guarantees insertion order for every key type.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">see the object key-order surprise</span></div>
+<pre><code>const o = {};
+o['banana'] = 1;
+o['2'] = 2;
+o['apple'] = 3;
+o['1'] = 4;
+console.log(Object.keys(o));     // ['1','2','banana','apple']  -- digits first!
+
+const m = new Map();
+m.set('banana', 1);
+m.set('2', 2);
+m.set('apple', 3);
+m.set('1', 4);
+console.log([...m.keys()]);      // ['banana','2','apple','1']  -- as inserted</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2a &mdash; sorted key, the interview answer</span></div>
+<pre><code>function groupAnagrams(words) {
+  const map = new Map();
+
+  for (const word of words) {
+    const key = [...word].sort().join('');    // canonical form
+
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(word);
+  }
+
+  return [...map.values()];
+}
+
+console.log(groupAnagrams(["eat","tea","tan","ate","nat","bat"]));
+console.log(groupAnagrams(["listen","silent","enlist","inlets","google"]));
+console.log(groupAnagrams([""]));
+console.log(groupAnagrams(["a"]));</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t"><code>word.sort()</code> does not exist</span>
+    <p>Strings have no <code>sort</code> method &mdash; they are immutable. You must explode the
+    string into an array first (<code>[...word]</code> or <code>word.split('')</code>), sort that, and
+    join it back. Prefer <code>[...word]</code>: it iterates by code point, so it handles emoji and
+    other non-BMP characters correctly, where <code>split('')</code> would cut them in half.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2b &mdash; count key, avoids the sort</span></div>
+<pre><code>function groupAnagramsCounts(words) {
+  const map = new Map();
+
+  for (const word of words) {
+    const counts = new Array(26).fill(0);
+    for (const ch of word) counts[ch.charCodeAt(0) - 97]++;
+    const key = counts.join('#');            // separators matter
+
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(word);
+  }
+
+  return [...map.values()];
+}
+
+console.log(groupAnagramsCounts(["eat","tea","tan","ate","nat","bat"]));
+console.log(groupAnagramsCounts(["aab","aba","baa","ab"]));
+
+// O(n*k) instead of O(n*k log k). Only works for a known alphabet
+// though -- here, lowercase a-z. For arbitrary characters, use a Map
+// of counts and sort its entries, or just sort the string.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 2c &mdash; reduce, and a general key function</span></div>
+<pre><code>// The pattern extracted: group anything by any key.
+function groupBy(items, keyOf) {
+  return items.reduce((map, item) =&gt; {
+    const key = keyOf(item);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(item);
+    return map;
+  }, new Map());
+}
+
+const words = ["eat","tea","tan","ate","nat","bat"];
+console.log([...groupBy(words, w =&gt; [...w].sort().join('')).values()]);
+
+// the same helper, different key -- this is the point
+console.log([...groupBy(words, w =&gt; w.length).entries()]);
+console.log([...groupBy(words, w =&gt; w[0]).entries()]);
+
+const people = [
+  { name: 'ana', team: 'red' }, { name: 'bo', team: 'blue' },
+  { name: 'cy', team: 'red' }
+];
+console.log([...groupBy(people, p =&gt; p.team).entries()]);
+
+// Object.groupBy exists in newer runtimes and does exactly this:
+if (typeof Object.groupBy === 'function') {
+  console.log(Object.groupBy(words, w =&gt; [...w].sort().join('')));
+}</code></pre>
+  </div>
+
+  <p>That <code>groupBy</code> helper is the real prize. Group Anagrams is one instance of it, and
+  &ldquo;group an array of objects by a key&rdquo; is a Tier&nbsp;4 problem on this same list &mdash;
+  the same six lines.</p>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Compare every pair</td><td class="mono">O(n&sup2; &middot; k)</td><td class="mono">O(n)</td></tr>
+        <tr><td>Sorted key</td><td class="mono">O(n &middot; k log k)</td><td class="mono">O(n &middot; k)</td></tr>
+        <tr><td><strong>Count key</strong></td><td class="mono">O(n &middot; k)</td><td class="mono">O(n &middot; k)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>where <code>n</code> is the number of words and <code>k</code> the length of the longest one.</p>
+
+  <p>The sorted key does <code>n</code> sorts of <code>k</code> characters: <code>n &middot; k log k</code>.
+  The count key does <code>n</code> passes of <code>k</code> characters plus building a fixed-size
+  key: <code>n &middot; k</code>. Both store every word once plus a key per group, so O(n&middot;k)
+  space.</p>
+
+  <p>In practice, for typical English words (<code>k</code> under 15), the sorted key is faster
+  &mdash; <code>join('#')</code> over 26 counters costs more than sorting 8 characters. Say that.
+  Knowing when the asymptotically-better option loses on real inputs is a senior-sounding
+  observation.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Comparing every pair is O(n&sup2;k). Instead I compute a canonical key that is the same
+    for all anagrams &mdash; the sorted letters &mdash; and bucket the words in a Map by that key.
+    One pass, O(n&middot;k log k). If the alphabet is fixed I can use a 26-element count signature
+    instead of sorting, which drops it to O(n&middot;k); I would separate the counts so
+    <code>11</code> and <code>1,1</code> do not collide.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. A count key with no separators</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; keys collide</span></div>
+<pre><code>function broken(words) {
+  const map = new Map();
+  for (const word of words) {
+    const counts = new Array(26).fill(0);
+    for (const ch of word) counts[ch.charCodeAt(0) - 97]++;
+    const key = counts.join('');          // no separator -- bug
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(word);
+  }
+  return [...map.values()];
+}
+
+// 'a' repeated 11 times vs 1 'a' and 1 'b':
+const a11 = 'aaaaaaaaaaa';
+const ab  = 'ab';
+console.log(broken([a11, ab]));
+// [["aaaaaaaaaaa","ab"]]   WRONG -- grouped together
+
+// a11 gives counts [11,0,0,...]  ->  "1100000..."
+// ab  gives counts [1,1,0,...]   ->  "1100000..."
+// identical strings, different words.</code></pre>
+  </div>
+
+  <h3>2. Calling <code>.sort()</code> on the string</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; strings have no sort</span></div>
+<pre><code>try {
+  const word = 'eat';
+  const key = word.sort().join('');
+  console.log(key);
+} catch (err) {
+  console.log('threw:', err.message);
+}
+
+// Strings are immutable, so there is no in-place sort to offer.
+// Explode first:
+console.log([...'eat'].sort().join(''));        // 'aet'
+console.log('eat'.split('').sort().join(''));   // 'aet'  (same for ASCII)</code></pre>
+  </div>
+
+  <h3>3. Sorting with the default comparator on numbers</h3>
+
+  <p>Not an issue for letters &mdash; the default string comparison is exactly what you want here.
+  It <em>is</em> an issue if you ever build a key from numeric values. The rule from Three Sum still
+  applies: numbers need <code>(a, b) =&gt; a - b</code>.</p>
+
+  <h3>4. Overwriting the bucket instead of appending</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; keeps only the last word</span></div>
+<pre><code>function broken(words) {
+  const map = new Map();
+  for (const word of words) {
+    const key = [...word].sort().join('');
+    map.set(key, word);         // set, not push -- bug
+  }
+  return [...map.values()];
+}
+
+console.log(broken(["eat","tea","tan","ate","nat","bat"]));
+// ["ate","nat","bat"]   WRONG -- one word per group, the last seen
+
+// The map value must be an ARRAY you append to, not the word itself.</code></pre>
+  </div>
+
+  <h3>5. Assuming lowercase ASCII</h3>
+
+  <p>The 26-element count key breaks on uppercase, digits, spaces and accents &mdash;
+  <code>'A'.charCodeAt(0) - 97</code> is <code>-32</code>, which writes to a negative array index and
+  silently produces a broken key. If the input is not guaranteed lowercase a&ndash;z, use the sorted
+  key, or a <code>Map</code> of character counts whose entries you sort.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">a key that works on any characters</span></div>
+<pre><code>function anyCharKey(word) {
+  const counts = new Map();
+  for (const ch of word) counts.set(ch, (counts.get(ch) || 0) + 1);
+  return [...counts.entries()]
+    .sort((a, b) =&gt; a[0] &lt; b[0] ? -1 : a[0] &gt; b[0] ? 1 : 0)
+    .map(([ch, n]) =&gt; ch + n)
+    .join('|');
+}
+
+console.log(anyCharKey('Eat!'));    // '!1|E1|a1|t1'
+console.log(anyCharKey('at!E'));    // '!1|E1|a1|t1'  -- same key
+console.log(anyCharKey('aab'));     // 'a2|b1'
+console.log(anyCharKey('ab'));      // 'a1|b1'  -- no collision</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the six-line Map version from memory</strong>, then say out loud what
+    &ldquo;canonical key&rdquo; means in one sentence.</li>
+    <li><strong>Valid Anagram.</strong> Just two words &mdash; the next page. You have already written
+    the helper in Step 2.</li>
+    <li><strong>Find all anagrams of a pattern inside a string.</strong> A sliding window carrying a
+    count signature, compared against the pattern&rsquo;s signature at each step. It combines this
+    page with the previous one.</li>
+    <li><strong>Group by any rule.</strong> Reuse the <code>groupBy</code> helper to group words by
+    length, by first letter, and by &ldquo;set of distinct letters&rdquo;. Notice that only the key
+    function changes.</li>
+    <li><strong>Group numbers that are permutations of each other&rsquo;s digits.</strong>
+    <code>123</code> and <code>321</code> together. What is the canonical key for a number?</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>When a problem asks you to find things that are &ldquo;the same&rdquo; under some
+    transformation, do not compare them &mdash; compute a canonical form and bucket by it.</strong>
+    Anagrams sort to the same string; shifted strings normalise to the same offset pattern; isomorphic
+    strings map to the same numbering. Finding the right key turns an O(n&sup2;) comparison problem
+    into an O(n) grouping problem, every time.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="01-longest-substring-without-repeating.html">&larr; Longest Substring Without Repeating</a>
+  <a href="03-valid-anagram.html">Next: Valid Anagram &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

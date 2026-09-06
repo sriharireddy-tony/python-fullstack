@@ -1,0 +1,1245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nested Tree to Flat List</title>
+<meta name="description" content="Depth-first, breadth-first, and the iterative version with no stack limit.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Object &amp; data shaping &middot; Problem 06</p>
+  <h1>Nested Tree &rarr; Flat List</h1>
+  <p class="standfirst">The same trip backwards, and easier &mdash; until you are asked which
+  <strong>order</strong> the list should be in. Depth-first and breadth-first give completely different
+  answers, and one of them is what a collapsible tree UI needs.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; five lines, depth first</span></div>
+<pre><code>function treeToList(nodes, parentId = null) {
+  const out = [];
+  for (const { children = [], ...node } of nodes) {
+    out.push({ ...node, parentId });
+    out.push(...treeToList(children, node.id));
+  }
+  return out;
+}
+
+const tree = [
+  { id: 1, name: 'Electronics', children: [
+    { id: 2, name: 'Phones', children: [
+      { id: 4, name: 'Android', children: [] },
+      { id: 5, name: 'iOS', children: [] },
+    ] },
+    { id: 3, name: 'Laptops', children: [] },
+  ] },
+  { id: 6, name: 'Books', children: [] },
+];
+
+const rows = treeToList(tree);
+console.log('id  parentId  name');
+for (const r of rows) {
+  console.log(String(r.id).padEnd(4) + String(r.parentId).padEnd(10) + r.name);
+}
+
+console.log('');
+console.log('The destructuring does two jobs at once:');
+console.log('  `children = []` gives a default for a leaf with no');
+console.log('    children key at all;');
+console.log('  `...node` collects everything EXCEPT children, so the');
+console.log('    nested array is not copied into the row.');
+console.log('');
+console.log('no children key on the row?', !('children' in rows[0]));
+console.log('rows:', rows.length, ' nodes in the tree: 6');</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why you would do this</span>
+    <p><strong>Saving to a database.</strong> A tree has to become rows with a
+    <code>parent_id</code>.</p>
+    <p><strong>Rendering a virtualised list.</strong> A collapsible tree of ten thousand nodes is
+    drawn as a flat list of visible rows, each with a <code>depth</code> for indentation. React
+    Window, TanStack Virtual and every large file explorer work this way.</p>
+    <p><strong>Searching.</strong> A flat list is trivial to filter; a tree is not.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the order question</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">depth first, breadth first, and post-order</span></div>
+<pre><code>const tree = [
+  { id: 'A', children: [
+    { id: 'B', children: [
+      { id: 'D', children: [] },
+      { id: 'E', children: [] },
+    ] },
+    { id: 'C', children: [
+      { id: 'F', children: [] },
+    ] },
+  ] },
+  { id: 'G', children: [] },
+];
+
+// DEPTH FIRST, pre-order: a node, then all of its descendants
+function preOrder(nodes) {
+  const out = [];
+  for (const n of nodes) { out.push(n.id); out.push(...preOrder(n.children)); }
+  return out;
+}
+
+// DEPTH FIRST, post-order: descendants first, then the node
+function postOrder(nodes) {
+  const out = [];
+  for (const n of nodes) { out.push(...postOrder(n.children)); out.push(n.id); }
+  return out;
+}
+
+// BREADTH FIRST: level by level
+function breadthFirst(nodes) {
+  const out = [];
+  const queue = [...nodes];
+  while (queue.length) {
+    const n = queue.shift();
+    out.push(n.id);
+    queue.push(...n.children);
+  }
+  return out;
+}
+
+console.log('the tree:');
+console.log('  A');
+console.log('    B');
+console.log('      D');
+console.log('      E');
+console.log('    C');
+console.log('      F');
+console.log('  G');
+console.log('');
+console.log('pre-order (DFS) :', preOrder(tree).join(' '));
+console.log('post-order      :', postOrder(tree).join(' '));
+console.log('breadth-first   :', breadthFirst(tree).join(' '));
+
+console.log('');
+console.log('Which one you want:');
+console.log('  pre-order  -> rendering. A row appears directly above');
+console.log('    its children, which is what an indented list looks');
+console.log('    like. THIS is the default you want.');
+console.log('  post-order -> deleting, or computing rolled-up totals.');
+console.log('    Children are handled before their parent, so a');
+console.log('    parent can rely on its children being done.');
+console.log('  breadth-first -> "everything within 2 levels", or');
+console.log('    finding the SHALLOWEST match.');
+
+console.log('');
+console.log('And the one that matters for inserting into a database:');
+console.log('  pre-order guarantees a parent appears BEFORE its');
+console.log('  children, so a foreign-key constraint is satisfied by');
+console.log('  inserting in list order.');
+console.log('  post-order guarantees the reverse -- which is what you');
+console.log('  need for DELETE.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why the spread version costs, and where it actually breaks</h2>
+
+  <p><code>out.push(...treeToList(children))</code> builds a new array at every level and copies it
+  upward. A node at depth <code>d</code> is copied <code>d</code> times, so the cost is
+  <code>O(n &middot; d)</code> &mdash; and the honest measurement below shows that on a
+  <em>shallow</em> tree that barely matters, while on a deep one it matters a lot and on a wide one it
+  throws outright.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; spread-and-merge versus one accumulator</span></div>
+<pre><code>function buildTree(depth, width, nextId = { v: 1 }) {
+  const out = [];
+  for (let i = 0; i &lt; width; i++) {
+    const id = nextId.v++;
+    out.push({ id, children: depth &gt; 1 ? buildTree(depth - 1, width, nextId) : [] });
+  }
+  return out;
+}
+const shallow = buildTree(6, 6);     // ~55,000 nodes, only 6 deep
+
+// a deep chain: 3,000 nodes, 3,000 levels
+const deep = (function () {
+  const root = { id: 0, children: [] };
+  let cursor = root;
+  for (let i = 1; i &lt; 3000; i++) {
+    const child = { id: i, children: [] };
+    cursor.children.push(child);
+    cursor = child;
+  }
+  return [root];
+})();
+
+// (a) a new array per level, spread upward
+function withSpread(nodes, parentId = null) {
+  const out = [];
+  for (const { children = [], ...node } of nodes) {
+    out.push({ ...node, parentId });
+    out.push(...withSpread(children, node.id));
+  }
+  return out;
+}
+
+// (b) one shared accumulator
+function withAccumulator(nodes) {
+  const out = [];
+  (function walk(list, parentId, depth) {
+    for (const node of list) {
+      const { children = [], ...rest } = node;
+      out.push({ ...rest, parentId, depth });
+      walk(children, node.id, depth + 1);
+    }
+  })(nodes, null, 0);
+  return out;
+}
+
+const bench = (label, tree) =&gt; {
+  let t = performance.now();
+  const a = withSpread(tree);
+  const spreadMs = performance.now() - t;
+
+  t = performance.now();
+  const b = withAccumulator(tree);
+  const accMs = performance.now() - t;
+
+  console.log(label);
+  console.log('  nodes             : ' + a.length.toLocaleString('en-US'));
+  console.log('  same order        : ' +
+              (JSON.stringify(a.map((x) =&gt; x.id)) === JSON.stringify(b.map((x) =&gt; x.id))));
+  console.log('  spread per level  : ' + spreadMs.toFixed(1) + ' ms');
+  console.log('  one accumulator   : ' + accMs.toFixed(1) + ' ms');
+  console.log('  ratio             : ' +
+              (spreadMs / Math.max(accMs, 0.01)).toFixed(1) + 'x');
+  console.log('  spread, PER NODE  : ' +
+              (spreadMs * 1000 / a.length).toFixed(2) + ' microseconds');
+  console.log('');
+};
+
+bench('SHALLOW: 6 levels, 55,000 nodes', shallow);
+bench('DEEP: 3,000 levels, 3,000 nodes', deep);
+
+console.log('Read the PER NODE line, not the ratio.');
+console.log('');
+console.log('The shallow tree has 18x more nodes than the deep chain');
+console.log('and takes about the same total time -- so each node in');
+console.log('the deep chain costs roughly an order of magnitude more.');
+console.log('');
+console.log('That is the O(n * d) showing itself: a node at depth 6 is');
+console.log('copied 6 times; a node at depth 3,000 is copied up to');
+console.log('3,000 times. 3,000 nodes in a chain is about 4.5 million');
+console.log('copies for 3,000 rows of output.');
+console.log('');
+console.log('The accumulator version does one push per node regardless');
+console.log('of depth, which is why its per-node cost is flat.');
+console.log('');
+console.log('And on a WIDE tree it does not slow down, it throws --');
+console.log('because push(...arr) passes every element as a separate');
+console.log('argument:');
+
+const wide = [{ id: 0, children: Array.from({ length: 200000 },
+  (_, i) =&gt; ({ id: i + 1, children: [] })) }];
+try {
+  withSpread(wide);
+  console.log('  spread on 200,000 siblings -> ok');
+} catch (e) {
+  console.log('  spread on 200,000 siblings ->', e.constructor.name + ':', e.message);
+}
+console.log('  accumulator on the same     ->',
+            withAccumulator(wide).length.toLocaleString('en-US') + ' rows');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; carry the context down</h2>
+
+  <div class="trace">
+<pre>  walk(nodes, parentId, depth, path):
+
+      for each node:
+          split off `children`, keep the rest
+
+          out.push({
+              ...rest,
+              parentId,           <-- from the caller
+              depth,              <-- from the caller
+              path: [...path, node.id],
+          })
+
+          walk(children, node.id, depth + 1, [...path, node.id])
+
+
+  Three things travel DOWN the recursion, and each answers a
+  question the flat list needs to answer:
+
+      parentId  ->  how to rebuild the tree
+      depth     ->  how far to indent the row
+      path      ->  breadcrumbs, and "is X an ancestor of Y"
+
+  And one thing travels UP: nothing. The accumulator is shared,
+  so the return value is unused. That is what makes it O(n).
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The extra fields that make it useful</span>
+    <p><code>depth</code> for indentation. <code>parentId</code> for reconstruction.
+    <code>path</code> for breadcrumbs. <code>hasChildren</code> so a renderer can draw a
+    disclosure triangle <em>without</em> having the children. <code>index</code> to preserve sibling
+    order across a database round trip.</p>
+    <p>The last one matters more than it looks: if the tree order is meaningful, it must survive being
+    flattened, stored and rebuilt &mdash; and the only place to put it is an explicit column.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">a round trip, and what it loses without an index</span></div>
+<pre><code>function treeToList(nodes) {
+  const out = [];
+  (function walk(list, parentId, depth) {
+    list.forEach((node, index) =&gt; {
+      const { children = [], ...rest } = node;
+      out.push({ ...rest, parentId, depth, index, hasChildren: children.length &gt; 0 });
+      walk(children, node.id, depth + 1);
+    });
+  })(nodes, null, 0);
+  return out;
+}
+
+function listToTree(rows, { sortByIndex }) {
+  const byId = new Map();
+  for (const row of rows) {
+    const { parentId, depth, index, hasChildren, ...rest } = row;
+    byId.set(row.id, { ...rest, children: [] });
+  }
+  const roots = [];
+  for (const row of rows) {
+    const node = byId.get(row.id);
+    const parent = byId.get(row.parentId);
+    (parent ? parent.children : roots).push(node);
+  }
+  if (sortByIndex) {
+    const indexOf = new Map(rows.map((r) =&gt; [r.id, r.index]));
+    (function sort(nodes) {
+      nodes.sort((a, b) =&gt; indexOf.get(a.id) - indexOf.get(b.id));
+      for (const n of nodes) sort(n.children);
+    })(roots);
+  }
+  return roots;
+}
+
+const original = [
+  { id: 1, name: 'first', children: [
+    { id: 3, name: 'c', children: [] },
+    { id: 4, name: 'a', children: [] },
+    { id: 5, name: 'b', children: [] },
+  ] },
+  { id: 2, name: 'second', children: [] },
+];
+
+const rows = treeToList(original);
+console.log('flat rows:');
+for (const r of rows) {
+  console.log('  ' + '  '.repeat(r.depth) + r.name +
+              '  (parent ' + r.parentId + ', index ' + r.index +
+              ', hasChildren ' + r.hasChildren + ')');
+}
+
+// now simulate a database: SELECT with no ORDER BY, so rows come
+// back in an arbitrary order
+const shuffled = [...rows].reverse();
+
+const withoutIndex = listToTree(shuffled, { sortByIndex: false });
+const withIndex = listToTree(shuffled, { sortByIndex: true });
+
+const names = (nodes) =&gt; nodes.map((n) =&gt;
+  n.name + (n.children.length ? '(' + names(n.children).join(',') + ')' : ''));
+
+console.log('');
+console.log('original order      :', names(original).join(' '));
+console.log('rebuilt, no index   :', names(withoutIndex).join(' '));
+console.log('rebuilt, with index :', names(withIndex).join(' '));
+console.log('');
+console.log('Without an explicit index, the sibling order is whatever');
+console.log('the rows happened to arrive in -- and "c, a, b" was');
+console.log('DELIBERATE ordering in the original, not alphabetical, so');
+console.log('nothing else could reconstruct it.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; watch the context travel</h2>
+
+  <div class="trace">
+<pre>  tree:
+      A
+        B
+          D
+        C
+      G
+
+  walk([A, G], parentId=null, depth=0)
+
+      A:  push { id: A, parentId: null, depth: 0 }
+          walk([B, C], parentId=A, depth=1)
+
+              B:  push { id: B, parentId: A, depth: 1 }
+                  walk([D], parentId=B, depth=2)
+                      D: push { id: D, parentId: B, depth: 2 }
+                         walk([], B, 3)  ->  nothing
+
+              C:  push { id: C, parentId: A, depth: 1 }
+                  walk([], C, 2)  ->  nothing
+
+      G:  push { id: G, parentId: null, depth: 0 }
+
+  result, in push order:
+
+      A (null, 0)
+      B (A, 1)
+      D (B, 2)
+      C (A, 1)
+      G (null, 0)
+
+  Read the depth column: 0 1 2 1 0. That is exactly the shape of
+  an indented list.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function treeToListLoud(nodes) {
+  const out = [];
+
+  (function walk(list, parentId, depth, path) {
+    const pad = '  '.repeat(depth);
+    if (list.length === 0) {
+      console.log(pad + '(no children)');
+      return;
+    }
+    list.forEach((node, index) =&gt; {
+      const { children = [], ...rest } = node;
+      const nextPath = [...path, node.id];
+      out.push({ ...rest, parentId, depth, index, path: nextPath.join('/') });
+      console.log(pad + 'push ' + node.id +
+                  '  parentId=' + parentId + ' depth=' + depth +
+                  ' path=' + nextPath.join('/'));
+      walk(children, node.id, depth + 1, nextPath);
+    });
+  })(nodes, null, 0, []);
+
+  return out;
+}
+
+const tree = [
+  { id: 'A', children: [
+    { id: 'B', children: [{ id: 'D', children: [] }] },
+    { id: 'C', children: [] },
+  ] },
+  { id: 'G', children: [] },
+];
+
+const rows = treeToListLoud(tree);
+
+console.log('');
+console.log('RESULT:');
+console.log('  id  parent  depth  path');
+for (const r of rows) {
+  console.log('  ' + r.id.padEnd(4) + String(r.parentId).padEnd(8) +
+              String(r.depth).padEnd(7) + r.path);
+}
+console.log('');
+console.log('depth column:', rows.map((r) =&gt; r.depth).join(' '));
+console.log('  -- the shape of the indented list, as a single row of');
+console.log('     numbers. A virtualised renderer needs nothing else.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; iterative, with no depth limit</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; an explicit stack</span></div>
+<pre><code>// Pre-order with a stack: push children in REVERSE so they pop in
+// the original order.
+function treeToListIterative(nodes) {
+  const out = [];
+  const stack = [];
+
+  for (let i = nodes.length - 1; i &gt;= 0; i--) {
+    stack.push({ node: nodes[i], parentId: null, depth: 0, index: i });
+  }
+
+  while (stack.length) {
+    const { node, parentId, depth, index } = stack.pop();
+    const children = node.children || [];
+    const { children: _, ...rest } = node;
+
+    out.push({ ...rest, parentId, depth, index });
+
+    for (let i = children.length - 1; i &gt;= 0; i--) {
+      stack.push({ node: children[i], parentId: node.id, depth: depth + 1, index: i });
+    }
+  }
+
+  return out;
+}
+
+function treeToListRecursive(nodes) {
+  const out = [];
+  (function walk(list, parentId, depth) {
+    list.forEach((node, index) =&gt; {
+      const { children = [], ...rest } = node;
+      out.push({ ...rest, parentId, depth, index });
+      walk(children, node.id, depth + 1);
+    });
+  })(nodes, null, 0);
+  return out;
+}
+
+const tree = [
+  { id: 1, children: [
+    { id: 2, children: [{ id: 4, children: [] }, { id: 5, children: [] }] },
+    { id: 3, children: [] },
+  ] },
+  { id: 6, children: [] },
+];
+
+const it = treeToListIterative(tree);
+const rec = treeToListRecursive(tree);
+console.log('iterative:', it.map((r) =&gt; r.id).join(' '));
+console.log('recursive:', rec.map((r) =&gt; r.id).join(' '));
+console.log('identical:', JSON.stringify(it) === JSON.stringify(rec));
+
+// the payoff: a 60,000-level-deep chain
+let deep = { id: 0, children: [] };
+let cursor = deep;
+for (let i = 1; i &lt; 60000; i++) {
+  const child = { id: i, children: [] };
+  cursor.children.push(child);
+  cursor = child;
+}
+
+console.log('');
+console.log('a 60,000-level chain:');
+try {
+  console.log('  recursive:', treeToListRecursive([deep]).length, 'rows');
+} catch (e) {
+  console.log('  recursive:', e.message);
+}
+const flat = treeToListIterative([deep]);
+console.log('  iterative:', flat.length.toLocaleString('en-US'), 'rows, max depth',
+            flat[flat.length - 1].depth.toLocaleString('en-US'));
+
+console.log('');
+console.log('Reversing the push order is the whole trick, and it is');
+console.log('the same one as in the iterative array flatten. Without');
+console.log('it you get children in reverse:');
+console.log('  ', (function () {
+  const out = [], stack = [...tree];        // NOT reversed
+  while (stack.length) {
+    const n = stack.pop();
+    out.push(n.id);
+    stack.push(...(n.children || []));      // NOT reversed
+  }
+  return out.join(' ');
+})());</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; breadth first, with a proper queue</span></div>
+<pre><code>// The obvious BFS uses queue.shift(), which is O(n) per call --
+// so the whole traversal is O(n^2).
+function bfsShift(nodes) {
+  const out = [];
+  const queue = nodes.map((n) =&gt; ({ node: n, depth: 0 }));
+  while (queue.length) {
+    const { node, depth } = queue.shift();          // O(n)
+    out.push({ id: node.id, depth });
+    for (const c of node.children || []) queue.push({ node: c, depth: depth + 1 });
+  }
+  return out;
+}
+
+// A head index instead of shifting: O(1) per dequeue.
+function bfsIndex(nodes) {
+  const out = [];
+  const queue = nodes.map((n) =&gt; ({ node: n, depth: 0 }));
+  let head = 0;
+  while (head &lt; queue.length) {
+    const { node, depth } = queue[head++];
+    out.push({ id: node.id, depth });
+    for (const c of node.children || []) queue.push({ node: c, depth: depth + 1 });
+  }
+  return out;
+}
+
+// level by level, which is often what you actually want
+function byLevel(nodes) {
+  const levels = [];
+  let current = nodes;
+  while (current.length) {
+    levels.push(current.map((n) =&gt; n.id));
+    current = current.flatMap((n) =&gt; n.children || []);
+  }
+  return levels;
+}
+
+const tree = [
+  { id: 'A', children: [
+    { id: 'B', children: [{ id: 'D', children: [] }, { id: 'E', children: [] }] },
+    { id: 'C', children: [{ id: 'F', children: [] }] },
+  ] },
+  { id: 'G', children: [] },
+];
+
+console.log('bfs order   :', bfsIndex(tree).map((r) =&gt; r.id).join(' '));
+console.log('same as shift:',
+            JSON.stringify(bfsShift(tree)) === JSON.stringify(bfsIndex(tree)));
+console.log('');
+console.log('by level:');
+byLevel(tree).forEach((ids, i) =&gt; console.log('  level ' + i + ': ' + ids.join(' ')));
+
+// the cost of shift(), on a wide tree
+const wide = [{ id: 0, children: Array.from({ length: 40000 },
+  (_, i) =&gt; ({ id: i + 1, children: [] })) }];
+
+let t = performance.now();
+bfsShift(wide);
+const shiftMs = performance.now() - t;
+t = performance.now();
+bfsIndex(wide);
+const indexMs = performance.now() - t;
+
+console.log('');
+console.log('40,000 siblings:');
+console.log('  queue.shift()  : ' + shiftMs.toFixed(0) + ' ms');
+console.log('  a head index   : ' + indexMs.toFixed(1) + ' ms');
+console.log('  ratio          : ' +
+            Math.round(shiftMs / Math.max(indexMs, 0.01)) + 'x');
+console.log('');
+console.log('`shift()` removes the first element and re-indexes the');
+console.log('rest. Engines optimise it well for small arrays, and it');
+console.log('is still the classic accidentally-quadratic BFS.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the production one</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function treeToList(nodes, options = {}) {
+  const {
+    childrenKey = 'children',
+    idKey = 'id',
+    order = 'pre',            // 'pre' | 'post' | 'breadth'
+    keepChildren = false,
+    maxDepth = Infinity,
+    filter = null,            // (node, depth) => boolean; false prunes the subtree
+  } = options;
+
+  const out = [];
+  const seen = new Set();     // guards a cyclic tree
+
+  function makeRow(node, parentId, depth, index, path) {
+    const children = node[childrenKey] || [];
+    const row = keepChildren ? { ...node } : (() =&gt; {
+      const copy = { ...node };
+      delete copy[childrenKey];
+      return copy;
+    })();
+    return {
+      ...row,
+      parentId,
+      depth,
+      index,
+      path: path.join('/'),
+      hasChildren: children.length &gt; 0,
+      childCount: children.length,
+    };
+  }
+
+  if (order === 'breadth') {
+    const queue = nodes.map((n, i) =&gt;
+      ({ node: n, parentId: null, depth: 0, index: i, path: [n[idKey]] }));
+    let head = 0;
+    while (head &lt; queue.length) {
+      const item = queue[head++];
+      if (seen.has(item.node)) continue;
+      seen.add(item.node);
+      if (item.depth &gt; maxDepth) continue;
+      if (filter &amp;&amp; !filter(item.node, item.depth)) continue;
+
+      out.push(makeRow(item.node, item.parentId, item.depth, item.index, item.path));
+
+      const children = item.node[childrenKey] || [];
+      children.forEach((c, i) =&gt; queue.push({
+        node: c, parentId: item.node[idKey], depth: item.depth + 1,
+        index: i, path: [...item.path, c[idKey]],
+      }));
+    }
+    return out;
+  }
+
+  (function walk(list, parentId, depth, path) {
+    if (depth &gt; maxDepth) return;
+    list.forEach((node, index) =&gt; {
+      if (seen.has(node)) return;
+      seen.add(node);
+      if (filter &amp;&amp; !filter(node, depth)) return;
+
+      const nextPath = [...path, node[idKey]];
+      const row = makeRow(node, parentId, depth, index, nextPath);
+
+      if (order === 'pre') out.push(row);
+      walk(node[childrenKey] || [], node[idKey], depth + 1, nextPath);
+      if (order === 'post') out.push(row);
+    });
+  })(nodes, null, 0, []);
+
+  return out;
+}
+
+const tree = [
+  { id: 'src', children: [
+    { id: 'components', children: [
+      { id: 'Button.tsx', children: [] },
+      { id: 'Input.tsx', children: [] },
+    ] },
+    { id: 'index.ts', children: [] },
+  ] },
+  { id: 'README.md', children: [] },
+];
+
+const show = (rows) =&gt; rows.forEach((r) =&gt;
+  console.log('  ' + '  '.repeat(r.depth) + r.id +
+              (r.hasChildren ? '/ (' + r.childCount + ')' : '')));
+
+console.log('pre-order:');
+show(treeToList(tree));
+
+console.log('');
+console.log('post-order:');
+treeToList(tree, { order: 'post' }).forEach((r) =&gt; console.log('  ' + r.id));
+
+console.log('');
+console.log('breadth-first:');
+treeToList(tree, { order: 'breadth' }).forEach((r) =&gt;
+  console.log('  depth ' + r.depth + ': ' + r.id));
+
+console.log('');
+console.log('maxDepth 1:');
+show(treeToList(tree, { maxDepth: 1 }));
+
+console.log('');
+console.log('filtered -- prune anything under "components":');
+show(treeToList(tree, { filter: (n) =&gt; n.id !== 'components' }));
+console.log('  note the CHILDREN went too. Returning false prunes the');
+console.log('  whole subtree, which is usually what you want.');
+
+console.log('');
+console.log('paths:');
+for (const r of treeToList(tree)) console.log('  ' + r.path);
+
+// a cyclic tree does not hang
+const cyclic = [{ id: 'a', children: [] }];
+cyclic[0].children.push(cyclic[0]);
+console.log('');
+console.log('a self-referencing node:',
+            treeToList(cyclic).map((r) =&gt; r.id + '@' + r.depth).join(', '));
+console.log('  -- the seen set stopped it after one visit.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">the virtualised-list version, which is the real use</span></div>
+<pre><code>// A tree UI never flattens the whole tree. It flattens the VISIBLE
+// rows, given a set of expanded ids -- and re-flattens on every
+// expand or collapse.
+function visibleRows(nodes, expanded, depth = 0, parentId = null, out = []) {
+  for (const node of nodes) {
+    const children = node.children || [];
+    const isExpanded = expanded.has(node.id);
+
+    out.push({
+      id: node.id,
+      name: node.name,
+      depth,
+      parentId,
+      hasChildren: children.length &gt; 0,
+      isExpanded,
+    });
+
+    if (isExpanded) visibleRows(children, expanded, depth + 1, node.id, out);
+  }
+  return out;
+}
+
+const tree = [
+  { id: 1, name: 'src', children: [
+    { id: 2, name: 'components', children: [
+      { id: 4, name: 'Button.tsx', children: [] },
+      { id: 5, name: 'Input.tsx', children: [] },
+    ] },
+    { id: 3, name: 'index.ts', children: [] },
+  ] },
+  { id: 6, name: 'README.md', children: [] },
+];
+
+const render = (rows) =&gt; rows.forEach((r) =&gt; {
+  const marker = r.hasChildren ? (r.isExpanded ? '[-]' : '[+]') : '   ';
+  console.log('  ' + '  '.repeat(r.depth) + marker + ' ' + r.name);
+});
+
+console.log('nothing expanded:');
+render(visibleRows(tree, new Set()));
+
+console.log('');
+console.log('src expanded:');
+render(visibleRows(tree, new Set([1])));
+
+console.log('');
+console.log('src and components expanded:');
+render(visibleRows(tree, new Set([1, 2])));
+
+console.log('');
+console.log('components expanded but src collapsed:');
+render(visibleRows(tree, new Set([2])));
+console.log('  -- nothing under src is visible, because visibility is');
+console.log('     about the PATH, not about a node in isolation.');
+
+// the cost, and why it is acceptable
+const big = (function build(depth, width, id = { v: 1 }) {
+  const out = [];
+  for (let i = 0; i &lt; width; i++) {
+    const myId = id.v++;
+    out.push({ id: myId, name: 'n' + myId,
+               children: depth &gt; 1 ? build(depth - 1, width, id) : [] });
+  }
+  return out;
+})(5, 8);
+
+const allIds = new Set();
+(function collect(nodes) { for (const n of nodes) { allIds.add(n.id); collect(n.children); } })(big);
+
+let t = performance.now();
+const all = visibleRows(big, allIds);
+const allMs = performance.now() - t;
+
+t = performance.now();
+const none = visibleRows(big, new Set());
+const noneMs = performance.now() - t;
+
+console.log('');
+console.log('a tree of ' + allIds.size.toLocaleString('en-US') + ' nodes:');
+console.log('  fully expanded : ' + all.length.toLocaleString('en-US') +
+            ' rows, ' + allMs.toFixed(1) + ' ms');
+console.log('  fully collapsed: ' + none.length + ' rows, ' + noneMs.toFixed(2) + ' ms');
+console.log('');
+console.log('Collapsed is nearly free, because the recursion does not');
+console.log('descend into an unexpanded node at all. That is the whole');
+console.log('reason a file explorer with a million files opens');
+console.log('instantly: it never walks what it is not showing.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">the generator version, and lazy search</span></div>
+<pre><code>// A generator gives you the rows one at a time, so you can stop
+// early -- which matters for "find the first matching node".
+function* walkTree(nodes, depth = 0, parentId = null, path = []) {
+  for (const [index, node] of nodes.entries()) {
+    const nextPath = [...path, node.id];
+    yield { node, depth, parentId, index, path: nextPath };
+    yield* walkTree(node.children || [], depth + 1, node.id, nextPath);
+  }
+}
+
+const build = (depth, width, id = { v: 1 }) =&gt; {
+  const out = [];
+  for (let i = 0; i &lt; width; i++) {
+    const myId = id.v++;
+    out.push({ id: myId, name: 'n' + myId,
+               children: depth &gt; 1 ? build(depth - 1, width, id) : [] });
+  }
+  return out;
+};
+const tree = build(6, 6);
+
+// eager: flatten everything, then find
+function eagerFind(nodes, predicate) {
+  const rows = [];
+  (function w(list, depth, parentId) {
+    for (const n of list) { rows.push({ node: n, depth, parentId }); w(n.children, depth + 1, n.id); }
+  })(nodes, 0, null);
+  return { found: rows.find((r) =&gt; predicate(r.node)), visited: rows.length };
+}
+
+// lazy: stop at the first match
+function lazyFind(nodes, predicate) {
+  let visited = 0;
+  for (const entry of walkTree(nodes)) {
+    visited++;
+    if (predicate(entry.node)) return { found: entry, visited };
+  }
+  return { found: null, visited };
+}
+
+const target = (n) =&gt; n.id === 20;
+
+let t = performance.now();
+const e = eagerFind(tree, target);
+const eagerMs = performance.now() - t;
+
+t = performance.now();
+const l = lazyFind(tree, target);
+const lazyMs = performance.now() - t;
+
+console.log('finding node #20 in a tree of ' +
+            e.visited.toLocaleString('en-US') + ' nodes');
+console.log('  eager: visited ' + e.visited.toLocaleString('en-US') +
+            ', ' + eagerMs.toFixed(1) + ' ms');
+console.log('  lazy : visited ' + l.visited +
+            ', ' + lazyMs.toFixed(2) + ' ms');
+console.log('  same node:', e.found.node.id === l.found.node.id);
+console.log('  path to it:', l.found.path.join('/'));
+
+console.log('');
+console.log('And a generator composes with everything that takes an');
+console.log('iterable:');
+const firstThree = [];
+for (const entry of walkTree(tree)) {
+  firstThree.push(entry.node.id);
+  if (firstThree.length === 3) break;
+}
+console.log('  first three ids:', firstThree.join(', '));
+console.log('  all leaves at depth 2:',
+            [...walkTree(tree)].filter((e) =&gt; e.depth === 2).length);
+console.log('');
+console.log('The trade: a generator cannot be indexed or measured');
+console.log('without consuming it, and it still recurses so it has the');
+console.log('same depth ceiling. Use it when you might stop early.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Approach</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td><strong>recursive, one accumulator</strong></td><td class="mono">O(n)</td><td class="mono">O(n) output, O(d) stack</td></tr>
+        <tr><td>recursive, spread per level</td><td class="mono">O(n &middot; d)</td><td class="mono">O(n &middot; d) allocated</td></tr>
+        <tr><td>iterative with a stack</td><td class="mono">O(n)</td><td class="mono">O(width) heap</td></tr>
+        <tr><td>BFS with <code>queue.shift()</code></td><td class="mono">O(n<sup>2</sup>)</td><td class="mono">O(n)</td></tr>
+        <tr><td>BFS with a head index</td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+        <tr><td>generator, stopping at k</td><td class="mono">O(k)</td><td class="mono">O(d)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Every node is visited once and pushed once, so the accumulator version is O(n). Two rows are
+  traps: spreading per level re-copies each row once per level above it, and
+  <code>queue.shift()</code> is O(n) per call because it re-indexes the array.</p>
+
+  <p>The stack version's space is the interesting one: it holds the current <em>frontier</em>, which
+  for a deep narrow tree is tiny and for a wide shallow tree is the whole width. The recursive
+  version's stack is the opposite &mdash; O(depth), fine for wide trees and fatal for deep ones. Pick
+  based on the shape you expect.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;One recursion with a shared accumulator, carrying <code>parentId</code> and
+    <code>depth</code> down. I push a row for each node before recursing, which gives pre-order &mdash;
+    a parent immediately above its children, which is both what an indented list needs and what a
+    foreign-key insert needs. Post-order is the same code with the push moved after the recursion, and
+    that is what you want for deletes. I use a shared output array rather than spreading a returned
+    array per level, and if the tree could be pathologically deep I would use an explicit stack,
+    pushing children in reverse so they pop in order. For a tree UI you would not flatten the whole
+    tree at all &mdash; only the visible rows, given the set of expanded ids.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Leaving <code>children</code> on the rows</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the "flat" list is not flat</span></div>
+<pre><code>// forgets to strip children
+function notFlat(nodes, parentId = null, out = []) {
+  for (const node of nodes) {
+    out.push({ ...node, parentId });          // children came along
+    notFlat(node.children || [], node.id, out);
+  }
+  return out;
+}
+
+function actuallyFlat(nodes, parentId = null, out = []) {
+  for (const node of nodes) {
+    const { children = [], ...rest } = node;
+    out.push({ ...rest, parentId });
+    actuallyFlat(children, node.id, out);
+  }
+  return out;
+}
+
+const tree = [
+  { id: 1, name: 'a', children: [
+    { id: 2, name: 'b', children: [{ id: 3, name: 'c', children: [] }] },
+  ] },
+];
+
+const bad = notFlat(tree);
+const good = actuallyFlat(tree);
+
+console.log('rows either way:', bad.length, good.length);
+console.log('');
+console.log('but the JSON size:');
+console.log('  with children   :', JSON.stringify(bad).length, 'chars');
+console.log('  without         :', JSON.stringify(good).length, 'chars');
+console.log('');
+console.log('row 1 with children:');
+console.log(' ', JSON.stringify(bad[0]));
+console.log('row 1 without:');
+console.log(' ', JSON.stringify(good[0]));
+
+console.log('');
+console.log('Three consequences:');
+console.log('  the payload contains every node MULTIPLE times -- once');
+console.log('    as a row and once inside each ancestor;');
+console.log('  an INSERT with a `children` column fails, or silently');
+console.log('    stores JSON in a column nobody reads;');
+console.log('  and the two copies drift: editing rows[2] does not');
+console.log('    change rows[0].children[0].children[0].');
+console.log('');
+console.log('  same object?', bad[2] === bad[0].children[0].children[0]);
+bad[2].name = 'EDITED';
+console.log('  after editing rows[2].name, the nested copy says:',
+            bad[0].children[0].children[0].name);
+console.log('  -- wait, they ARE the same object, so it did change.');
+console.log('     Which is arguably worse: the row and the nested copy');
+console.log('     are aliases, so "flattening" produced a structure');
+console.log('     that is still a graph.');</code></pre>
+  </div>
+
+  <h3>2. Losing sibling order</h3>
+
+  <p>Step 4. If the tree order is meaningful, it needs an explicit <code>index</code> column, because
+  a <code>SELECT</code> without <code>ORDER BY</code> guarantees nothing.</p>
+
+  <h3>3. <code>queue.shift()</code> in a BFS</h3>
+
+  <p>Step 6b. O(n) per dequeue, so O(n&sup2;) overall. A head index is a one-line fix.</p>
+
+  <h3>4. Assuming <code>children</code> always exists</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; five shapes a real tree arrives in</span></div>
+<pre><code>function fragile(nodes, out = []) {
+  for (const node of nodes) {
+    out.push({ id: node.id });
+    fragile(node.children, out);              // assumes an array
+  }
+  return out;
+}
+
+function robust(nodes, out = []) {
+  for (const node of nodes) {
+    out.push({ id: node.id });
+    const children = node.children;
+    if (Array.isArray(children)) robust(children, out);
+  }
+  return out;
+}
+
+const shapes = {
+  'children: []      ': [{ id: 1, children: [] }],
+  'no children key   ': [{ id: 1 }],
+  'children: null    ': [{ id: 1, children: null }],
+  'children: {}      ': [{ id: 1, children: {} }],
+  'children: 0       ': [{ id: 1, children: 0 }],
+  'nested mixed      ': [{ id: 1, children: [{ id: 2 }, { id: 3, children: null }] }],
+};
+
+console.log('shape                fragile              robust');
+for (const [label, tree] of Object.entries(shapes)) {
+  let f;
+  try { f = fragile(tree).length + ' rows'; }
+  catch (e) { f = e.constructor.name; }
+  let r;
+  try { r = robust(tree).length + ' rows'; }
+  catch (e) { r = e.constructor.name; }
+  console.log('  ' + label + f.padEnd(21) + r);
+}
+
+console.log('');
+console.log('All five shapes are things a real API returns:');
+console.log('  an ORM omits an empty relation entirely;');
+console.log('  a SQL join produces null for no rows;');
+console.log('  a serialiser turns an empty array into {};');
+console.log('  and someone counted children into the same field.');
+console.log('');
+console.log('`node.children || []` fixes three of the five.');
+console.log('`Array.isArray(children)` fixes all five, and it is the');
+console.log('same lesson as every other page in this section: test the');
+console.log('SHAPE, not the truthiness.');
+console.log('');
+console.log('  with || [] on children: {} ->',
+            (function () {
+              try {
+                const out = [];
+                (function w(ns) {
+                  for (const n of ns) { out.push(n.id); w(n.children || []); }
+                })([{ id: 1, children: {} }]);
+                return out.length + ' rows';
+              } catch (e) { return e.constructor.name; }
+            })());</code></pre>
+  </div>
+
+  <h3>5. Flattening the whole tree to render part of it</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct, and it walks a million nodes to draw twelve</span></div>
+<pre><code>const build = (depth, width, id = { v: 1 }) =&gt; {
+  const out = [];
+  for (let i = 0; i &lt; width; i++) {
+    const myId = id.v++;
+    out.push({ id: myId, name: 'n' + myId,
+               children: depth &gt; 1 ? build(depth - 1, width, id) : [] });
+  }
+  return out;
+};
+const tree = build(7, 6);
+
+let total = 0;
+(function count(nodes) { for (const n of nodes) { total++; count(n.children); } })(tree);
+
+// A: flatten everything, then filter to the visible rows
+function flattenAll(nodes, out = [], depth = 0, path = []) {
+  for (const n of nodes) {
+    const p = [...path, n.id];
+    out.push({ id: n.id, depth, path: p, hasChildren: n.children.length &gt; 0 });
+    flattenAll(n.children, out, depth + 1, p);
+  }
+  return out;
+}
+function visibleFromAll(nodes, expanded) {
+  const all = flattenAll(nodes);
+  return all.filter((r) =&gt; r.path.slice(0, -1).every((id) =&gt; expanded.has(id)));
+}
+
+// B: only descend into what is expanded
+function visibleOnly(nodes, expanded, depth = 0, out = []) {
+  for (const n of nodes) {
+    out.push({ id: n.id, depth, hasChildren: n.children.length &gt; 0 });
+    if (expanded.has(n.id)) visibleOnly(n.children, expanded, depth + 1, out);
+  }
+  return out;
+}
+
+const expanded = new Set([1]);              // just the first root open
+
+let t = performance.now();
+const a = visibleFromAll(tree, expanded);
+const allMs = performance.now() - t;
+
+t = performance.now();
+const b = visibleOnly(tree, expanded);
+const onlyMs = performance.now() - t;
+
+console.log('tree size:', total.toLocaleString('en-US'), 'nodes');
+console.log('one root expanded, so visible rows:', b.length);
+console.log('');
+console.log('  flatten all, then filter : ' + allMs.toFixed(1) + ' ms');
+console.log('  descend only if expanded : ' + onlyMs.toFixed(3) + ' ms');
+console.log('  same visible ids         :',
+            JSON.stringify(a.map((r) =&gt; r.id)) === JSON.stringify(b.map((r) =&gt; r.id)));
+console.log('  ratio                    : ' +
+            Math.round(allMs / Math.max(onlyMs, 0.001)) + 'x');
+
+console.log('');
+console.log('And remember this runs on EVERY expand, collapse,');
+console.log('keystroke in the filter box, and re-render.');
+console.log('');
+console.log('The general principle, and it is the last one in this');
+console.log('section: do not compute the whole answer and then throw');
+console.log('most of it away. Compute what is asked for.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the five-line version from memory</strong>, then say which order it produces and
+    why that is the right default.</li>
+    <li><strong>Convert it to post-order</strong> by moving one line, and say when you would want
+    that.</li>
+    <li><strong>Write the iterative stack version</strong> and explain the reversed push.</li>
+    <li><strong>Write the BFS with a head index</strong> and say what <code>shift()</code> costs.</li>
+    <li><strong>Round trip.</strong> Flatten a tree, shuffle the rows, rebuild it with the previous
+    page's function, and check you get the original back &mdash; including sibling order.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Carry the context down, accumulate into one array, and choose the order
+    deliberately.</strong> Pre-order puts a parent above its children, which is what indentation and
+    foreign keys both want; post-order handles children first, which is what deletes and rolled-up
+    totals want. And the biggest practical win on this page is not an algorithm: it is not flattening
+    the parts of the tree nobody is looking at.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="05-list-to-tree.html">&larr; Flat List &rarr; Nested Tree</a>
+  <a href="07-paginate-sort-filter.html">Next: Paginate, Sort and Filter &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

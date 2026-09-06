@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Top K Frequent Elements</title>
+<meta name="description" content="Bucket sort by count: how to beat sorting when the thing you are sorting by has a small bounded range.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Hash map &middot; Problem 01</p>
+  <h1>Top K Frequent Elements</h1>
+  <p class="standfirst">Count, then pick the biggest counts. Sorting gets you there in O(n log n)
+  &mdash; but a count can never exceed <code>n</code>, and that bound lets you do it in
+  <strong>O(n)</strong> with a trick called bucket sort.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Return the <code>k</code> values that appear most often in the array. Any order is fine.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th class="mono">k</th><th>Answer</th><th>Counts</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[1,1,1,2,2,3]</td><td class="mono">2</td><td class="mono">[1, 2]</td><td>1&times;3, 2&times;2, 3&times;1</td></tr>
+        <tr><td class="mono">[1]</td><td class="mono">1</td><td class="mono">[1]</td><td></td></tr>
+        <tr><td class="mono">[4,4,4,5,5,6]</td><td class="mono">2</td><td class="mono">[4, 5]</td><td></td></tr>
+        <tr><td class="mono">[1,2,3,4]</td><td class="mono">2</td><td class="mono">any two</td><td>all tie at 1</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Two things to settle before coding, and both are worth asking out loud:</p>
+
+  <ul>
+    <li><strong>Ties.</strong> When several values share a count, which do you return? The problem
+    usually says any answer is acceptable. If it does not, you need a tie-breaking rule.</li>
+    <li><strong>Is <code>k</code> valid?</strong> It is normally guaranteed that
+    <code>k</code> is at most the number of distinct values.</li>
+  </ul>
+
+  <div class="note">
+    <span class="t">The bound that unlocks the fast solution</span>
+    <p>A count is at least 1 and at most <code>n</code>, the length of the array. So the counts live
+    in a <strong>small, known range of integers</strong> &mdash; and whenever that is true, you can
+    sort by them without actually sorting.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; count then sort</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; count, sort, take k</span></div>
+<pre><code>function topKSort(nums, k) {
+  // 1. count every value
+  const counts = new Map();
+  for (const n of nums) counts.set(n, (counts.get(n) || 0) + 1);
+
+  // 2. sort the [value, count] pairs by count, descending
+  const pairs = [...counts.entries()].sort((a, b) =&gt; b[1] - a[1]);
+
+  // 3. take the first k values
+  return pairs.slice(0, k).map(pair =&gt; pair[0]);
+}
+
+console.log(topKSort([1,1,1,2,2,3], 2));     // [1, 2]
+console.log(topKSort([1], 1));               // [1]
+console.log(topKSort([4,4,4,5,5,6], 2));     // [4, 5]
+console.log(topKSort([1,2,3,4], 2));         // [1, 2]  (all tie)
+console.log(topKSort([5,5,4,4,3], 3));       // [5, 4, 3]</code></pre>
+  </div>
+
+  <p>Three lines of real work, obviously correct, and a perfectly good interview answer. Say it out
+  loud, quote its complexity as O(n log n) because of the sort, and then offer to do better.</p>
+
+  <div class="note warn">
+    <span class="t">The comparator, again</span>
+    <p><code>(a, b) =&gt; b[1] - a[1]</code> sorts <strong>descending</strong> by the second element.
+    Swap <code>a</code> and <code>b</code> and you get ascending. The default
+    <code>.sort()</code> would stringify the pairs and sort alphabetically, which is meaningless
+    here.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why sorting is more than you need</h2>
+
+  <p>Sorting produces a <strong>total order</strong> &mdash; it tells you exactly how the 500th most
+  frequent value compares with the 501st. You asked for the top <code>k</code>. Everything below
+  that is wasted work.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 500000;
+const nums = [];
+for (let i = 0; i &lt; N; i++) nums.push(Math.floor(Math.random() * 50000));
+const k = 10;
+
+function bySorting(arr, k) {
+  const c = new Map();
+  for (const n of arr) c.set(n, (c.get(n) || 0) + 1);
+  return [...c.entries()].sort((a, b) =&gt; b[1] - a[1]).slice(0, k).map(p =&gt; p[0]);
+}
+
+function byBuckets(arr, k) {
+  const c = new Map();
+  let maxCount = 0;
+  for (const n of arr) {
+    const next = (c.get(n) || 0) + 1;
+    c.set(n, next);
+    if (next &gt; maxCount) maxCount = next;
+  }
+
+  // Size the buckets by the LARGEST count actually seen, not by
+  // arr.length. Both are correct; this one allocates 21 arrays here
+  // instead of half a million, which matters at this scale.
+  const buckets = Array.from({ length: maxCount + 1 }, () =&gt; []);
+  for (const [value, count] of c) buckets[count].push(value);
+
+  const out = [];
+  for (let count = maxCount; count &gt;= 1 &amp;&amp; out.length &lt; k; count--) {
+    for (const value of buckets[count]) {
+      out.push(value);
+      if (out.length === k) break;
+    }
+  }
+  return out;
+}
+
+let t = performance.now();
+const a = bySorting(nums, k);
+const sortMs = performance.now() - t;
+
+t = performance.now();
+const b = byBuckets(nums, k);
+const bucketMs = performance.now() - t;
+
+console.log('count + sort    :', sortMs.toFixed(1) + ' ms');
+console.log('count + buckets :', bucketMs.toFixed(1) + ' ms');
+console.log('');
+console.log('Both are dominated by the SAME counting pass over 500,000');
+console.log('values -- the sort or the bucket walk only touches the');
+console.log('50,000 distinct entries. So the gap is real but modest;');
+console.log('it widens as the number of DISTINCT values grows.');
+console.log('');
+console.log('top counts agree:',
+  a.map(v =&gt; nums.filter(x =&gt; x === v).length).sort((x, y) =&gt; y - x).join(',') ===
+  b.map(v =&gt; nums.filter(x =&gt; x === v).length).sort((x, y) =&gt; y - x).join(','));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; bucket by count</h2>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Counts are integers between 1 and <code>n</code>. So make an array of <code>n + 1</code>
+    buckets, and put each value into the bucket numbered by its count. Then read the buckets from the
+    highest index downwards until you have collected <code>k</code> values.</p>
+    <p>No comparisons, no sorting. The array index <em>is</em> the ordering.</p>
+  </div>
+
+  <div class="trace">
+<pre>  nums = [1, 1, 1, 2, 2, 3]        n = 6
+
+  counts:   1 -> 3      2 -> 2      3 -> 1
+
+  buckets (index = count):
+      0: []
+      1: [3]          <- values seen once
+      2: [2]          <- values seen twice
+      3: [1]          <- values seen three times
+      4: []
+      5: []
+      6: []
+
+  read from the top:  index 6, 5, 4 are empty
+                      index 3 -> collect 1
+                      index 2 -> collect 2
+                      we have k = 2, stop
+
+  answer: [1, 2]
+</pre>
+  </div>
+
+  <p>This is <strong>bucket sort</strong> (sometimes counting sort). It works whenever the key you are
+  sorting by is an integer in a small known range &mdash; then you can use the key directly as an
+  array index instead of comparing keys to each other.</p>
+
+  <div class="note warn">
+    <span class="t">Why <code>n + 1</code> buckets and not <code>n</code></span>
+    <p>A value can appear <code>n</code> times &mdash; every element being the same. So you need a
+    bucket at index <code>n</code>, and array indexes start at 0, giving <code>n + 1</code> slots.
+    Index 0 is never used, and that is fine; the alternative is subtracting 1 everywhere and
+    introducing an off-by-one.</p>
+    <p>In practice you can do better: track the <strong>largest count you actually saw</strong>
+    during the counting pass and size the array to <code>maxCount + 1</code>. Same complexity, but on
+    an array of 500,000 values with 50,000 distinct ones it allocates about 20 buckets instead of
+    500,000 &mdash; and that difference is large enough to decide whether bucket sort really beats
+    sorting. The timing demo above uses this version.</p>
+  </div>
+
+  <h3>The third approach: a heap</h3>
+
+  <p>There is a middle option worth naming. Keep a <strong>min-heap of size k</strong>: push each
+  <code>[value, count]</code> pair, and whenever the heap exceeds <code>k</code>, remove the smallest
+  count. At the end the heap holds the top k. That is <strong>O(n log k)</strong> &mdash; better than
+  sorting, worse than buckets, and the right answer when the counts are <em>not</em> bounded by a
+  small number, or when the data is a stream too large to hold.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>nums = [1,1,1,2,2,3]</code>, <code>k = 2</code>.</p>
+
+  <div class="trace">
+<pre>PASS 1 -- count
+  1 -> {1:1}
+  1 -> {1:2}
+  1 -> {1:3}
+  2 -> {1:3, 2:1}
+  2 -> {1:3, 2:2}
+  3 -> {1:3, 2:2, 3:1}
+
+PASS 2 -- drop each value into the bucket for its count
+  value 1, count 3  ->  buckets[3] = [1]
+  value 2, count 2  ->  buckets[2] = [2]
+  value 3, count 1  ->  buckets[1] = [3]
+
+  buckets = [ [], [3], [2], [1], [], [], [] ]
+              0    1    2    3   4   5   6
+
+PASS 3 -- read downwards until we have k = 2 values
+  count 6: empty
+  count 5: empty
+  count 4: empty
+  count 3: [1]   ->  collect 1        result = [1]
+  count 2: [2]   ->  collect 2        result = [1, 2]   -> full, stop
+
+answer: [1, 2]
+</pre>
+  </div>
+
+  <p>A tie case, <code>nums = [1,1,2,2,3]</code>, <code>k = 2</code>:</p>
+
+  <div class="trace">
+<pre>counts: 1->2   2->2   3->1
+
+buckets = [ [], [3], [1,2], [], [], [] ]
+            0    1    2      3   4   5
+
+count 5,4,3: empty
+count 2: [1, 2]  ->  collect 1   result=[1]
+                 ->  collect 2   result=[1,2]  full, stop
+
+answer: [1, 2]
+
+Both tied values happened to fit. If k had been 1, we would return
+[1] -- the first one in the bucket. Any tied value is acceptable,
+but note the answer depends on Map insertion order, so it is
+deterministic for a given input, not random.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function topKExplained(nums, k) {
+  console.log('nums =', nums, '  k =', k);
+  console.log('');
+
+  const counts = new Map();
+  for (const n of nums) counts.set(n, (counts.get(n) || 0) + 1);
+  console.log('PASS 1 counts:', counts);
+
+  const buckets = Array.from({ length: nums.length + 1 }, () =&gt; []);
+  for (const [value, count] of counts) {
+    buckets[count].push(value);
+    console.log('PASS 2  value ' + value + ' has count ' + count +
+                '  ->  buckets[' + count + ']');
+  }
+  console.log('        buckets =', JSON.stringify(buckets));
+  console.log('');
+  console.log('PASS 3 read downwards:');
+
+  const out = [];
+  for (let count = buckets.length - 1; count &gt;= 1; count--) {
+    if (buckets[count].length === 0) continue;
+
+    for (const value of buckets[count]) {
+      out.push(value);
+      console.log('  count ' + count + ': collect ' + value + '   result = [' + out + ']');
+      if (out.length === k) {
+        console.log('  reached k, stop');
+        console.log('');
+        return out;
+      }
+    }
+  }
+
+  console.log('');
+  return out;
+}
+
+console.log('ANSWER:', topKExplained([1,1,1,2,2,3], 2));
+console.log('==========================================');
+console.log('ANSWER:', topKExplained([5,5,4,4,4,3,3,3,3], 2));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; bucket sort, loops only</span></div>
+<pre><code>function topKManual(nums, k) {
+  if (nums.length === 0 || k === 0) return [];
+
+  // PASS 1: count, using a plain object
+  const counts = {};
+  const distinct = [];        // remember the distinct values, in order
+  let distinctCount = 0;
+
+  for (let i = 0; i &lt; nums.length; i++) {
+    const n = nums[i];
+    if (counts[n] === undefined) {
+      counts[n] = 0;
+      distinct[distinctCount] = n;
+      distinctCount = distinctCount + 1;
+    }
+    counts[n] = counts[n] + 1;
+  }
+
+  // PASS 2: one bucket per possible count
+  const buckets = [];
+  for (let c = 0; c &lt;= nums.length; c++) buckets[c] = [];
+
+  for (let i = 0; i &lt; distinctCount; i++) {
+    const value = distinct[i];
+    const count = counts[value];
+    buckets[count][buckets[count].length] = value;
+  }
+
+  // PASS 3: read from the highest count downwards
+  const result = [];
+  let found = 0;
+
+  for (let c = nums.length; c &gt;= 1; c--) {
+    for (let j = 0; j &lt; buckets[c].length; j++) {
+      result[found] = buckets[c][j];
+      found = found + 1;
+      if (found === k) return result;
+    }
+  }
+
+  return result;
+}
+
+console.log(topKManual([1,1,1,2,2,3], 2));         // [1, 2]
+console.log(topKManual([1], 1));                   // [1]
+console.log(topKManual([4,4,4,5,5,6], 2));         // [4, 5]
+console.log(topKManual([1,2,3,4], 2));             // [1, 2]
+console.log(topKManual([5,5,4,4,3], 3));           // [5, 4, 3]
+console.log(topKManual([7,7,7,7], 1));             // [7]
+console.log(topKManual([], 2));                    // []
+console.log(topKManual([-1,-1,-2], 1));            // [-1]</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Why <code>distinct</code> exists</span>
+    <p>Object keys are strings, so <code>counts</code> turns the number <code>-1</code> into the key
+    <code>"-1"</code>. Iterating the object with <code>for...in</code> would hand back strings and
+    reorder integer-like keys. Keeping a separate array of the distinct values, in the order they
+    first appeared, sidesteps both problems &mdash; and it is exactly what a <code>Map</code> would
+    have given you for free.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2a &mdash; bucket sort, the O(n) answer</span></div>
+<pre><code>function topKFrequent(nums, k) {
+  const counts = new Map();
+  for (const n of nums) counts.set(n, (counts.get(n) || 0) + 1);
+
+  // index = count, value = the numbers with that count
+  const buckets = Array.from({ length: nums.length + 1 }, () =&gt; []);
+  for (const [value, count] of counts) buckets[count].push(value);
+
+  const out = [];
+  for (let count = buckets.length - 1; count &gt;= 1 &amp;&amp; out.length &lt; k; count--) {
+    for (const value of buckets[count]) {
+      out.push(value);
+      if (out.length === k) break;
+    }
+  }
+
+  return out;
+}
+
+console.log(topKFrequent([1,1,1,2,2,3], 2));   // [1, 2]
+console.log(topKFrequent([1], 1));             // [1]
+console.log(topKFrequent([4,4,4,5,5,6], 2));   // [4, 5]
+console.log(topKFrequent([1,2,3,4], 4));       // [1, 2, 3, 4]
+console.log(topKFrequent([3,0,1,0], 1));       // [0]</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2b &mdash; count, sort, take k</span></div>
+<pre><code>function topKSorted(nums, k) {
+  const counts = new Map();
+  for (const n of nums) counts.set(n, (counts.get(n) || 0) + 1);
+
+  return [...counts.entries()]
+    .sort((a, b) =&gt; b[1] - a[1])
+    .slice(0, k)
+    .map(([value]) =&gt; value);
+}
+
+console.log(topKSorted([1,1,1,2,2,3], 2));   // [1, 2]
+console.log(topKSorted([4,4,4,5,5,6], 2));   // [4, 5]
+
+// Three chained methods, very readable, O(n log n).
+// This is what you write at work. Bucket sort is what you write
+// when the interviewer says "can you do better than n log n?"</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 2c &mdash; a min-heap of size k</span></div>
+<pre><code>// A tiny binary min-heap, enough for this problem.
+class MinHeap {
+  constructor(scoreOf) { this.items = []; this.scoreOf = scoreOf; }
+  get size() { return this.items.length; }
+
+  push(item) {
+    this.items.push(item);
+    let i = this.items.length - 1;
+    while (i &gt; 0) {
+      const parent = (i - 1) &gt;&gt; 1;
+      if (this.scoreOf(this.items[parent]) &lt;= this.scoreOf(this.items[i])) break;
+      [this.items[parent], this.items[i]] = [this.items[i], this.items[parent]];
+      i = parent;
+    }
+  }
+
+  pop() {
+    const top = this.items[0];
+    const last = this.items.pop();
+    if (this.items.length) {
+      this.items[0] = last;
+      let i = 0;
+      for (;;) {
+        const l = 2 * i + 1, r = 2 * i + 2;
+        let smallest = i;
+        if (l &lt; this.items.length &amp;&amp;
+            this.scoreOf(this.items[l]) &lt; this.scoreOf(this.items[smallest])) smallest = l;
+        if (r &lt; this.items.length &amp;&amp;
+            this.scoreOf(this.items[r]) &lt; this.scoreOf(this.items[smallest])) smallest = r;
+        if (smallest === i) break;
+        [this.items[i], this.items[smallest]] = [this.items[smallest], this.items[i]];
+        i = smallest;
+      }
+    }
+    return top;
+  }
+}
+
+function topKHeap(nums, k) {
+  const counts = new Map();
+  for (const n of nums) counts.set(n, (counts.get(n) || 0) + 1);
+
+  const heap = new MinHeap(pair =&gt; pair[1]);
+
+  for (const entry of counts.entries()) {
+    heap.push(entry);
+    if (heap.size &gt; k) heap.pop();     // evict the smallest count
+  }
+
+  return heap.items.map(pair =&gt; pair[0]);
+}
+
+console.log(topKHeap([1,1,1,2,2,3], 2).sort());          // [1, 2]
+console.log(topKHeap([5,5,4,4,4,3,3,3,3], 2).sort());    // [3, 4]
+console.log(topKHeap([1], 1));                           // [1]
+
+// O(n log k). The heap never holds more than k+1 items, so it works
+// on a stream of a billion values where you could never build the
+// bucket array. That is when you reach for it.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>When to use it</th></tr></thead>
+      <tbody>
+        <tr><td>Count + sort</td><td class="mono">O(n log n)</td><td class="mono">O(n)</td><td>default; most readable</td></tr>
+        <tr><td>Count + min-heap</td><td class="mono">O(n log k)</td><td class="mono">O(n + k)</td><td>streams, or k much smaller than n</td></tr>
+        <tr><td><strong>Count + buckets</strong></td><td class="mono">O(n)</td><td class="mono">O(n)</td><td>counts bounded by n &mdash; which they always are</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Why buckets is O(n).</strong> Counting is one pass. Filling the buckets touches each
+  distinct value once, which is at most n. Reading the buckets walks n + 1 indexes and collects each
+  value at most once. Three sequential passes, each O(n) &mdash; they add, giving O(n).</p>
+
+  <p>Note that <code>O(n)</code> is optimal: you have to look at every element to count it.</p>
+
+  <p>The trade is space. The bucket array has <code>n + 1</code> slots even if there are only three
+  distinct values, so on <code>[1,1,1,...,1]</code> with a million elements you allocate a million
+  mostly-empty arrays. The heap version does not. That is the honest reason both exist.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Count with a hash map, then I need the k largest counts. Sorting is O(n log n). But a
+    count is an integer between 1 and n, so instead of comparing counts I can use them as array
+    indexes: bucket each value under its count, then read the buckets from the highest index down
+    until I have k. O(n) time and O(n) space. If k is tiny or the data is a stream, a size-k min-heap
+    gives O(n log k) with much less memory.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Sizing the bucket array by the value range instead of the count range</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; indexes by value, not by count</span></div>
+<pre><code>function broken(nums, k) {
+  const counts = new Map();
+  for (const n of nums) counts.set(n, (counts.get(n) || 0) + 1);
+
+  const buckets = Array.from({ length: nums.length + 1 }, () =&gt; []);
+  for (const [value, count] of counts) buckets[value].push(count);   // swapped -- bug
+
+  const out = [];
+  for (let i = buckets.length - 1; i &gt;= 0 &amp;&amp; out.length &lt; k; i--) {
+    for (const v of buckets[i]) { out.push(i); if (out.length === k) break; }
+  }
+  return out;
+}
+
+console.log(broken([1,1,1,2,2,3], 2));   // [3, 2]  WRONG, should be [1, 2]
+
+// Bucketing by VALUE returns the largest values, not the most
+// frequent ones. And it breaks entirely on negative numbers or
+// values larger than n -- buckets[1000000] does not exist.
+// The index must be the COUNT.</code></pre>
+  </div>
+
+  <h3>2. <code>fill([])</code> instead of a factory</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; every bucket is the same array</span></div>
+<pre><code>const bad = new Array(5).fill([]);
+bad[2].push('x');
+console.log(bad);        // [['x'],['x'],['x'],['x'],['x']] -- all five!
+
+const good = Array.from({ length: 5 }, () =&gt; []);
+good[2].push('x');
+console.log(good);       // [[],[],['x'],[],[]]
+
+// fill() stores the SAME array reference in every slot.
+// Array.from with a function calls it once per slot.
+// This is the same trap as building a 2D matrix.</code></pre>
+  </div>
+
+  <h3>3. Sorting ascending by mistake</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; least frequent</span></div>
+<pre><code>function broken(nums, k) {
+  const counts = new Map();
+  for (const n of nums) counts.set(n, (counts.get(n) || 0) + 1);
+  return [...counts.entries()]
+    .sort((a, b) =&gt; a[1] - b[1])       // ascending -- bug
+    .slice(0, k)
+    .map(([v]) =&gt; v);
+}
+
+console.log(broken([1,1,1,2,2,3], 2));   // [3, 2]  WRONG, should be [1, 2]
+
+// a - b is ascending, b - a is descending. Say it out loud when you
+// write it: "b minus a means biggest first".</code></pre>
+  </div>
+
+  <h3>4. Returning the counts instead of the values</h3>
+
+  <p>The answer is <code>[1, 2]</code> &mdash; the <em>values</em> &mdash; not <code>[3, 2]</code>,
+  their counts. After <code>.sort()</code> on entries you are holding <code>[value, count]</code>
+  pairs; remember to map back to the values.</p>
+
+  <h3>5. Stopping the bucket scan at index 0</h3>
+
+  <p>Bucket 0 is always empty &mdash; no value has a count of zero, because a value only exists in
+  the map if it appeared. Scanning down to <code>count &gt;= 1</code> instead of
+  <code>count &gt;= 0</code> is not a correctness issue, just one wasted iteration. What
+  <em>is</em> a bug is forgetting the <code>out.length &lt; k</code> guard in the outer loop, so you
+  keep scanning after the answer is complete.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the bucket version from memory</strong>, then say why the bucket array has
+    <code>n + 1</code> slots.</li>
+    <li><strong>Top K frequent words.</strong> Same problem on strings, with a tie-break: equal counts
+    are ordered alphabetically. The bucket approach still works &mdash; you just sort within each
+    bucket.</li>
+    <li><strong>Sort characters by frequency.</strong> Return the whole string reordered so the most
+    frequent characters come first. Buckets again, collecting everything rather than stopping at k.</li>
+    <li><strong>Kth largest element.</strong> Not about frequency &mdash; the kth largest
+    <em>value</em>. Heap or quickselect; it is in the searching topic here.</li>
+    <li><strong>Write the min-heap from scratch.</strong> The one in Step 7 is about 30 lines. Being
+    able to produce a basic heap is genuinely useful, and JavaScript is one of the few mainstream
+    languages with no built-in priority queue.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>When the key you are sorting by is a small bounded integer, do not sort &mdash; index.</strong>
+    Bucket sort turns O(n log n) into O(n) by using the key as an array position. Counts, ages,
+    scores out of 100, priorities, days of the year: all bounded integers, all bucketable. The
+    question to ask is always: <em>how big can this key get?</em> If the answer is &ldquo;at most
+    n&rdquo;, you can index by it.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="../strings/10-first-non-repeating-character.html">&larr; First Non-Repeating Character</a>
+  <a href="02-subarray-with-given-sum.html">Next: Subarray With Given Sum &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

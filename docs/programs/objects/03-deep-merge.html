@@ -1,0 +1,1182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Merge Two Objects</title>
+<meta name="description" content="Arrays are the argument — plus prototype pollution, undefined, and the shallow-copy trap.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Object &amp; data shaping &middot; Problem 03</p>
+  <h1>Deep Merge Two Objects</h1>
+  <p class="standfirst">The recursion is six lines. Everything interesting is a policy decision:
+  <strong>what happens when both sides have an array?</strong> What about
+  <code>undefined</code>? And a merge that walks user input into an object has the same
+  <code>__proto__</code> vulnerability as the last page.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem &mdash; and why <code>Object.assign</code> is not it</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0a &mdash; the shallow merges everyone tries first</span></div>
+<pre><code>const defaults = {
+  server: { host: 'localhost', port: 8080, tls: { enabled: false, cert: null } },
+  logging: { level: 'info', file: '/var/log/app.log' },
+  retries: 3,
+};
+
+const userConfig = {
+  server: { port: 3000 },
+  logging: { level: 'debug' },
+};
+
+console.log('spread  :', JSON.stringify({ ...defaults, ...userConfig }));
+console.log('assign  :', JSON.stringify(Object.assign({}, defaults, userConfig)));
+console.log('');
+console.log('Both replaced `server` entirely. host, tls and the whole');
+console.log('tls sub-object are gone -- the user only wanted to change');
+console.log('the port.');
+console.log('');
+console.log('retries survived, because the user did not mention it. So');
+console.log('the failure is silent and depends on which keys the user');
+console.log('happened to touch.');
+console.log('');
+console.log('What was wanted:');
+console.log(JSON.stringify({
+  server: { host: 'localhost', port: 3000, tls: { enabled: false, cert: null } },
+  logging: { level: 'debug', file: '/var/log/app.log' },
+  retries: 3,
+}, null, 2).split('\n').map((l) =&gt; '  ' + l).join('\n'));</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The one-line definition</span>
+    <p>A deep merge takes the union of the keys. Where both sides have a <strong>plain object</strong>,
+    it merges them recursively. Where they do not, the <strong>later source wins</strong>.</p>
+    <p>Everything else on this page is deciding what &ldquo;where they do not&rdquo; should mean.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0b &mdash; the six-line answer</span></div>
+<pre><code>const isPlain = (v) =&gt;
+  v !== null &amp;&amp; typeof v === 'object' &amp;&amp; v.constructor === Object;
+
+function deepMerge(target, source) {
+  const out = { ...target };
+  for (const [key, value] of Object.entries(source)) {
+    out[key] = isPlain(value) &amp;&amp; isPlain(out[key])
+      ? deepMerge(out[key], value)          // both plain objects -> recurse
+      : value;                              // otherwise the source wins
+  }
+  return out;
+}
+
+const defaults = {
+  server: { host: 'localhost', port: 8080, tls: { enabled: false } },
+  logging: { level: 'info', file: '/var/log/app.log' },
+  retries: 3,
+};
+const userConfig = { server: { port: 3000, tls: { cert: '/etc/cert.pem' } },
+                     logging: { level: 'debug' } };
+
+const merged = deepMerge(defaults, userConfig);
+console.log(JSON.stringify(merged, null, 2));
+
+console.log('');
+console.log('nothing was lost:', merged.server.host === 'localhost' &amp;&amp;
+            merged.server.tls.enabled === false &amp;&amp; merged.retries === 3);
+console.log('and the overrides applied:', merged.server.port === 3000 &amp;&amp;
+            merged.logging.level === 'debug');
+
+console.log('');
+console.log('and the inputs are untouched:');
+console.log('  defaults.server.port :', defaults.server.port);
+console.log('  userConfig unchanged :', JSON.stringify(userConfig));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the array question</h2>
+
+  <p>There is no correct answer. There are four defensible answers, and the interviewer wants to hear
+  that you know it is a choice.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Strategy</th><th><code>[1,2]</code> + <code>[3]</code></th><th>Right for</th></tr></thead>
+      <tbody>
+        <tr><td><strong>replace</strong></td><td class="mono">[3]</td><td>config lists &mdash; the user means &ldquo;exactly these&rdquo;</td></tr>
+        <tr><td><strong>concat</strong></td><td class="mono">[1,2,3]</td><td>plugin lists, middleware, additive settings</td></tr>
+        <tr><td><strong>union</strong></td><td class="mono">[1,2,3] deduped</td><td>tags, permissions, feature flags</td></tr>
+        <tr><td><strong>by index</strong></td><td class="mono">[3,2]</td><td>fixed-length tuples; almost never otherwise</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">all four, on the same input</span></div>
+<pre><code>const isPlain = (v) =&gt; v !== null &amp;&amp; typeof v === 'object' &amp;&amp; v.constructor === Object;
+
+function merge(target, source, arrayStrategy) {
+  const out = Array.isArray(target) ? [...target] : { ...target };
+
+  for (const [key, value] of Object.entries(source)) {
+    const existing = out[key];
+
+    if (isPlain(value) &amp;&amp; isPlain(existing)) {
+      out[key] = merge(existing, value, arrayStrategy);
+    } else if (Array.isArray(value) &amp;&amp; Array.isArray(existing)) {
+      out[key] = arrayStrategy(existing, value);
+    } else {
+      out[key] = value;
+    }
+  }
+
+  return out;
+}
+
+const strategies = {
+  replace: (a, b) =&gt; b,
+  concat: (a, b) =&gt; [...a, ...b],
+  union: (a, b) =&gt; [...new Set([...a, ...b])],
+  byIndex: (a, b) =&gt; {
+    const out = [...a];
+    b.forEach((v, i) =&gt; { out[i] = v; });
+    return out;
+  },
+};
+
+const base = { plugins: ['auth', 'logging'], tags: ['a', 'b'], levels: [1, 2, 3] };
+const over = { plugins: ['metrics'], tags: ['b', 'c'], levels: [9] };
+
+for (const [name, fn] of Object.entries(strategies)) {
+  const r = merge(base, over, fn);
+  console.log(name.padEnd(9) + 'plugins ' + JSON.stringify(r.plugins).padEnd(24) +
+              ' tags ' + JSON.stringify(r.tags).padEnd(18) +
+              ' levels ' + JSON.stringify(r.levels));
+}
+
+console.log('');
+console.log('Look at `levels` under byIndex: [9,2,3]. The override said');
+console.log('"one level", and it got three. That is why by-index is');
+console.log('almost always wrong for a list.');
+console.log('');
+console.log('And under union, tags deduped to [a,b,c] -- correct for');
+console.log('tags, wrong for something like [1,1,2] where the');
+console.log('duplication is meaningful.');
+console.log('');
+console.log('lodash.merge uses byIndex. That surprises people, and it');
+console.log('is a common source of config bugs:');
+console.log('  merging { a: [1,2,3] } with { a: [9] } gives',
+            JSON.stringify(merge({ a: [1, 2, 3] }, { a: [9] }, strategies.byIndex).a),
+            'not [9]');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why the spread-per-level version costs</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; copy every level versus copy once</span></div>
+<pre><code>const isPlain = (v) =&gt; v !== null &amp;&amp; typeof v === 'object' &amp;&amp; v.constructor === Object;
+
+// (a) immutable: a new object at every level
+function mergeImmutable(target, source) {
+  const out = { ...target };
+  for (const [k, v] of Object.entries(source)) {
+    out[k] = isPlain(v) &amp;&amp; isPlain(out[k]) ? mergeImmutable(out[k], v) : v;
+  }
+  return out;
+}
+
+// (b) mutating a fresh deep copy: one copy, then write in place
+function deepCopy(v) {
+  if (!isPlain(v) &amp;&amp; !Array.isArray(v)) return v;
+  if (Array.isArray(v)) return v.map(deepCopy);
+  const out = {};
+  for (const k of Object.keys(v)) out[k] = deepCopy(v[k]);
+  return out;
+}
+function mergeIntoCopy(target, source) {
+  const out = deepCopy(target);
+  (function walk(dst, src) {
+    for (const [k, v] of Object.entries(src)) {
+      if (isPlain(v) &amp;&amp; isPlain(dst[k])) walk(dst[k], v);
+      else dst[k] = deepCopy(v);
+    }
+  })(out, source);
+  return out;
+}
+
+// a wide, deep target with a tiny override
+function build(depth, width) {
+  if (depth === 0) return 1;
+  const o = {};
+  for (let i = 0; i &lt; width; i++) o['k' + i] = build(depth - 1, width);
+  return o;
+}
+const target = build(5, 8);                       // 8^5 = 32,768 leaves
+const source = { k0: { k0: { k0: { k0: { k0: 'changed' } } } } };
+
+const N = 500;
+
+let t = performance.now();
+let a;
+for (let i = 0; i &lt; N; i++) a = mergeImmutable(target, source);
+const immMs = performance.now() - t;
+
+t = performance.now();
+let b;
+for (let i = 0; i &lt; N; i++) b = mergeIntoCopy(target, source);
+const copyMs = performance.now() - t;
+
+console.log('target has', Object.keys(a).length, 'top-level keys, 32,768 leaves');
+console.log('source changes exactly one leaf');
+console.log('');
+console.log('  ' + N.toLocaleString('en-US') + ' x immutable merge   : ' + immMs.toFixed(1) + ' ms');
+console.log('  ' + N.toLocaleString('en-US') + ' x merge into a copy : ' + copyMs.toFixed(1) + ' ms');
+console.log('  same result:', JSON.stringify(a) === JSON.stringify(b));
+
+console.log('');
+console.log('The immutable version is FASTER here, and the reason is');
+console.log('worth understanding: it only copies the levels along the');
+console.log('path being changed. Untouched sub-objects are shared by');
+console.log('reference -- structural sharing, exactly what immutable');
+console.log('data structures do.');
+console.log('');
+console.log('  merged.k1 === target.k1 ?', a.k1 === target.k1);
+console.log('  merged.k0 === target.k0 ?', a.k0 === target.k0);
+console.log('  -- k1 was untouched and shared; k0 was on the path and');
+console.log('     was copied.');
+console.log('');
+console.log('That sharing is a feature and a hazard. The result is not');
+console.log('a deep clone: mutating merged.k1.k0 also mutates');
+console.log('target.k1.k0. Step 9 has the bug that causes.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; the five decisions</h2>
+
+  <div class="trace">
+<pre>  merge(target, source):
+
+      out = a shallow copy of target
+
+      for each [key, value] in source:
+
+          1. is `key` dangerous?          __proto__ / constructor /
+                                          prototype  ->  skip
+          2. both sides PLAIN OBJECTS?    ->  recurse
+          3. both sides ARRAYS?           ->  the array strategy
+          4. value is undefined?          ->  skip, or overwrite?
+          5. otherwise                    ->  out[key] = value
+
+      return out
+
+
+  The order matters. The prototype check must be FIRST, before
+  anything reads or writes out[key].
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The two policies to state out loud</span>
+    <p><strong>Arrays:</strong> replace by default. It is the least surprising, and it is what
+    &ldquo;the user's config wins&rdquo; means. Make it configurable.</p>
+    <p><strong><code>undefined</code>:</strong> skip it by default, so
+    <code>merge(defaults, { port: undefined })</code> keeps the default. That matches how default
+    parameters behave, and it means a partial object built with optional fields does not wipe things
+    out. But it also means you cannot <em>unset</em> a value &mdash; and that trade is worth
+    mentioning.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the undefined question, both ways</span></div>
+<pre><code>const isPlain = (v) =&gt; v !== null &amp;&amp; typeof v === 'object' &amp;&amp; v.constructor === Object;
+
+function merge(target, source, { skipUndefined }) {
+  const out = { ...target };
+  for (const [k, v] of Object.entries(source)) {
+    if (v === undefined &amp;&amp; skipUndefined) continue;
+    out[k] = isPlain(v) &amp;&amp; isPlain(out[k])
+      ? merge(out[k], v, { skipUndefined })
+      : v;
+  }
+  return out;
+}
+
+const defaults = { host: 'localhost', port: 8080, timeout: 5000 };
+
+// this is what a partially-filled options object looks like in real code
+const partial = { port: 3000, timeout: undefined };
+
+console.log('defaults        :', JSON.stringify(defaults));
+console.log('partial override:', JSON.stringify(partial),
+            ' <- JSON hides it; the key IS there:', Object.keys(partial));
+console.log('');
+console.log('skipUndefined true :',
+            JSON.stringify(merge(defaults, partial, { skipUndefined: true })));
+console.log('skipUndefined false:',
+            JSON.stringify(merge(defaults, partial, { skipUndefined: false })));
+console.log('  -- with false, timeout is now undefined. The caller did');
+console.log('     not mean to remove it; the key was there because the');
+console.log('     object was built from optional fields.');
+
+console.log('');
+console.log('Where that comes from:');
+function makeOptions(port, timeout) { return { port, timeout }; }
+console.log('  makeOptions(3000) ->', Object.keys(makeOptions(3000)),
+            'with timeout =', makeOptions(3000).timeout);
+console.log('  Both keys exist. Every optional-argument builder does');
+console.log('  this, which is why skipping undefined is the sane');
+console.log('  default.');
+
+console.log('');
+console.log('But null is different, and should NOT be skipped:');
+console.log('  ', JSON.stringify(merge(defaults, { timeout: null },
+                                       { skipUndefined: true })));
+console.log('  null is an explicit "no value". undefined is "I did not');
+console.log('  say". Treating them the same is the mistake.');
+
+console.log('');
+console.log('And if you need to unset something, use a sentinel:');
+const DELETE = Symbol('delete');
+function mergeWithDelete(target, source) {
+  const out = { ...target };
+  for (const [k, v] of Object.entries(source)) {
+    if (v === DELETE) { delete out[k]; continue; }
+    if (v === undefined) continue;
+    out[k] = isPlain(v) &amp;&amp; isPlain(out[k]) ? mergeWithDelete(out[k], v) : v;
+  }
+  return out;
+}
+console.log(' ', JSON.stringify(mergeWithDelete(defaults, { timeout: DELETE })));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace the merge</h2>
+
+  <div class="trace">
+<pre>  target = { a: 1, b: { c: 2, d: 3 }, e: [1, 2] }
+  source = {        b: { c: 9, f: 4 }, e: [7], g: 5 }
+
+  out = { ...target }
+      = { a: 1, b: <same object as target.b>, e: <same array> }
+
+  key 'b'   both plain objects  ->  recurse
+      out2 = { ...target.b } = { c: 2, d: 3 }
+      key 'c'  2 and 9, not objects  ->  out2.c = 9
+      key 'f'  not in out2           ->  out2.f = 4
+      out2 = { c: 9, d: 3, f: 4 }
+      out.b = out2      <-- a NEW object; target.b untouched
+
+  key 'e'   both arrays  ->  strategy(replace)  ->  out.e = [7]
+
+  key 'g'   not in out   ->  out.g = 5
+
+  result = { a: 1, b: { c: 9, d: 3, f: 4 }, e: [7], g: 5 }
+
+  Note `a` was never visited -- it came along in the initial
+  shallow copy and nothing in source mentioned it.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>const isPlain = (v) =&gt; v !== null &amp;&amp; typeof v === 'object' &amp;&amp; v.constructor === Object;
+
+function mergeLoud(target, source, depth = 0) {
+  const pad = '  '.repeat(depth);
+  const out = { ...target };
+  console.log(pad + 'copy target keys: ' + JSON.stringify(Object.keys(out)));
+
+  for (const [key, value] of Object.entries(source)) {
+    const existing = out[key];
+
+    if (isPlain(value) &amp;&amp; isPlain(existing)) {
+      console.log(pad + '"' + key + '": both plain objects -> recurse');
+      out[key] = mergeLoud(existing, value, depth + 1);
+    } else if (Array.isArray(value) &amp;&amp; Array.isArray(existing)) {
+      console.log(pad + '"' + key + '": both arrays -> replace ' +
+                  JSON.stringify(existing) + ' with ' + JSON.stringify(value));
+      out[key] = value;
+    } else if (key in out) {
+      console.log(pad + '"' + key + '": overwrite ' + JSON.stringify(existing) +
+                  ' with ' + JSON.stringify(value));
+      out[key] = value;
+    } else {
+      console.log(pad + '"' + key + '": new key, set to ' + JSON.stringify(value));
+      out[key] = value;
+    }
+  }
+
+  return out;
+}
+
+const target = { a: 1, b: { c: 2, d: 3 }, e: [1, 2] };
+const source = { b: { c: 9, f: 4 }, e: [7], g: 5 };
+
+const result = mergeLoud(target, source);
+console.log('');
+console.log('RESULT  :', JSON.stringify(result));
+console.log('target  :', JSON.stringify(target), '<- untouched');
+console.log('');
+console.log('structural sharing, and what it means:');
+console.log('  result.b === target.b ?', result.b === target.b, '(was merged)');
+console.log('  result.a === target.a ?', result.a === target.a, '(a primitive)');
+const t2 = { untouched: { deep: 1 } };
+const r2 = mergeLoud({ ...t2 }, { other: 2 });
+console.log('');
+console.log('  a sub-object nothing merged into IS shared:',
+            r2.untouched === t2.untouched);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; for...in, hasOwnProperty, manual copying</span></div>
+<pre><code>function isPlainObject(v) {
+  return v !== null &amp;&amp; typeof v === 'object' &amp;&amp;
+         Object.prototype.toString.call(v) === '[object Object]';
+}
+
+function shallowCopy(obj) {
+  const out = {};
+  for (const k in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, k)) out[k] = obj[k];
+  }
+  return out;
+}
+
+const FORBIDDEN = { __proto__: true, constructor: true, prototype: true };
+
+function deepMergeManual(target, source) {
+  const out = shallowCopy(target);
+
+  for (const key in source) {
+    if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
+    // the guard comes FIRST, before any read or write of out[key]
+    if (Object.prototype.hasOwnProperty.call(FORBIDDEN, key)) continue;
+
+    const value = source[key];
+    if (value === undefined) continue;
+
+    if (isPlainObject(value) &amp;&amp; isPlainObject(out[key])) {
+      out[key] = deepMergeManual(out[key], value);
+    } else {
+      out[key] = value;
+    }
+  }
+
+  return out;
+}
+
+// variadic: merge many sources left to right
+function mergeAll() {
+  let result = {};
+  for (let i = 0; i &lt; arguments.length; i++) {
+    result = deepMergeManual(result, arguments[i]);
+  }
+  return result;
+}
+
+const base = { a: 1, nested: { x: 1, y: 2 } };
+const mid = { nested: { y: 20, z: 30 } };
+const top = { a: 100, nested: { z: 300 } };
+
+console.log('merge three, left to right:');
+console.log(' ', JSON.stringify(mergeAll(base, mid, top)));
+console.log('  a: 1 -> 100        (last wins)');
+console.log('  nested.x: 1        (only in base)');
+console.log('  nested.y: 2 -> 20  (mid wins over base)');
+console.log('  nested.z: 30 -> 300 (top wins over mid)');
+
+console.log('');
+console.log('edge cases:');
+console.log('  merge with {}      :', JSON.stringify(deepMergeManual(base, {})));
+console.log('  merge {} with base :', JSON.stringify(deepMergeManual({}, base)));
+console.log('  no sources         :', JSON.stringify(mergeAll()));
+console.log('  one source         :', JSON.stringify(mergeAll(base)));
+
+console.log('');
+console.log('the FORBIDDEN guard:');
+const attack = JSON.parse('{"__proto__": {"polluted": true}}');
+const safe = deepMergeManual({}, attack);
+console.log('  merged           :', JSON.stringify(safe));
+console.log('  ({}).polluted is :', ({}).polluted);
+console.log('  -- nothing leaked. Note JSON.parse creates __proto__ as');
+console.log('     a real OWN property, which is exactly why an attacker');
+console.log('     uses a JSON body.');
+console.log('  is it an own key? ', Object.prototype.hasOwnProperty.call(attack, '__proto__'));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the configurable one</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>const isPlain = (v) =&gt;
+  v !== null &amp;&amp; typeof v === 'object' &amp;&amp;
+  (v.constructor === Object || v.constructor === undefined);
+
+const FORBIDDEN = new Set(['__proto__', 'constructor', 'prototype']);
+
+const ARRAY_STRATEGIES = {
+  replace: (a, b) =&gt; b,
+  concat: (a, b) =&gt; [...a, ...b],
+  union: (a, b) =&gt; [...new Set([...a, ...b])],
+};
+
+function deepMerge(...sources) {
+  const options = { arrays: 'replace', skipUndefined: true };
+  // an options object may be passed last, marked so it is unambiguous
+  const last = sources[sources.length - 1];
+  if (last &amp;&amp; last.__mergeOptions) {
+    Object.assign(options, sources.pop().__mergeOptions);
+  }
+
+  const combineArrays = typeof options.arrays === 'function'
+    ? options.arrays
+    : ARRAY_STRATEGIES[options.arrays];
+
+  function two(target, source) {
+    const out = { ...target };
+
+    for (const key of Object.keys(source)) {
+      if (FORBIDDEN.has(key)) continue;
+
+      const value = source[key];
+      if (value === undefined &amp;&amp; options.skipUndefined) continue;
+
+      const existing = out[key];
+
+      if (isPlain(value) &amp;&amp; isPlain(existing)) out[key] = two(existing, value);
+      else if (Array.isArray(value) &amp;&amp; Array.isArray(existing)) {
+        out[key] = combineArrays(existing, value);
+      } else out[key] = value;
+    }
+
+    return out;
+  }
+
+  return sources.reduce((acc, src) =&gt; two(acc, src ?? {}), {});
+}
+
+const defaults = {
+  server: { host: 'localhost', port: 8080, tls: { enabled: false } },
+  plugins: ['auth', 'logging'],
+  retries: 3,
+};
+const fromFile = { server: { port: 3000 }, plugins: ['metrics'] };
+const fromEnv = { server: { tls: { enabled: true } }, retries: undefined };
+
+console.log('replace (default):');
+console.log(' ', JSON.stringify(deepMerge(defaults, fromFile, fromEnv)));
+
+console.log('');
+console.log('concat:');
+console.log(' ', JSON.stringify(deepMerge(defaults, fromFile, fromEnv,
+  { __mergeOptions: { arrays: 'concat' } })));
+
+console.log('');
+console.log('union:');
+console.log(' ', JSON.stringify(deepMerge(defaults, { plugins: ['auth', 'metrics'] },
+  { __mergeOptions: { arrays: 'union' } })));
+
+console.log('');
+console.log('a custom strategy -- merge objects inside arrays by id:');
+const byId = (a, b) =&gt; {
+  const map = new Map(a.map((x) =&gt; [x.id, x]));
+  for (const item of b) {
+    map.set(item.id, map.has(item.id) ? { ...map.get(item.id), ...item } : item);
+  }
+  return [...map.values()];
+};
+console.log(' ', JSON.stringify(deepMerge(
+  { items: [{ id: 1, qty: 1 }, { id: 2, qty: 2 }] },
+  { items: [{ id: 2, qty: 99 }, { id: 3, qty: 3 }] },
+  { __mergeOptions: { arrays: byId } },
+).items));
+
+console.log('');
+console.log('robustness:');
+console.log('  null source        :', JSON.stringify(deepMerge({ a: 1 }, null)));
+console.log('  no sources         :', JSON.stringify(deepMerge()));
+console.log('  __proto__ payload  :',
+            JSON.stringify(deepMerge({}, JSON.parse('{"__proto__":{"x":1}}'))));
+console.log('  ({}).x still       :', ({}).x);</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">a merge that does NOT share structure</span></div>
+<pre><code>const isPlain = (v) =&gt; v !== null &amp;&amp; typeof v === 'object' &amp;&amp; v.constructor === Object;
+
+// the sharing version -- fast, and the result aliases the inputs
+function mergeSharing(target, source) {
+  const out = { ...target };
+  for (const [k, v] of Object.entries(source)) {
+    out[k] = isPlain(v) &amp;&amp; isPlain(out[k]) ? mergeSharing(out[k], v) : v;
+  }
+  return out;
+}
+
+// the isolating version -- every value deep-copied on the way in
+function deepCopy(v, seen = new Map()) {
+  if (v === null || typeof v !== 'object') return v;
+  if (seen.has(v)) return seen.get(v);
+  if (v instanceof Date) return new Date(v.getTime());
+  const out = Array.isArray(v) ? [] : {};
+  seen.set(v, out);
+  for (const k of Object.keys(v)) out[k] = deepCopy(v[k], seen);
+  return out;
+}
+function mergeIsolating(target, source) {
+  const out = {};
+  for (const k of Object.keys(target)) out[k] = deepCopy(target[k]);
+  for (const [k, v] of Object.entries(source)) {
+    out[k] = isPlain(v) &amp;&amp; isPlain(out[k]) ? mergeIsolating(out[k], v) : deepCopy(v);
+  }
+  return out;
+}
+
+const defaults = { server: { tls: { ciphers: ['A', 'B'] } }, untouched: { deep: 1 } };
+const override = { server: { port: 3000 } };
+
+const shared = mergeSharing(defaults, override);
+const isolated = mergeIsolating(defaults, override);
+
+console.log('aliasing check:');
+console.log('  shared.untouched   === defaults.untouched :',
+            shared.untouched === defaults.untouched);
+console.log('  isolated.untouched === defaults.untouched :',
+            isolated.untouched === defaults.untouched);
+console.log('  shared.server.tls  === defaults.server.tls:',
+            shared.server.tls === defaults.server.tls);
+
+console.log('');
+console.log('now mutate the RESULT and look at the defaults:');
+shared.untouched.deep = 'CHANGED';
+shared.server.tls.ciphers.push('EVIL');
+console.log('  after mutating `shared`  :', JSON.stringify(defaults));
+
+// reset for the second test
+defaults.untouched.deep = 1;
+defaults.server.tls.ciphers = ['A', 'B'];
+const isolated2 = mergeIsolating(defaults, override);
+isolated2.untouched.deep = 'CHANGED';
+isolated2.server.tls.ciphers.push('EVIL');
+console.log('  after mutating `isolated`:', JSON.stringify(defaults));
+
+console.log('');
+console.log('Which one you want depends entirely on the caller:');
+console.log('  a config merged once at boot and never mutated');
+console.log('    -> sharing is fine, and cheaper');
+console.log('  a defaults object reused for every request');
+console.log('    -> you MUST isolate, or one request corrupts the');
+console.log('       defaults for every later one');
+console.log('');
+console.log('The second case is a real and common production bug, and');
+console.log('it survives testing because it needs two requests to');
+console.log('show up.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">merge via flatten, and structuredClone</span></div>
+<pre><code>// A completely different implementation: flatten both, overlay the
+// paths, unflatten. Short, and it inherits every flatten limitation.
+const isPlain = (v) =&gt; v !== null &amp;&amp; typeof v === 'object' &amp;&amp; v.constructor === Object;
+
+function flatten(obj, prefix = '', out = {}) {
+  for (const [k, v] of Object.entries(obj)) {
+    const path = prefix ? prefix + ' ' + k : k;
+    if (isPlain(v) &amp;&amp; Object.keys(v).length &gt; 0) flatten(v, path, out);
+    else out[path] = v;
+  }
+  return out;
+}
+function unflatten(flat) {
+  const out = {};
+  for (const [path, v] of Object.entries(flat)) {
+    const parts = path.split(' ');
+    let node = out;
+    for (let i = 0; i &lt; parts.length - 1; i++) {
+      if (!isPlain(node[parts[i]])) node[parts[i]] = {};
+      node = node[parts[i]];
+    }
+    node[parts[parts.length - 1]] = v;
+  }
+  return out;
+}
+const mergeViaFlatten = (a, b) =&gt; unflatten({ ...flatten(a), ...flatten(b) });
+
+const defaults = { server: { host: 'localhost', port: 8080, tls: { enabled: false } },
+                   retries: 3 };
+const override = { server: { port: 3000, tls: { cert: 'x' } } };
+
+console.log('via flatten:', JSON.stringify(mergeViaFlatten(defaults, override)));
+
+function deepMerge(t, s) {
+  const out = { ...t };
+  for (const [k, v] of Object.entries(s)) {
+    out[k] = isPlain(v) &amp;&amp; isPlain(out[k]) ? deepMerge(out[k], v) : v;
+  }
+  return out;
+}
+console.log('recursive  :', JSON.stringify(deepMerge(defaults, override)));
+console.log('identical  :',
+            JSON.stringify(mergeViaFlatten(defaults, override)) ===
+            JSON.stringify(deepMerge(defaults, override)));
+
+console.log('');
+console.log('It works, and it is worth knowing as a trick rather than');
+console.log('as an implementation: two full traversals plus string');
+console.log('building, and it cannot express an array strategy at all.');
+console.log('  arrays:', JSON.stringify(mergeViaFlatten({ a: [1, 2] }, { a: [3] }).a));
+
+console.log('');
+console.log('And the easy way to get isolation, if it is available:');
+console.log('  structuredClone available?', typeof structuredClone === 'function');
+if (typeof structuredClone === 'function') {
+  const isolated = deepMerge(structuredClone(defaults), structuredClone(override));
+  console.log('  isolated.server === defaults.server:',
+              isolated.server === defaults.server);
+  console.log('  -- clone the inputs, then merge. Two lines, and it');
+  console.log('     handles Dates, Maps and cycles properly.');
+}</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Approach</th><th>Time</th><th>Allocated</th></tr></thead>
+      <tbody>
+        <tr><td><strong>recursive, structural sharing</strong></td><td class="mono">O(s + t<sub>top</sub>)</td><td>one object per level touched</td></tr>
+        <tr><td>recursive, isolating</td><td class="mono">O(s + t)</td><td>a full copy of both</td></tr>
+        <tr><td>via flatten / unflatten</td><td class="mono">O((s + t) &middot; d)</td><td>two flat objects plus path strings</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><code>s</code> is the size of the source, <code>t</code> the size of the target. The sharing
+  version is the interesting one: it copies only the <em>top level</em> of the target plus each level
+  the source actually descends into. A one-key override of a huge config touches a handful of objects,
+  not the whole tree &mdash; which is why Step 3's measurement came out the way it did.</p>
+
+  <p>The isolating version is O(s + t) because it copies everything, and that is the price of not
+  aliasing the inputs.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Shallow-copy the target, then walk the source's keys: where both sides have a plain
+    object I recurse, otherwise the source wins. The three things to raise before being asked are
+    policies, not code. Arrays: I replace by default, because that is what a config override means, but
+    concat and union are both reasonable and lodash actually merges by index, which surprises people.
+    <code>undefined</code>: I skip it, so a partially-filled options object does not wipe defaults, but
+    <code>null</code> I treat as an explicit value. And the result shares structure with the inputs, so
+    if the target is a defaults object reused across requests I clone first &mdash; otherwise one
+    request's mutation leaks into every later one. Also, any merge that walks keys from a request body
+    has to reject <code>__proto__</code>.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Prototype pollution</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the CVE in six lines</span></div>
+<pre><code>const isPlain = (v) =&gt; v !== null &amp;&amp; typeof v === 'object' &amp;&amp; v.constructor === Object;
+
+function mergeUnsafe(target, source) {
+  for (const key of Object.keys(source)) {
+    const value = source[key];
+    if (isPlain(value) &amp;&amp; isPlain(target[key])) mergeUnsafe(target[key], value);
+    else target[key] = value;
+  }
+  return target;
+}
+
+// a request body. Object.keys DOES see __proto__ when it came from
+// JSON.parse, because it is a real own property there.
+const body = JSON.parse('{"__proto__": {"isAdmin": true}}');
+console.log('the payload own-keys:', Object.keys(body));
+
+console.log('before: ({}).isAdmin =', ({}).isAdmin);
+mergeUnsafe({}, body);
+console.log('after : ({}).isAdmin =', ({}).isAdmin);
+console.log('');
+console.log('Every object in the process is now an admin:');
+console.log('  a fresh user object   :', ({ name: 'nobody' }).isAdmin);
+console.log('  an options object     :', ({ port: 3000 }).isAdmin);
+console.log('  and `if (user.isAdmin)`', ({ name: 'nobody' }).isAdmin ? 'PASSES' : 'fails');
+
+delete Object.prototype.isAdmin;
+
+// the second variant: nested, so a shallow key check misses it
+console.log('');
+const nested = JSON.parse('{"a": {"__proto__": {"pwned": 1}}}');
+console.log('before: ({}).pwned =', ({}).pwned);
+mergeUnsafe({ a: {} }, nested);
+console.log('after : ({}).pwned =', ({}).pwned);
+delete Object.prototype.pwned;
+
+console.log('');
+console.log('The fix, and all three names matter:');
+const FORBIDDEN = new Set(['__proto__', 'constructor', 'prototype']);
+function mergeSafe(target, source) {
+  const out = { ...target };
+  for (const key of Object.keys(source)) {
+    if (FORBIDDEN.has(key)) continue;
+    const value = source[key];
+    out[key] = isPlain(value) &amp;&amp; isPlain(out[key]) ? mergeSafe(out[key], value) : value;
+  }
+  return out;
+}
+mergeSafe({}, JSON.parse('{"__proto__":{"isAdmin":true}}'));
+mergeSafe({ a: {} }, JSON.parse('{"a":{"constructor":{"prototype":{"isAdmin":true}}}}'));
+console.log('  after two payloads, ({}).isAdmin =', ({}).isAdmin);
+console.log('');
+console.log('`constructor` matters because constructor.prototype is');
+console.log('another route to the same object. Blocking only');
+console.log('__proto__ is not enough.');
+console.log('');
+console.log('This exact bug has shipped in lodash, jQuery, minimist,');
+console.log('and half a dozen config libraries. It is not an exotic');
+console.log('attack -- it is a one-line JSON body.');</code></pre>
+  </div>
+
+  <h3>2. Mutating the target</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the defaults are gone after the first request</span></div>
+<pre><code>const isPlain = (v) =&gt; v !== null &amp;&amp; typeof v === 'object' &amp;&amp; v.constructor === Object;
+
+// mutates the target in place
+function mergeMutating(target, source) {
+  for (const [k, v] of Object.entries(source)) {
+    if (isPlain(v) &amp;&amp; isPlain(target[k])) mergeMutating(target[k], v);
+    else target[k] = v;
+  }
+  return target;
+}
+
+const DEFAULTS = {
+  server: { host: 'localhost', port: 8080 },
+  features: { beta: false },
+};
+
+console.log('DEFAULTS at boot:', JSON.stringify(DEFAULTS));
+
+// three "requests", each with its own override
+const results = [];
+for (const override of [{ server: { port: 3000 } },
+                        { features: { beta: true } },
+                        {}]) {
+  results.push(JSON.stringify(mergeMutating(DEFAULTS, override)));
+}
+
+console.log('');
+results.forEach((r, i) =&gt; console.log('request ' + (i + 1) + ': ' + r));
+console.log('');
+console.log('DEFAULTS now      :', JSON.stringify(DEFAULTS));
+console.log('');
+console.log('Request 3 sent NO override and got port 3000 and beta');
+console.log('true, because requests 1 and 2 permanently changed the');
+console.log('defaults.');
+console.log('');
+console.log('This is the bug that passes every unit test -- each test');
+console.log('makes one call -- and fails in production on the second');
+console.log('request.');
+
+// the non-mutating version
+function mergePure(target, source) {
+  const out = { ...target };
+  for (const [k, v] of Object.entries(source)) {
+    out[k] = isPlain(v) &amp;&amp; isPlain(out[k]) ? mergePure(out[k], v) : v;
+  }
+  return out;
+}
+
+const CLEAN = { server: { host: 'localhost', port: 8080 }, features: { beta: false } };
+console.log('');
+console.log('with mergePure:');
+for (const override of [{ server: { port: 3000 } }, { features: { beta: true } }, {}]) {
+  console.log('  ' + JSON.stringify(mergePure(CLEAN, override)));
+}
+console.log('  CLEAN still:', JSON.stringify(CLEAN));</code></pre>
+  </div>
+
+  <h3>3. Forgetting the shallow-copy alias</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; "pure" and still leaking</span></div>
+<pre><code>const isPlain = (v) =&gt; v !== null &amp;&amp; typeof v === 'object' &amp;&amp; v.constructor === Object;
+
+function mergePure(target, source) {
+  const out = { ...target };
+  for (const [k, v] of Object.entries(source)) {
+    out[k] = isPlain(v) &amp;&amp; isPlain(out[k]) ? mergePure(out[k], v) : v;
+  }
+  return out;
+}
+
+const DEFAULTS = {
+  cors: { origins: ['https://example.com'] },
+  server: { port: 8080 },
+};
+
+const config = mergePure(DEFAULTS, { server: { port: 3000 } });
+
+console.log('DEFAULTS.cors.origins:', JSON.stringify(DEFAULTS.cors.origins));
+console.log('config.cors === DEFAULTS.cors ?', config.cors === DEFAULTS.cors);
+
+// somewhere else in the codebase, entirely reasonably:
+config.cors.origins.push('http://localhost:3000');
+
+console.log('');
+console.log('after pushing to config.cors.origins:');
+console.log('  config.cors.origins  :', JSON.stringify(config.cors.origins));
+console.log('  DEFAULTS.cors.origins:', JSON.stringify(DEFAULTS.cors.origins));
+console.log('  -- the defaults now permit localhost, for every later');
+console.log('     config built from them.');
+
+console.log('');
+console.log('mergePure never mutated anything. The leak is that `cors`');
+console.log('was not mentioned in the source, so it came through the');
+console.log('shallow copy by REFERENCE.');
+console.log('');
+console.log('Two fixes:');
+console.log('  1. deep-clone the target first (Step 7)');
+console.log('  2. freeze the defaults, so the leak becomes an error');
+
+const FROZEN = (function deepFreeze(o) {
+  for (const k of Object.keys(o)) if (typeof o[k] === 'object' &amp;&amp; o[k] !== null) deepFreeze(o[k]);
+  return Object.freeze(o);
+})({ cors: { origins: ['https://example.com'] }, server: { port: 8080 } });
+
+const c2 = mergePure(FROZEN, { server: { port: 3000 } });
+console.log('');
+console.log('with frozen defaults:');
+console.log('  merge still works:', JSON.stringify(c2));
+try {
+  c2.cors.origins.push('http://localhost:3000');
+} catch (e) {
+  console.log('  the push now throws:', e.constructor.name + ':', e.message);
+}
+console.log('  -- the aliasing is still there, but it cannot cause');
+console.log('     silent damage. Freezing your defaults is cheap');
+console.log('     insurance.');</code></pre>
+  </div>
+
+  <h3>4. Merging things that are not plain objects</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; Dates, Maps and class instances mangled</span></div>
+<pre><code>// tests only for typeof 'object'
+function mergeNaive(target, source) {
+  const out = { ...target };
+  for (const [k, v] of Object.entries(source)) {
+    out[k] = v !== null &amp;&amp; typeof v === 'object' &amp;&amp;
+             out[k] !== null &amp;&amp; typeof out[k] === 'object'
+      ? mergeNaive(out[k], v)
+      : v;
+  }
+  return out;
+}
+
+const isPlain = (v) =&gt; v !== null &amp;&amp; typeof v === 'object' &amp;&amp; v.constructor === Object;
+function mergeSafe(target, source) {
+  const out = { ...target };
+  for (const [k, v] of Object.entries(source)) {
+    out[k] = isPlain(v) &amp;&amp; isPlain(out[k]) ? mergeSafe(out[k], v) : v;
+  }
+  return out;
+}
+
+class Logger { constructor(level) { this.level = level; } log() { return 'logging'; } }
+
+const target = {
+  createdAt: new Date('2020-01-01T00:00:00Z'),
+  lookup: new Map([['a', 1]]),
+  logger: new Logger('info'),
+  tags: ['x'],
+};
+const source = {
+  createdAt: new Date('2024-06-15T00:00:00Z'),
+  lookup: new Map([['b', 2]]),
+  logger: new Logger('debug'),
+  tags: ['y'],
+};
+
+const naive = mergeNaive(target, source);
+const safe = mergeSafe(target, source);
+
+console.log('naive merge:');
+console.log('  createdAt instanceof Date?', naive.createdAt instanceof Date);
+console.log('  createdAt value          :', String(naive.createdAt).slice(0, 24));
+console.log('  lookup instanceof Map?   ', naive.lookup instanceof Map);
+console.log('  logger instanceof Logger?', naive.logger instanceof Logger);
+console.log('  tags                     :', JSON.stringify(naive.tags));
+
+console.log('');
+console.log('safe merge (plain-object check):');
+console.log('  createdAt instanceof Date?', safe.createdAt instanceof Date);
+console.log('  createdAt value          :', safe.createdAt.toISOString());
+console.log('  lookup instanceof Map?   ', safe.lookup instanceof Map,
+            ' entries', JSON.stringify([...safe.lookup]));
+console.log('  logger instanceof Logger?', safe.logger instanceof Logger,
+            ' level', safe.logger.level);
+console.log('  tags                     :', JSON.stringify(safe.tags));
+
+console.log('');
+console.log('The naive version recursed into a Date, found no own');
+console.log('enumerable keys, and produced a plain object that LOOKS');
+console.log('empty. Anything downstream calling .getTime() crashes,');
+console.log('far away from here.');
+console.log('');
+console.log('A merge should treat anything that is not a plain object');
+console.log('as a leaf: replace it wholesale.');</code></pre>
+  </div>
+
+  <h3>5. Not deciding the array policy, and letting it be discovered</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct code, undocumented behaviour</span></div>
+<pre><code>const isPlain = (v) =&gt; v !== null &amp;&amp; typeof v === 'object' &amp;&amp; v.constructor === Object;
+
+// lodash-style: arrays merged BY INDEX
+function mergeByIndex(target, source) {
+  const out = Array.isArray(target) ? [...target] : { ...target };
+  for (const [k, v] of Object.entries(source)) {
+    const existing = out[k];
+    if ((isPlain(v) &amp;&amp; isPlain(existing)) ||
+        (Array.isArray(v) &amp;&amp; Array.isArray(existing))) {
+      out[k] = mergeByIndex(existing, v);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+const cases = [
+  [{ hosts: ['a.com', 'b.com', 'c.com'] }, { hosts: ['only.com'] }],
+  [{ roles: ['admin', 'user'] }, { roles: ['guest'] }],
+  [{ matrix: [[1, 2], [3, 4]] }, { matrix: [[9]] }],
+];
+
+console.log('by-index merging:');
+for (const [t, s] of cases) {
+  const key = Object.keys(t)[0];
+  console.log('  ' + JSON.stringify(t[key]) + ' + ' + JSON.stringify(s[key]));
+  console.log('    = ' + JSON.stringify(mergeByIndex(t, s)[key]));
+}
+
+console.log('');
+console.log('Read those three results as a user would:');
+console.log('  "restrict the hosts to only.com" -> got three hosts');
+console.log('  "the role is guest"              -> still an admin');
+console.log('  "replace the matrix"             -> half the old one');
+console.log('');
+console.log('Every one is a security-relevant misreading, and none of');
+console.log('them throws.');
+
+console.log('');
+console.log('The fix is not a better algorithm -- it is a decision,');
+console.log('written down:');
+console.log('  "arrays in an override REPLACE the array beneath them"');
+console.log('and then a test that says so:');
+const replace = (t, s) =&gt; {
+  const out = { ...t };
+  for (const [k, v] of Object.entries(s)) {
+    out[k] = isPlain(v) &amp;&amp; isPlain(out[k]) ? replace(out[k], v) : v;
+  }
+  return out;
+};
+for (const [t, s] of cases) {
+  const key = Object.keys(t)[0];
+  console.log('  ' + JSON.stringify(replace(t, s)[key]));
+}</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the six-line version from memory</strong>, then say the array policy and the
+    <code>undefined</code> policy before you are asked.</li>
+    <li><strong>Add the <code>__proto__</code> guard</strong> and be able to name all three forbidden
+    keys and why <code>constructor</code> is one of them.</li>
+    <li><strong>Make it variadic.</strong> Step 6 &mdash; <code>mergeAll(a, b, c)</code>, left to
+    right.</li>
+    <li><strong>Write the isolating version.</strong> Step 7 &mdash; and explain the reused-defaults
+    bug it prevents.</li>
+    <li><strong>Deep equality.</strong> The next page &mdash; same recursion, mirror problem, and a
+    different set of traps.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Three lines of recursion, and three policies.</strong> The code is easy; what makes a
+    merge correct or wrong is what you decided about arrays, about <code>undefined</code>, and about
+    whether the result may alias its inputs. Say all three out loud, because a merge whose behaviour
+    the caller has to discover by experiment is a bug generator &mdash; and add the
+    <code>__proto__</code> guard the moment any of those keys come from a request.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="02-flatten-unflatten.html">&larr; Flatten &amp; Unflatten</a>
+  <a href="04-deep-equal.html">Next: Deep Equality Check &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

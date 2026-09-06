@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>First Non-Repeating Character</title>
+<meta name="description" content="Two simple passes beat one clever one — count everything, then scan in order for the first count of 1.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Strings &middot; Problem 10</p>
+  <h1>First Non-Repeating Character</h1>
+  <p class="standfirst">The lesson here is not a trick &mdash; it is that <strong>two simple passes
+  beat one clever pass</strong>. You cannot know whether a character repeats until you have seen the
+  whole string, so stop trying to decide on the first pass.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Return the index of the first character in the string that appears exactly once. If every
+  character repeats, return <code>-1</code>.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Answer</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">"leetcode"</td><td class="mono">0</td><td>the <code>l</code> appears once</td></tr>
+        <tr><td class="mono">"loveleetcode"</td><td class="mono">2</td><td>l and o repeat; <code>v</code> is first unique</td></tr>
+        <tr><td class="mono">"aabb"</td><td class="mono">-1</td><td>everything repeats</td></tr>
+        <tr><td class="mono">"z"</td><td class="mono">0</td><td></td></tr>
+        <tr><td class="mono">"abcabd"</td><td class="mono">2</td><td>the <code>c</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Row two rewards a careful read. In <code>"loveleetcode"</code>:</p>
+
+  <div class="trace">
+<pre>  l o v e l e e t c o d e
+  0 1 2 3 4 5 6 7 8 9 ...
+
+  l appears at 0 and 4          -> repeats
+  o appears at 1 and 9          -> repeats
+  v appears at 2 only           -> UNIQUE, and it is the earliest
+
+  answer: 2
+</pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Why one pass cannot work &mdash; on its own</span>
+    <p>Standing at index 0 of <code>"leetcode"</code>, is the <code>l</code> unique? You cannot know
+    without reading the rest of the string. That is not a limitation of your algorithm; it is a
+    property of the question. The information simply is not available yet.</p>
+    <p>So either read the string twice, or keep enough state on one pass to answer at the end
+    &mdash; which, as Step 7 shows, is still two passes wearing a disguise.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <p>For each character, scan the rest of the string looking for a second occurrence.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; check each against all</span></div>
+<pre><code>function firstUniqueBrute(s) {
+  for (let i = 0; i &lt; s.length; i++) {
+    let seenAgain = false;
+
+    for (let j = 0; j &lt; s.length; j++) {
+      if (i !== j &amp;&amp; s[i] === s[j]) {
+        seenAgain = true;
+        break;
+      }
+    }
+
+    if (!seenAgain) return i;
+  }
+
+  return -1;
+}
+
+console.log(firstUniqueBrute('leetcode'));       // 0
+console.log(firstUniqueBrute('loveleetcode'));   // 2
+console.log(firstUniqueBrute('aabb'));           // -1
+console.log(firstUniqueBrute('z'));              // 0
+console.log(firstUniqueBrute(''));               // -1</code></pre>
+  </div>
+
+  <p>Note <code>i !== j</code>. Without it, every character &ldquo;matches itself&rdquo; and the answer
+  is always <code>-1</code>. That is the single most common slip in this brute force.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>Every character scans the whole string: <strong>O(n&sup2;)</strong>. And it is entirely wasted
+  effort &mdash; each scan rediscovers counts that the previous scans already computed.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// The worst case for the brute force: every character's duplicate is
+// far away, so each inner scan has to travel half the string.
+const HALF = 6000;
+let base = '';
+for (let i = 0; i &lt; HALF; i++) base += String.fromCharCode(200 + i);
+const s = base + base + '!';        // '!' is the only unique character
+
+function brute(str) {
+  for (let i = 0; i &lt; str.length; i++) {
+    let dup = false;
+    for (let j = 0; j &lt; str.length; j++) {
+      if (i !== j &amp;&amp; str[i] === str[j]) { dup = true; break; }
+    }
+    if (!dup) return i;
+  }
+  return -1;
+}
+
+function twoPass(str) {
+  const counts = new Map();
+  for (const ch of str) counts.set(ch, (counts.get(ch) || 0) + 1);
+  for (let i = 0; i &lt; str.length; i++) {
+    if (counts.get(str[i]) === 1) return i;
+  }
+  return -1;
+}
+
+let t = performance.now();
+const a = brute(s);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const b = twoPass(s);
+const fastMs = performance.now() - t;
+
+console.log('check each against all :', a, 'in', bruteMs.toFixed(1) + ' ms');
+console.log('count then scan        :', b, 'in', fastMs.toFixed(2) + ' ms');
+console.log('same answer:', a === b);
+console.log('speed-up:', Math.round(bruteMs / Math.max(fastMs, 0.01)) + 'x');</code></pre>
+  </div>
+
+  <p>Notice why the brute force is so bad here specifically: every repeating character finds its
+  duplicate almost immediately, but the <em>outer</em> loop still has to reach the end, and the
+  unique character&rsquo;s own scan reads all 60,001 characters.</p>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; separate counting from deciding</h2>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p><strong>Pass 1:</strong> count every character. Do not decide anything.<br>
+    <strong>Pass 2:</strong> walk the string <em>in order</em> and return the first index whose count
+    is 1.</p>
+  </div>
+
+  <p>Two loops, each O(n), so O(n) total &mdash; sequential passes add. This is the same shape as
+  Set Matrix Zeroes: <em>collect first, act second</em>. When a decision needs information from the
+  whole input, gather it all before deciding anything.</p>
+
+  <h3>Why pass 2 must walk the string, not the map</h3>
+
+  <p>This is the detail that catches people. You might think: the map is in insertion order, so just
+  find the first entry with a count of 1. That happens to work in JavaScript &mdash; <code>Map</code>
+  preserves insertion order &mdash; but it is fragile reasoning:</p>
+
+  <ul>
+    <li>A plain object does <em>not</em> reliably preserve insertion order (integer-like keys jump to
+    the front).</li>
+    <li>The question asks for an <strong>index in the string</strong>, and the map does not store
+    indexes.</li>
+    <li>In most other languages a hash map has no meaningful order at all.</li>
+  </ul>
+
+  <p>Walking the string in pass 2 is unambiguous, needs no assumption about map ordering, and gives
+  you the index directly.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>s = "loveleetcode"</code>.</p>
+
+  <div class="trace">
+<pre>PASS 1 -- count everything
+
+  l -> {l:1}
+  o -> {l:1, o:1}
+  v -> {l:1, o:1, v:1}
+  e -> {l:1, o:1, v:1, e:1}
+  l -> {l:2, ...}
+  e -> {e:2, ...}
+  e -> {e:3, ...}
+  t -> {t:1, ...}
+  c -> {c:1, ...}
+  o -> {o:2, ...}
+  d -> {d:1, ...}
+  e -> {e:4, ...}
+
+final counts:  l:2  o:2  v:1  e:4  t:1  c:1  d:1
+
+PASS 2 -- walk the STRING in order
+
+  index 0  'l'  count 2   repeats, skip
+  index 1  'o'  count 2   repeats, skip
+  index 2  'v'  count 1   FOUND  ->  return 2
+</pre>
+  </div>
+
+  <p>Now the all-repeating case, <code>s = "aabb"</code>:</p>
+
+  <div class="trace">
+<pre>PASS 1   counts: a:2  b:2
+
+PASS 2
+  index 0 'a' count 2  skip
+  index 1 'a' count 2  skip
+  index 2 'b' count 2  skip
+  index 3 'b' count 2  skip
+
+reached the end without finding one  ->  return -1
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function firstUniqueExplained(s) {
+  const counts = new Map();
+
+  console.log('s = "' + s + '"');
+  console.log('');
+  console.log('PASS 1 -- count every character');
+
+  for (const ch of s) {
+    counts.set(ch, (counts.get(ch) || 0) + 1);
+    console.log("  '" + ch + "'  ->  " + JSON.stringify([...counts]));
+  }
+
+  console.log('');
+  console.log('PASS 2 -- walk the string in order, looking for a count of 1');
+
+  for (let i = 0; i &lt; s.length; i++) {
+    const n = counts.get(s[i]);
+    if (n === 1) {
+      console.log('  index ' + i + " '" + s[i] + "'  count 1  ->  FOUND");
+      console.log('');
+      return i;
+    }
+    console.log('  index ' + i + " '" + s[i] + "'  count " + n + '  repeats, skip');
+  }
+
+  console.log('  reached the end -> -1');
+  console.log('');
+  return -1;
+}
+
+console.log('ANSWER:', firstUniqueExplained('loveleetcode'));
+console.log('==========================================');
+console.log('ANSWER:', firstUniqueExplained('aabb'));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; a 26-slot counter array</span></div>
+<pre><code>function firstUniqueManual(s) {
+  // one counter per lowercase letter
+  const counts = [];
+  for (let i = 0; i &lt; 26; i++) counts[i] = 0;
+
+  // PASS 1: count
+  for (let i = 0; i &lt; s.length; i++) {
+    const idx = s.charCodeAt(i) - 97;
+    counts[idx] = counts[idx] + 1;
+  }
+
+  // PASS 2: first index whose character was counted exactly once
+  for (let i = 0; i &lt; s.length; i++) {
+    const idx = s.charCodeAt(i) - 97;
+    if (counts[idx] === 1) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+console.log(firstUniqueManual('leetcode'));       // 0
+console.log(firstUniqueManual('loveleetcode'));   // 2
+console.log(firstUniqueManual('aabb'));           // -1
+console.log(firstUniqueManual('z'));              // 0
+console.log(firstUniqueManual(''));               // -1
+console.log(firstUniqueManual('abcabd'));         // 2
+console.log(firstUniqueManual('aabbccdde'));      // 8</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the same, storing the index instead of a count</span></div>
+<pre><code>// A neat variant: store the FIRST index a character appeared at,
+// and overwrite it with -1 the moment you see it a second time.
+// Then the answer is the smallest surviving index.
+function firstUniqueByIndex(s) {
+  const firstAt = {};        // character -> first index, or -1 if repeated
+
+  for (let i = 0; i &lt; s.length; i++) {
+    const ch = s[i];
+    if (firstAt[ch] === undefined) {
+      firstAt[ch] = i;       // first time
+    } else {
+      firstAt[ch] = -1;      // seen before -> disqualified
+    }
+  }
+
+  let best = -1;
+  for (const ch in firstAt) {
+    const at = firstAt[ch];
+    if (at !== -1 &amp;&amp; (best === -1 || at &lt; best)) best = at;
+  }
+
+  return best;
+}
+
+console.log(firstUniqueByIndex('leetcode'));       // 0
+console.log(firstUniqueByIndex('loveleetcode'));   // 2
+console.log(firstUniqueByIndex('aabb'));           // -1
+console.log(firstUniqueByIndex('abcabd'));         // 2
+
+// Also two passes -- the second one walks the MAP rather than the
+// string, but it takes the minimum index explicitly rather than
+// relying on any ordering. That is what makes it safe.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function firstUniqChar(s) {
+  const counts = new Map();
+
+  for (const ch of s) counts.set(ch, (counts.get(ch) || 0) + 1);
+
+  for (let i = 0; i &lt; s.length; i++) {
+    if (counts.get(s[i]) === 1) return i;
+  }
+
+  return -1;
+}
+
+console.log(firstUniqChar('leetcode'));       // 0
+console.log(firstUniqChar('loveleetcode'));   // 2
+console.log(firstUniqChar('aabb'));           // -1
+console.log(firstUniqChar(''));               // -1
+console.log(firstUniqChar('Hello World'));    // 0  -- 'H'
+console.log(firstUniqChar('aA'));             // 0  -- case matters</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">the one-liner that is secretly O(n&sup2;)</span></div>
+<pre><code>function tempting(s) {
+  for (let i = 0; i &lt; s.length; i++) {
+    if (s.indexOf(s[i]) === s.lastIndexOf(s[i])) return i;
+  }
+  return -1;
+}
+
+console.log(tempting('leetcode'));       // 0
+console.log(tempting('loveleetcode'));   // 2
+console.log(tempting('aabb'));           // -1
+
+// The idea is lovely: a character is unique exactly when its first
+// and last occurrence are the same index.
+//
+// But indexOf and lastIndexOf each SCAN THE WHOLE STRING. Two scans
+// per character, inside a loop over every character: O(n^2).
+// It LOOKS like one clean pass. It is not.
+
+const HALF = 4000;
+let chunk = '';
+for (let i = 0; i &lt; HALF; i++) chunk += String.fromCharCode(200 + i);
+const big = chunk + chunk + '!';
+
+function counting(str) {
+  const c = new Map();
+  for (const ch of str) c.set(ch, (c.get(ch) || 0) + 1);
+  for (let i = 0; i &lt; str.length; i++) if (c.get(str[i]) === 1) return i;
+  return -1;
+}
+
+let t = performance.now();
+const a = tempting(big);
+const oneLinerMs = performance.now() - t;
+
+t = performance.now();
+const b = counting(big);
+const countMs = performance.now() - t;
+
+console.log('');
+console.log('indexOf one-liner :', a, 'in', oneLinerMs.toFixed(1) + ' ms');
+console.log('counting          :', b, 'in', countMs.toFixed(2) + ' ms');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the streaming version &mdash; a genuinely different problem</span></div>
+<pre><code>// "First unique character in a STREAM": characters arrive one at a
+// time and after each one you must report the current answer.
+// You cannot re-read the past, so two passes are impossible.
+//
+// Keep an ordered list of candidates plus a count map. Anything that
+// repeats is disqualified and drops out of the front when it reaches it.
+function createStream() {
+  const counts = new Map();
+  const queue = [];            // characters still possibly unique, in order
+
+  return {
+    push(ch) {
+      counts.set(ch, (counts.get(ch) || 0) + 1);
+      queue.push(ch);
+
+      // drop repeated characters from the front
+      while (queue.length &amp;&amp; counts.get(queue[0]) &gt; 1) queue.shift();
+
+      return queue.length ? queue[0] : null;
+    }
+  };
+}
+
+const stream = createStream();
+for (const ch of 'aabcbd') {
+  console.log("pushed '" + ch + "'  ->  first unique so far: " +
+              JSON.stringify(stream.push(ch)));
+}
+
+// a      -> 'a'
+// aa     -> null
+// aab    -> 'b'
+// aabc   -> 'b'
+// aabcb  -> 'c'
+// aabcbd -> 'c'
+//
+// Each character is pushed once and shifted at most once, so this is
+// O(1) amortised per character despite the inner while loop.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Check each against all</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td></tr>
+        <tr><td><code>indexOf</code> / <code>lastIndexOf</code></td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td></tr>
+        <tr><td><strong>Count, then scan</strong></td><td class="mono">O(n)</td><td class="mono">O(k)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><code>k</code> is the alphabet size &mdash; 26 for lowercase letters, so effectively constant.</p>
+
+  <p><strong>Two passes is still O(n).</strong> Worth saying explicitly, because people hesitate to
+  call a two-loop solution linear. n + n = 2n, and constants drop. You could make ten passes and
+  still be O(n). It is only <em>nesting</em> that multiplies.</p>
+
+  <p>The <code>indexOf</code> version is the interesting row: it is one visible loop and is still
+  quadratic, because each built-in call hides a full scan. That is the same trap as
+  <code>arr.includes(x)</code> inside a loop, and it is why every page here writes the manual version
+  first.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;You cannot tell whether the first character is unique until you have read the whole
+    string, so I use two passes: count every character into a map, then walk the string in order and
+    return the first index whose count is 1. O(n) time and O(k) space for the alphabet. I scan the
+    string rather than the map in the second pass, because I need the index and because map ordering
+    is not something I want to rely on.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Trying to answer during the first pass</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; decides too early</span></div>
+<pre><code>function broken(s) {
+  const seen = new Set();
+  for (let i = 0; i &lt; s.length; i++) {
+    if (!seen.has(s[i])) {
+      seen.add(s[i]);
+      return i;              // "first character I have not seen" -- bug
+    }
+  }
+  return -1;
+}
+
+console.log(broken('leetcode'));       // 0   right, by luck
+console.log(broken('loveleetcode'));   // 0   WRONG, should be 2
+console.log(broken('aabb'));           // 0   WRONG, should be -1
+
+// "The first character I have not seen before" is always index 0.
+// Unique means it never appears again EITHER -- information that
+// does not exist until the end of the string.</code></pre>
+  </div>
+
+  <h3>2. Walking the map instead of the string</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; a plain object reorders keys</span></div>
+<pre><code>function broken(s) {
+  const counts = {};
+  for (const ch of s) counts[ch] = (counts[ch] || 0) + 1;
+
+  for (const ch in counts) {           // walking the OBJECT -- bug
+    if (counts[ch] === 1) return s.indexOf(ch);
+  }
+  return -1;
+}
+
+console.log(broken('loveleetcode'));   // 2   right, letters keep their order
+console.log(broken('b1a'));            // 1   WRONG, should be 0
+
+// In "b1a" every character is unique, so the answer is index 0.
+// But the object's keys come out as ['1','b','a'] -- integer-like
+// keys are listed FIRST, whatever the insertion order. So it finds
+// '1' and returns its index, 1.
+const o = {};
+o['b'] = 1; o['1'] = 1; o['a'] = 1;
+console.log('key order:', Object.keys(o));   // ['1','b','a']</code></pre>
+  </div>
+
+  <h3>3. Forgetting <code>i !== j</code> in the brute force</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; every character matches itself</span></div>
+<pre><code>function broken(s) {
+  for (let i = 0; i &lt; s.length; i++) {
+    let dup = false;
+    for (let j = 0; j &lt; s.length; j++) {
+      if (s[i] === s[j]) { dup = true; break; }     // no i !== j -- bug
+    }
+    if (!dup) return i;
+  }
+  return -1;
+}
+
+console.log(broken('leetcode'));   // -1   WRONG, should be 0
+console.log(broken('abc'));        // -1   WRONG, should be 0
+
+// At j === i the character trivially equals itself, so every
+// character is declared a duplicate and nothing is ever unique.</code></pre>
+  </div>
+
+  <h3>4. Returning the character instead of the index</h3>
+
+  <p><code>"leetcode"</code> answers <code>0</code>, not <code>"l"</code>. Read the signature.
+  If the question does want the character, return <code>s[i]</code> &mdash; but decide deliberately
+  rather than by accident, and say which you are returning.</p>
+
+  <h3>5. Assuming lowercase a&ndash;z</h3>
+
+  <p>The 26-slot array breaks on <code>"Hello World"</code>: <code>'H'.charCodeAt(0) - 97</code> is
+  <code>-25</code>, and <code>' '.charCodeAt(0) - 97</code> is <code>-65</code>. Negative indexes do
+  not throw &mdash; they quietly become object properties &mdash; so the counts are silently wrong.
+  Use a <code>Map</code> unless the input is guaranteed lowercase.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the six-line version from memory</strong>, then say out loud why two passes are
+    unavoidable.</li>
+    <li><strong>First repeating character.</strong> The mirror image &mdash; and this one
+    <em>can</em> be done in one pass, because &ldquo;have I seen this before?&rdquo; is answerable
+    immediately. Work out why the two problems differ.</li>
+    <li><strong>Last non-repeating character.</strong> Same counts, second pass walking backwards.</li>
+    <li><strong>First non-repeating word.</strong> Split on whitespace and apply the identical
+    algorithm to words instead of characters. The technique does not care what it is counting.</li>
+    <li><strong>The streaming version.</strong> It is in Step 7 &mdash; write it from memory, then
+    explain why the inner <code>while</code> loop does not make it quadratic.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>If the answer depends on information from the whole input, make two passes.</strong>
+    Trying to be clever in one pass is how you get subtly wrong solutions. Two O(n) passes are still
+    O(n), and the resulting code is obviously correct, which is worth far more than a single loop you
+    have to squint at.</p>
+    <p>And the second half of the lesson: <strong>a built-in method inside a loop can hide a whole
+    scan.</strong> The <code>indexOf</code> one-liner reads like a single pass and is quadratic.
+    Whenever a solution looks suspiciously short, ask what each method call actually costs.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="09-minimum-window-substring.html">&larr; Minimum Window Substring</a>
+  <a href="../hashmap/01-top-k-frequent.html">Next topic: Hash map &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

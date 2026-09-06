@@ -1,0 +1,933 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Permutations</title>
+<meta name="description" content="Every ordering of every element — the same backtracking triple, with a used-set instead of a start index.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Recursion &middot; Problem 02</p>
+  <h1>Permutations</h1>
+  <p class="standfirst">Same backtracking triple as Subsets, one change: order matters now, so you
+  cannot use a <code>start</code> index to keep things moving forward. Instead you track
+  <strong>which elements are already used</strong> &mdash; and every unused one is a candidate.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Return every possible ordering of the array. All elements are used every time; only the order
+  changes.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Count</th><th>Permutations</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[]</td><td class="mono">1</td><td class="mono">[[]]</td></tr>
+        <tr><td class="mono">[1]</td><td class="mono">1</td><td class="mono">[1]</td></tr>
+        <tr><td class="mono">[1,2]</td><td class="mono">2</td><td class="mono">[1,2], [2,1]</td></tr>
+        <tr><td class="mono">[1,2,3]</td><td class="mono">6</td><td class="mono">[1,2,3], [1,3,2], [2,1,3], [2,3,1], [3,1,2], [3,2,1]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why the count is n factorial</span>
+    <p><code>n</code> choices for the first position, then <code>n - 1</code> remaining for the
+    second, <code>n - 2</code> for the third, and so on:
+    <code>n &times; (n-1) &times; &hellip; &times; 1 = n!</code></p>
+    <p>That grows terrifyingly fast. 10 elements is 3.6&nbsp;million. 13 is over six billion.
+    20 is more permutations than there are atoms in a person. <strong>Permutation problems are
+    only ever asked with small inputs.</strong></p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">how fast n! grows</span></div>
+<pre><code>let fact = 1;
+console.log('n    n!                          2^n');
+for (let n = 1; n &lt;= 20; n++) {
+  fact *= n;
+  console.log(String(n).padEnd(5) +
+              fact.toLocaleString('en-US').padEnd(28) +
+              (2 ** n).toLocaleString('en-US'));
+}
+console.log('');
+console.log('Subsets (2^n) at n=20: about a million -- fine.');
+console.log('Permutations (n!) at n=20: 2.4 quintillion -- impossible.');
+console.log('This is why permutation problems cap n at around 8.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; insert into every position</h2>
+
+  <p>An approach with no recursion: build up one element at a time, inserting the new element into
+  <strong>every possible slot</strong> of every permutation you already have.</p>
+
+  <div class="trace">
+<pre>  start:      [[]]
+
+  add 1:      insert 1 into the 1 slot of []
+              [[1]]
+
+  add 2:      insert 2 into the 2 slots of [1]
+              [2,1]  [1,2]
+
+  add 3:      insert 3 into the 3 slots of each
+              from [2,1]:  [3,2,1] [2,3,1] [2,1,3]
+              from [1,2]:  [3,1,2] [1,3,2] [1,2,3]
+
+  6 permutations. The list multiplies by k at step k -- which is
+  exactly n! by the end.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; iterative insertion</span></div>
+<pre><code>function permutationsIterative(nums) {
+  let result = [[]];
+
+  for (const n of nums) {
+    const next = [];
+
+    for (const perm of result) {
+      // insert n at every position, including the very end
+      for (let pos = 0; pos &lt;= perm.length; pos++) {
+        next.push([...perm.slice(0, pos), n, ...perm.slice(pos)]);
+      }
+    }
+
+    result = next;
+    console.log('after adding ' + n + ': ' + JSON.stringify(result));
+  }
+
+  return result;
+}
+
+console.log('');
+console.log('ANSWER:', JSON.stringify(permutationsIterative([1, 2, 3])));
+console.log('');
+console.log('count for 4 elements:', permutationsIterative([1,2,3,4]).length);  // 24</code></pre>
+  </div>
+
+  <p>A complete and correct answer, and a good one to mention. Its weakness is the same as the
+  iterative subsets version: it cannot <strong>prune</strong>, and it does not generalise to
+  problems with constraints.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why recursion wins here too</h2>
+
+  <p>Both approaches are O(n &middot; n!) and that is optimal &mdash; the output alone is that big.
+  The difference is again pruning: with backtracking you can abandon a partial ordering the moment it
+  violates a rule, instead of generating all n! and filtering.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; pruning versus filtering</span></div>
+<pre><code>const N = 9;
+const nums = [];
+for (let i = 1; i &lt;= N; i++) nums.push(i);
+
+// rule: no two adjacent elements may differ by exactly 1
+const ok = (a, b) =&gt; Math.abs(a - b) !== 1;
+
+function generateThenFilter(nums) {
+  let result = [[]];
+  for (const n of nums) {
+    const next = [];
+    for (const perm of result) {
+      for (let pos = 0; pos &lt;= perm.length; pos++) {
+        next.push([...perm.slice(0, pos), n, ...perm.slice(pos)]);
+      }
+    }
+    result = next;
+  }
+  return result.filter(p =&gt; {
+    for (let i = 1; i &lt; p.length; i++) if (!ok(p[i - 1], p[i])) return false;
+    return true;
+  });
+}
+
+function pruneEarly(nums) {
+  const out = [];
+  const path = [];
+  const used = new Array(nums.length).fill(false);
+
+  function go() {
+    if (path.length === nums.length) { out.push([...path]); return; }
+
+    for (let i = 0; i &lt; nums.length; i++) {
+      if (used[i]) continue;
+      // PRUNE: reject the choice before recursing into it
+      if (path.length &gt; 0 &amp;&amp; !ok(path[path.length - 1], nums[i])) continue;
+
+      used[i] = true;
+      path.push(nums[i]);
+      go();
+      path.pop();
+      used[i] = false;
+    }
+  }
+
+  go();
+  return out;
+}
+
+let t = performance.now();
+const a = generateThenFilter(nums);
+const filterMs = performance.now() - t;
+
+t = performance.now();
+const b = pruneEarly(nums);
+const pruneMs = performance.now() - t;
+
+let f = 1;
+for (let i = 2; i &lt;= N; i++) f *= i;
+
+console.log('generate all ' + f.toLocaleString('en-US') +
+            ' then filter : ' + a.length + ' kept, ' + filterMs.toFixed(1) + ' ms');
+console.log('prune while building              : ' + b.length + ' built, ' +
+            pruneMs.toFixed(1) + ' ms');
+console.log('same count:', a.length === b.length);
+console.log('speed-up:', Math.round(filterMs / Math.max(pruneMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; track what is used</h2>
+
+  <p>In Subsets, the loop started at <code>start</code> and recursed with <code>i + 1</code>, which
+  forced the choices to move forward and made <code>[2,1]</code> impossible. That was exactly right
+  there &mdash; and it is exactly wrong here, because order <em>is</em> the point.</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Drop the <code>start</code> index. Loop over <strong>all</strong> indexes every time, and skip
+    the ones already in the path. Track that with a <code>used</code> array.</p>
+    <p>The base case is now <code>path.length === nums.length</code>: a permutation is only complete
+    when every element has been placed.</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th></th><th>Subsets</th><th>Permutations</th></tr></thead>
+      <tbody>
+        <tr><td>Loop</td><td class="mono">for (i = start; ...)</td><td class="mono">for (i = 0; ...)</td></tr>
+        <tr><td>Skip</td><td>nothing &mdash; index order handles it</td><td class="mono">if (used[i]) continue</td></tr>
+        <tr><td>Recurse</td><td class="mono">go(i + 1)</td><td class="mono">go()</td></tr>
+        <tr><td>Record</td><td>at every node</td><td>only at full length</td></tr>
+        <tr><td>Un-choose</td><td class="mono">path.pop()</td><td class="mono">path.pop(); used[i] = false</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>That table is the whole page. Learn one skeleton and change five lines.</p>
+
+  <div class="trace">
+<pre>                        []
+          1 /         2 |         \ 3
+         [1]          [2]          [3]
+      2 /  \ 3     1 /  \ 3     1 /  \ 2
+   [1,2]  [1,3]  [2,1]  [2,3]  [3,1]  [3,2]
+     |3     |2     |3     |1     |2     |1
+  [1,2,3][1,3,2][2,1,3][2,3,1][3,1,2][3,2,1]
+
+  Every leaf is a permutation. Note that the SAME element appears
+  at different depths on different branches -- that is what `used`
+  is for.
+</pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Two things to undo, not one</span>
+    <p>The un-choose step now has <strong>two</strong> statements:
+    <code>path.pop()</code> and <code>used[i] = false</code>. Forget the second and each element gets
+    used at most once across the entire run &mdash; you get one permutation instead of n!.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace the recursion</h2>
+
+  <p><code>nums = [1, 2, 3]</code>.</p>
+
+  <div class="trace">
+<pre>go()  path=[]  used=[F,F,F]
+  i=0  take 1   path=[1]  used=[T,F,F]
+    go()
+      i=0  used -> skip
+      i=1  take 2   path=[1,2]  used=[T,T,F]
+        go()
+          i=2  take 3   path=[1,2,3]  used=[T,T,T]
+            go()  length 3 == 3  ->  RECORD [1,2,3]
+          undo 3   path=[1,2]  used=[T,T,F]
+      undo 2   path=[1]  used=[T,F,F]
+      i=2  take 3   path=[1,3]  used=[T,F,T]
+        go()
+          i=1  take 2   path=[1,3,2]  ->  RECORD [1,3,2]
+          undo 2
+      undo 3   path=[1]  used=[T,F,F]
+  undo 1   path=[]  used=[F,F,F]
+
+  i=1  take 2   ->  eventually RECORD [2,1,3] and [2,3,1]
+  i=2  take 3   ->  eventually RECORD [3,1,2] and [3,2,1]
+
+6 permutations.
+</pre>
+  </div>
+
+  <p>Watch <code>used</code> return to <code>[F,F,F]</code> every time the recursion comes back up.
+  Both the path and the used array are restored to exactly the state the caller left them in &mdash;
+  that is the invariant.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function permuteExplained(nums) {
+  const out = [];
+  const path = [];
+  const used = new Array(nums.length).fill(false);
+
+  const flags = () =&gt; '[' + used.map(u =&gt; u ? 'T' : 'F').join(',') + ']';
+
+  function go(depth) {
+    const pad = '  '.repeat(depth);
+
+    if (path.length === nums.length) {
+      out.push([...path]);
+      console.log(pad + 'complete -> RECORD [' + path.join(',') + ']');
+      return;
+    }
+
+    for (let i = 0; i &lt; nums.length; i++) {
+      if (used[i]) {
+        console.log(pad + 'i=' + i + ' (' + nums[i] + ') already used -- skip');
+        continue;
+      }
+
+      used[i] = true;
+      path.push(nums[i]);
+      console.log(pad + 'take ' + nums[i] + '   path=[' + path.join(',') +
+                  ']  used=' + flags());
+
+      go(depth + 1);
+
+      path.pop();
+      used[i] = false;
+      console.log(pad + 'undo ' + nums[i] + '   path=[' + path.join(',') +
+                  ']  used=' + flags());
+    }
+  }
+
+  go(0);
+  console.log('');
+  return out;
+}
+
+console.log('ANSWER:', JSON.stringify(permuteExplained([1, 2, 3])));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; used array, no spread or push</span></div>
+<pre><code>function permuteManual(nums) {
+  const out = [];
+  let outCount = 0;
+
+  const path = [];
+  let pathLength = 0;
+
+  const used = [];
+  for (let i = 0; i &lt; nums.length; i++) used[i] = false;
+
+  function copyPath() {
+    const copy = [];
+    for (let i = 0; i &lt; pathLength; i++) copy[i] = path[i];
+    return copy;
+  }
+
+  function go() {
+    if (pathLength === nums.length) {
+      out[outCount] = copyPath();
+      outCount = outCount + 1;
+      return;
+    }
+
+    for (let i = 0; i &lt; nums.length; i++) {
+      if (used[i] === true) continue;
+
+      used[i] = true;                   // choose
+      path[pathLength] = nums[i];
+      pathLength = pathLength + 1;
+
+      go();                             // explore
+
+      pathLength = pathLength - 1;      // un-choose -- BOTH parts
+      used[i] = false;
+    }
+  }
+
+  go();
+  return out;
+}
+
+console.log(JSON.stringify(permuteManual([1, 2, 3])));
+console.log(JSON.stringify(permuteManual([1, 2])));
+console.log(JSON.stringify(permuteManual([1])));
+console.log(JSON.stringify(permuteManual([])));
+console.log('count for 4:', permuteManual([1,2,3,4]).length);      // 24
+console.log('count for 5:', permuteManual([1,2,3,4,5]).length);    // 120
+console.log('count for 6:', permuteManual([1,2,3,4,5,6]).length);  // 720</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; the swap version, no used array at all</span></div>
+<pre><code>// A different idea: instead of tracking what is used, SWAP the
+// chosen element into position `k` and permute the rest.
+// Everything from index k onwards is "not yet placed".
+function permuteBySwapping(input) {
+  const a = [];
+  for (let i = 0; i &lt; input.length; i++) a[i] = input[i];
+
+  const out = [];
+  let count = 0;
+
+  function swap(x, y) {
+    const t = a[x]; a[x] = a[y]; a[y] = t;
+  }
+
+  function go(k) {
+    if (k === a.length) {
+      const copy = [];
+      for (let i = 0; i &lt; a.length; i++) copy[i] = a[i];
+      out[count] = copy;
+      count = count + 1;
+      return;
+    }
+
+    for (let i = k; i &lt; a.length; i++) {
+      swap(k, i);        // choose: put a[i] in position k
+      go(k + 1);         // explore: permute the rest
+      swap(k, i);        // un-choose: put it back
+    }
+  }
+
+  go(0);
+  return out;
+}
+
+console.log(JSON.stringify(permuteBySwapping([1, 2, 3])));
+console.log('count for 4:', permuteBySwapping([1,2,3,4]).length);   // 24
+console.log(JSON.stringify(permuteBySwapping([])));                 // [[]]
+
+// No `used` array, no `path` array -- the array IS the state.
+// O(1) extra space beyond the output and the call stack.
+// The trade: the output order differs from the used-array version,
+// and it is harder to add "skip duplicates" logic. Know both.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">checking all three agree</span></div>
+<pre><code>function usedArray(nums) {
+  const out = [], path = [], used = new Array(nums.length).fill(false);
+  (function go() {
+    if (path.length === nums.length) { out.push([...path]); return; }
+    for (let i = 0; i &lt; nums.length; i++) {
+      if (used[i]) continue;
+      used[i] = true; path.push(nums[i]);
+      go();
+      path.pop(); used[i] = false;
+    }
+  })();
+  return out;
+}
+
+function swapping(input) {
+  const a = [...input], out = [];
+  (function go(k) {
+    if (k === a.length) { out.push([...a]); return; }
+    for (let i = k; i &lt; a.length; i++) {
+      [a[k], a[i]] = [a[i], a[k]];
+      go(k + 1);
+      [a[k], a[i]] = [a[i], a[k]];
+    }
+  })(0);
+  return out;
+}
+
+function insertion(nums) {
+  let result = [[]];
+  for (const n of nums) {
+    const next = [];
+    for (const p of result)
+      for (let pos = 0; pos &lt;= p.length; pos++)
+        next.push([...p.slice(0, pos), n, ...p.slice(pos)]);
+    result = next;
+  }
+  return result;
+}
+
+const normalise = list =&gt;
+  JSON.stringify(list.map(p =&gt; p.join(',')).sort());
+
+let agree = 0;
+for (let n = 0; n &lt;= 6; n++) {
+  const nums = [];
+  for (let i = 1; i &lt;= n; i++) nums.push(i);
+
+  const a = normalise(usedArray(nums));
+  const b = normalise(swapping(nums));
+  const c = normalise(insertion(nums));
+
+  if (a === b &amp;&amp; b === c) agree++;
+  else console.log('DISAGREE at n=' + n);
+}
+console.log('sizes 0 through 6, all three methods agree:', agree + '/7');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function permute(nums) {
+  const out = [];
+  const path = [];
+  const used = new Array(nums.length).fill(false);
+
+  function backtrack() {
+    if (path.length === nums.length) {
+      out.push([...path]);
+      return;
+    }
+
+    for (let i = 0; i &lt; nums.length; i++) {
+      if (used[i]) continue;
+
+      used[i] = true;          // choose
+      path.push(nums[i]);
+
+      backtrack();             // explore
+
+      path.pop();              // un-choose
+      used[i] = false;
+    }
+  }
+
+  backtrack();
+  return out;
+}
+
+console.log(JSON.stringify(permute([1, 2, 3])));
+console.log(JSON.stringify(permute([0, 1])));
+console.log(JSON.stringify(permute([1])));
+console.log('count for 5:', permute([1,2,3,4,5]).length);   // 120</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">permutations with duplicates in the input</span></div>
+<pre><code>// [1,1,2] has 3 distinct permutations, not 6. Sort first so equal
+// values are adjacent, then skip an unused duplicate whose twin
+// has not been used yet at this level.
+function permuteUnique(nums) {
+  const sorted = [...nums].sort((a, b) =&gt; a - b);
+  const out = [], path = [];
+  const used = new Array(sorted.length).fill(false);
+
+  function go() {
+    if (path.length === sorted.length) { out.push([...path]); return; }
+
+    for (let i = 0; i &lt; sorted.length; i++) {
+      if (used[i]) continue;
+
+      // the key line: if this value equals the previous one AND the
+      // previous one is not currently used, then the previous one
+      // was already tried at this level -- skip to avoid a repeat
+      if (i &gt; 0 &amp;&amp; sorted[i] === sorted[i - 1] &amp;&amp; !used[i - 1]) continue;
+
+      used[i] = true;
+      path.push(sorted[i]);
+      go();
+      path.pop();
+      used[i] = false;
+    }
+  }
+
+  go();
+  return out;
+}
+
+console.log('[1,1,2]  :', JSON.stringify(permuteUnique([1,1,2])));
+// [[1,1,2],[1,2,1],[2,1,1]]   -- 3, not 6
+
+console.log('[1,1,1]  :', JSON.stringify(permuteUnique([1,1,1])));
+// [[1,1,1]]                   -- 1, not 6
+
+console.log('[1,2,2,3]:', permuteUnique([1,2,2,3]).length);   // 12, not 24
+console.log('[1,2,3]  :', permuteUnique([1,2,3]).length);      // 6, unaffected
+
+// Why !used[i-1] and not used[i-1]?
+// If the previous duplicate IS used, we are deeper in the tree and
+// this is a legitimate second copy. If it is NOT used, we already
+// finished exploring it as this level's choice -- so choosing an
+// identical value here would produce the same subtree again.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the constrained variations &mdash; where pruning pays</span></div>
+<pre><code>// 1. Permutations where no element sits in its own original index
+//    (a "derangement")
+function derangements(nums) {
+  const out = [], path = [];
+  const used = new Array(nums.length).fill(false);
+
+  function go() {
+    if (path.length === nums.length) { out.push([...path]); return; }
+    const position = path.length;
+
+    for (let i = 0; i &lt; nums.length; i++) {
+      if (used[i]) continue;
+      if (i === position) continue;       // PRUNE: no fixed points
+
+      used[i] = true; path.push(nums[i]);
+      go();
+      path.pop(); used[i] = false;
+    }
+  }
+
+  go();
+  return out;
+}
+
+console.log('derangements of [1,2,3]:', JSON.stringify(derangements([1,2,3])));
+// [[2,3,1],[3,1,2]]  -- 2 of the 6
+console.log('derangements of [1,2,3,4]:', derangements([1,2,3,4]).length);  // 9
+
+// 2. Permutations of a STRING, as strings
+function stringPermutations(s) {
+  const chars = [...s];
+  const out = [], path = [];
+  const used = new Array(chars.length).fill(false);
+  function go() {
+    if (path.length === chars.length) { out.push(path.join('')); return; }
+    for (let i = 0; i &lt; chars.length; i++) {
+      if (used[i]) continue;
+      used[i] = true; path.push(chars[i]);
+      go();
+      path.pop(); used[i] = false;
+    }
+  }
+  go();
+  return out;
+}
+
+console.log('');
+console.log('permutations of "abc":', stringPermutations('abc'));
+
+// 3. Just the NEXT permutation in lexicographic order -- O(n), no
+//    recursion. This is what you use when n! is too big to enumerate.
+function nextPermutation(nums) {
+  const a = [...nums];
+  let i = a.length - 2;
+
+  // find the rightmost element that is smaller than its successor
+  while (i &gt;= 0 &amp;&amp; a[i] &gt;= a[i + 1]) i--;
+
+  if (i &gt;= 0) {
+    // find the rightmost element bigger than a[i], and swap
+    let j = a.length - 1;
+    while (a[j] &lt;= a[i]) j--;
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+
+  // reverse the suffix -- it was descending, now it is the smallest
+  let lo = i + 1, hi = a.length - 1;
+  while (lo &lt; hi) { [a[lo], a[hi]] = [a[hi], a[lo]]; lo++; hi--; }
+
+  return a;
+}
+
+console.log('');
+let p = [1, 2, 3];
+for (let step = 0; step &lt; 6; step++) {
+  console.log('  ' + JSON.stringify(p));
+  p = nextPermutation(p);
+}
+console.log('  wraps back to:', JSON.stringify(p));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Working space</th></tr></thead>
+      <tbody>
+        <tr><td>Iterative insertion</td><td class="mono">O(n &middot; n!)</td><td class="mono">O(n &middot; n!)</td></tr>
+        <tr><td><strong>Backtracking, used array</strong></td><td class="mono">O(n &middot; n!)</td><td class="mono">O(n)</td></tr>
+        <tr><td>Backtracking, swapping</td><td class="mono">O(n &middot; n!)</td><td class="mono">O(n) stack only</td></tr>
+        <tr><td>Next permutation</td><td class="mono">O(n) per call</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Why <code>n &middot; n!</code>:</strong> there are <code>n!</code> permutations, and
+  copying each one into the output costs <code>n</code>. The recursion tree itself has fewer than
+  <code>2 &middot; n!</code> nodes, so the copying dominates.</p>
+
+  <p>Working space is O(n): the path, the used array and the call stack are each at most
+  <code>n</code> deep. The output is O(n &middot; n!) and unavoidable.</p>
+
+  <p>The last row is worth remembering. When <code>n!</code> is too large to enumerate but you need
+  to <em>step through</em> permutations, <code>nextPermutation</code> gives the next one in O(n) with
+  no recursion and no memory &mdash; which is how <code>std::next_permutation</code> works and how
+  you iterate permutations lazily.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Order matters, so unlike Subsets I cannot use a start index &mdash; every unused element
+    is a candidate at every position. I keep a <code>used</code> boolean array, loop over all indexes
+    skipping used ones, and record when the path reaches full length. Choose, explore, then un-choose
+    <em>both</em> the path push and the used flag. O(n&middot;n!) time, O(n) working space. For
+    duplicate inputs I sort first and skip a value equal to its predecessor when that predecessor is
+    unused, which prevents generating the same subtree twice.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Forgetting to reset <code>used[i]</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; only one permutation</span></div>
+<pre><code>function broken(nums) {
+  const out = [], path = [];
+  const used = new Array(nums.length).fill(false);
+
+  function go() {
+    if (path.length === nums.length) { out.push([...path]); return; }
+    for (let i = 0; i &lt; nums.length; i++) {
+      if (used[i]) continue;
+      used[i] = true;
+      path.push(nums[i]);
+      go();
+      path.pop();
+      // used[i] = false  MISSING -- bug
+    }
+  }
+
+  go();
+  return out;
+}
+
+console.log(JSON.stringify(broken([1, 2, 3])));   // [[1,2,3]]  -- only ONE
+console.log('count:', broken([1,2,3,4]).length);  // 1, should be 24
+
+// Once an element is marked used it stays used forever, so after
+// the first full path no branch can find anything to choose.
+// The un-choose step has TWO parts.</code></pre>
+  </div>
+
+  <h3>2. Keeping the <code>start</code> index from Subsets</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; that generates subsets, not orderings</span></div>
+<pre><code>function broken(nums) {
+  const out = [], path = [];
+  function go(start) {
+    if (path.length === nums.length) { out.push([...path]); return; }
+    for (let i = start; i &lt; nums.length; i++) {    // start index -- bug
+      path.push(nums[i]);
+      go(i + 1);
+      path.pop();
+    }
+  }
+  go(0);
+  return out;
+}
+
+console.log(JSON.stringify(broken([1, 2, 3])));   // [[1,2,3]]  -- only ONE
+console.log('count:', broken([1,2,3]).length);    // 1, should be 6
+
+// `i + 1` forbids ever going back to an earlier index, so [2,1] is
+// unreachable. That restriction is exactly what you WANT for
+// subsets and exactly what you must remove for permutations.</code></pre>
+  </div>
+
+  <h3>3. Recording at every node</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; partial paths are not permutations</span></div>
+<pre><code>function broken(nums) {
+  const out = [], path = [];
+  const used = new Array(nums.length).fill(false);
+  function go() {
+    out.push([...path]);              // records EVERY node -- bug
+    for (let i = 0; i &lt; nums.length; i++) {
+      if (used[i]) continue;
+      used[i] = true; path.push(nums[i]);
+      go();
+      path.pop(); used[i] = false;
+    }
+  }
+  go();
+  return out;
+}
+
+const r = broken([1, 2, 3]);
+console.log('count:', r.length);      // 16, should be 6
+console.log(JSON.stringify(r));
+// includes [], [1], [1,2] -- partial orderings
+
+// Subsets records at every node because a partial subset IS a
+// subset. A partial permutation is not a permutation. Record only
+// when the path is full.</code></pre>
+  </div>
+
+  <h3>4. Using <code>path.includes()</code> instead of a used array</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct, and quietly slower &mdash; plus one real bug</span></div>
+<pre><code>function withIncludes(nums) {
+  const out = [], path = [];
+  function go() {
+    if (path.length === nums.length) { out.push([...path]); return; }
+    for (const n of nums) {
+      if (path.includes(n)) continue;        // O(n) scan, every time
+      path.push(n);
+      go();
+      path.pop();
+    }
+  }
+  go();
+  return out;
+}
+
+console.log(JSON.stringify(withIncludes([1, 2, 3])));   // correct
+
+// Problem one: includes() is an O(n) scan inside the loop, so the
+// whole thing becomes O(n^2 * n!) instead of O(n * n!).
+const N = 8;
+const nums = [];
+for (let i = 1; i &lt;= N; i++) nums.push(i);
+
+function withUsed(nums) {
+  const out = [], path = [], used = new Array(nums.length).fill(false);
+  (function go() {
+    if (path.length === nums.length) { out.push([...path]); return; }
+    for (let i = 0; i &lt; nums.length; i++) {
+      if (used[i]) continue;
+      used[i] = true; path.push(nums[i]);
+      go();
+      path.pop(); used[i] = false;
+    }
+  })();
+  return out;
+}
+
+let t = performance.now();
+withIncludes(nums);
+const incMs = performance.now() - t;
+
+t = performance.now();
+withUsed(nums);
+const usedMs = performance.now() - t;
+
+console.log('');
+console.log('includes(): ' + incMs.toFixed(1) + ' ms');
+console.log('used array: ' + usedMs.toFixed(1) + ' ms');
+
+// Problem two, and it is worse: it tracks VALUES, not POSITIONS.
+// With a duplicate in the input it silently loses permutations:
+console.log('');
+console.log('includes on [1,1,2]:', JSON.stringify(withIncludes([1,1,2])));
+// [] -- no permutation can ever use both 1s
+console.log('used on [1,1,2]    :', JSON.stringify(withUsed([1,1,2])));
+// all 6, including the duplicated ones</code></pre>
+  </div>
+
+  <h3>5. Attempting it on a large input</h3>
+
+  <p><code>13!</code> is over six billion. There is no clever trick &mdash; the output does not fit.
+  If a problem seems to want all permutations of a large array, you have misread it: it almost
+  certainly wants a <em>count</em>, the <em>next</em> permutation, the <em>k</em>th permutation, or
+  the <em>best</em> permutation under some rule. All three of those have polynomial solutions.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the used-array version from memory</strong>, then say the two-part un-choose out
+    loud. Compare it against the Subsets skeleton line by line.</li>
+    <li><strong>Permutations with duplicates.</strong> In Step 7 &mdash; write it from memory and
+    explain the <code>!used[i - 1]</code> condition. Test on <code>[1,1,1]</code>, which must give
+    exactly one result.</li>
+    <li><strong>The swap version.</strong> Also in Step 6. Write it from memory and note that it needs
+    no auxiliary arrays at all.</li>
+    <li><strong>Next permutation.</strong> In Step 7. O(n), no recursion, and the algorithm has a
+    genuinely nice justification &mdash; work out why the suffix must be reversed.</li>
+    <li><strong>Letter Combinations of a Phone Number.</strong> The same skeleton, but the choices at
+    each position come from a different set (the letters on that digit) rather than from a shared
+    pool. A good check that you have the pattern rather than the code.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>The skeleton is fixed; the constraint changes.</strong> Subsets and Permutations differ
+    in five lines: how the loop starts, what it skips, what it recurses with, when it records, and
+    what it undoes. Before writing any backtracking problem, answer those five questions explicitly
+    &mdash; and then the code writes itself, including the pruning.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="01-subsets.html">&larr; Subsets</a>
+  <a href="03-combination-sum.html">Next: Combination Sum &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

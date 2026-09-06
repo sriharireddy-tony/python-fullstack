@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Isomorphic Strings</title>
+<meta name="description" content="Why one map is not enough: a consistent character mapping has to work in both directions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Hash map &middot; Problem 03</p>
+  <h1>Isomorphic Strings</h1>
+  <p class="standfirst">Can you rename the characters of one string to get the other? The obvious
+  answer uses one map and is <strong>wrong</strong>. Finding out why &mdash; and that a valid mapping
+  must be consistent in <em>both</em> directions &mdash; is the whole point of the problem.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Two strings are <strong>isomorphic</strong> if you can replace every character of the first with
+  some character to get the second, where the replacement is consistent: the same input character
+  always becomes the same output character, and <strong>no two different input characters map to the
+  same output character</strong>.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th class="mono">s</th><th class="mono">t</th><th>Answer</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">"egg"</td><td class="mono">"add"</td><td class="mono">true</td><td>e&rarr;a, g&rarr;d</td></tr>
+        <tr><td class="mono">"paper"</td><td class="mono">"title"</td><td class="mono">true</td><td>p&rarr;t, a&rarr;i, e&rarr;l, r&rarr;e</td></tr>
+        <tr><td class="mono">"foo"</td><td class="mono">"bar"</td><td class="mono">false</td><td>o would have to be both a and r</td></tr>
+        <tr><td class="mono">"badc"</td><td class="mono">"baba"</td><td class="mono">false</td><td>d and c would both map to a</td></tr>
+        <tr><td class="mono">"ab"</td><td class="mono">"aa"</td><td class="mono">false</td><td>a and b would both map to a</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The half of the rule everyone forgets</span>
+    <p>Take <code>s = "ab"</code>, <code>t = "aa"</code>. Reading left to right: a&rarr;a is fine,
+    then b&rarr;a is fine too &mdash; <code>b</code> has not been mapped before. One map says
+    <strong>true</strong>.</p>
+    <p>But now two different characters, <code>a</code> and <code>b</code>, both produce
+    <code>a</code>. You could not undo the renaming: given <code>"aa"</code> you could not tell which
+    <code>a</code> came from a <code>b</code>. Isomorphic means a <strong>one-to-one</strong> mapping,
+    and one-to-one has to hold in both directions.</p>
+  </div>
+
+  <p>Note that the two characters may be the same &mdash; <code>a</code> mapping to <code>a</code> is
+  perfectly legal, as in <code>"paper"</code> where nothing maps to itself but nothing forbids it.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the answer that looks right</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0 &mdash; one map</span></div>
+<pre><code>function isomorphicOneMap(s, t) {
+  if (s.length !== t.length) return false;
+
+  const map = new Map();     // character of s -> character of t
+
+  for (let i = 0; i &lt; s.length; i++) {
+    const from = s[i];
+    const to = t[i];
+
+    if (map.has(from)) {
+      if (map.get(from) !== to) return false;   // inconsistent
+    } else {
+      map.set(from, to);
+    }
+  }
+
+  return true;
+}
+
+console.log(isomorphicOneMap('egg', 'add'));       // true    correct
+console.log(isomorphicOneMap('paper', 'title'));   // true    correct
+console.log(isomorphicOneMap('foo', 'bar'));       // false   correct
+console.log(isomorphicOneMap('ab', 'aa'));         // TRUE    WRONG
+console.log(isomorphicOneMap('badc', 'baba'));     // TRUE    WRONG
+
+// It only checks that each character of s maps CONSISTENTLY.
+// It never checks that two different characters of s avoid
+// landing on the SAME character of t.</code></pre>
+  </div>
+
+  <p>This is the single most common wrong answer, and it passes the three obvious test cases. The
+  bug only shows on inputs where <code>t</code> has fewer distinct characters than <code>s</code>.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why one map is not enough</h2>
+
+  <p>A mapping that is consistent in one direction is a <em>function</em>. A mapping you could undo is
+  a <em>bijection</em>. Isomorphism needs the second.</p>
+
+  <div class="trace">
+<pre>  s = "ab"      t = "aa"
+
+  one map:      a -> a      b -> a
+                             ^
+                two different sources, one destination
+
+  Try to reverse it: given "aa", what was the original?
+      "aa"?  "ab"?  "ba"?  "bb"?
+  You cannot tell. The renaming destroyed information, so it was
+  not a renaming at all -- it was a merge.
+
+  A legal isomorphism looks like this:
+
+  s = "paper"   t = "title"
+      p -> t        t -> p
+      a -> i        i -> a
+      e -> l        l -> e
+      r -> e        e -> r
+      \_______/     \_______/
+      forwards       backwards -- both are functions
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the difference, demonstrated</span></div>
+<pre><code>function oneMap(s, t) {
+  if (s.length !== t.length) return false;
+  const m = new Map();
+  for (let i = 0; i &lt; s.length; i++) {
+    if (m.has(s[i])) { if (m.get(s[i]) !== t[i]) return false; }
+    else m.set(s[i], t[i]);
+  }
+  return true;
+}
+
+function twoMaps(s, t) {
+  if (s.length !== t.length) return false;
+  const forward = new Map(), backward = new Map();
+  for (let i = 0; i &lt; s.length; i++) {
+    const a = s[i], b = t[i];
+    if (forward.has(a) &amp;&amp; forward.get(a) !== b) return false;
+    if (backward.has(b) &amp;&amp; backward.get(b) !== a) return false;
+    forward.set(a, b);
+    backward.set(b, a);
+  }
+  return true;
+}
+
+const cases = [
+  ['egg', 'add'], ['paper', 'title'], ['foo', 'bar'],
+  ['ab', 'aa'], ['badc', 'baba'], ['abc', 'xyz'], ['aba', 'xyx'],
+  ['abab', 'baba'], ['abcd', 'aabb']
+];
+
+for (const [a, b] of cases) {
+  const one = oneMap(a, b);
+  const two = twoMaps(a, b);
+  console.log('"' + a + '" -> "' + b + '"   one map: ' + one +
+              '   two maps: ' + two + (one !== two ? '   <-- DISAGREE' : ''));
+}</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; check both directions</h2>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Keep <strong>two</strong> maps. <code>forward</code> answers &ldquo;what does this character of
+    <code>s</code> become?&rdquo; and <code>backward</code> answers &ldquo;what did this character of
+    <code>t</code> come from?&rdquo;. At each position, both must either be unset or already agree
+    with what you are about to record.</p>
+  </div>
+
+  <p>The rule at position <code>i</code>, with <code>a = s[i]</code> and <code>b = t[i]</code>:</p>
+
+  <ol>
+    <li>If <code>forward</code> already maps <code>a</code> to something other than <code>b</code>
+    &rarr; <strong>false</strong>. One character of <code>s</code> cannot become two things.</li>
+    <li>If <code>backward</code> already maps <code>b</code> to something other than <code>a</code>
+    &rarr; <strong>false</strong>. One character of <code>t</code> cannot have two sources.</li>
+    <li>Otherwise record both and continue.</li>
+  </ol>
+
+  <p>That is it. One pass, two constant-time lookups per character.</p>
+
+  <h3>The elegant alternative: compare first-occurrence patterns</h3>
+
+  <p>There is a second solution that needs no explicit mapping at all. Replace each character with
+  <em>the index where that character first appeared</em>. Two strings are isomorphic exactly when
+  those patterns match.</p>
+
+  <div class="trace">
+<pre>  "paper"          "title"
+   p a p e r        t i t l e
+   0 1 0 3 4        0 1 0 3 4      identical  ->  isomorphic
+
+  "foo"            "bar"
+   f o o            b a r
+   0 1 1            0 1 2          different  ->  not isomorphic
+
+  "ab"             "aa"
+   a b              a a
+   0 1              0 0            different  ->  not isomorphic
+                                   (and this one catches the bug
+                                    the single map missed)
+</pre>
+  </div>
+
+  <p>This works because the pattern of first occurrences captures the <em>structure</em> of a string
+  independently of which characters it uses &mdash; and it is symmetric by construction, so both
+  directions are checked at once.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>s = "paper"</code>, <code>t = "title"</code>.</p>
+
+  <div class="trace">
+<pre>forward = {}   backward = {}
+
+i=0   p -> t
+      forward has p? no.  backward has t? no.
+      record:  forward{p:t}   backward{t:p}
+
+i=1   a -> i
+      forward has a? no.  backward has i? no.
+      record:  forward{p:t, a:i}   backward{t:p, i:a}
+
+i=2   p -> t
+      forward has p -> t.  matches.
+      backward has t -> p. matches.
+      fine, carry on
+
+i=3   e -> l
+      neither seen.  record: forward{...e:l}  backward{...l:e}
+
+i=4   r -> e
+      forward has r? no.  backward has e? no.
+      record: forward{...r:e}  backward{...e:r}
+
+reached the end  ->  TRUE
+</pre>
+  </div>
+
+  <p>Note <code>i=4</code>: <code>e</code> appears as a <em>source</em> (mapping to <code>l</code>)
+  and also as a <em>destination</em> (coming from <code>r</code>). That is perfectly fine &mdash; the
+  two maps are separate namespaces. Using one shared map would confuse them.</p>
+
+  <p>Now the failing case, <code>s = "badc"</code>, <code>t = "baba"</code>:</p>
+
+  <div class="trace">
+<pre>i=0   b -> b    both unseen   forward{b:b}   backward{b:b}
+i=1   a -> a    both unseen   forward{b:b,a:a}  backward{b:b,a:a}
+i=2   d -> b
+      forward has d? no.
+      backward has b?  YES, backward[b] = 'b', but we want 'd'
+      MISMATCH  ->  FALSE
+
+The character 'b' in t already came from 'b'. It cannot also come
+from 'd'. The forward map alone would have missed this entirely.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function isomorphicExplained(s, t) {
+  console.log('s = "' + s + '"   t = "' + t + '"');
+
+  if (s.length !== t.length) {
+    console.log('lengths differ -> FALSE');
+    console.log('');
+    return false;
+  }
+
+  const forward = new Map();
+  const backward = new Map();
+
+  for (let i = 0; i &lt; s.length; i++) {
+    const a = s[i], b = t[i];
+
+    if (forward.has(a) &amp;&amp; forward.get(a) !== b) {
+      console.log('i=' + i + '  ' + a + ' -> ' + b + '   but forward says ' + a +
+                  ' -> ' + forward.get(a) + '   MISMATCH -> FALSE');
+      console.log('');
+      return false;
+    }
+
+    if (backward.has(b) &amp;&amp; backward.get(b) !== a) {
+      console.log('i=' + i + '  ' + a + ' -> ' + b + '   but backward says ' + b +
+                  ' came from ' + backward.get(b) + '   MISMATCH -> FALSE');
+      console.log('');
+      return false;
+    }
+
+    const known = forward.has(a);
+    forward.set(a, b);
+    backward.set(b, a);
+    console.log('i=' + i + '  ' + a + ' -> ' + b + '   ' +
+                (known ? 'consistent with what we knew' : 'new pair, recorded'));
+    console.log('        forward ' + JSON.stringify([...forward]) +
+                '   backward ' + JSON.stringify([...backward]));
+  }
+
+  console.log('reached the end -> TRUE');
+  console.log('');
+  return true;
+}
+
+console.log('ANSWER:', isomorphicExplained('paper', 'title'));
+console.log('==========================================');
+console.log('ANSWER:', isomorphicExplained('badc', 'baba'));
+console.log('==========================================');
+console.log('ANSWER:', isomorphicExplained('foo', 'bar'));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; two plain objects</span></div>
+<pre><code>function isIsomorphicManual(s, t) {
+  if (s.length !== t.length) return false;
+
+  const forward = {};    // character of s -> character of t
+  const backward = {};   // character of t -> character of s
+
+  for (let i = 0; i &lt; s.length; i++) {
+    const a = s[i];
+    const b = t[i];
+
+    const mappedTo = forward[a];
+    const cameFrom = backward[b];
+
+    // a already maps somewhere else?
+    if (mappedTo !== undefined &amp;&amp; mappedTo !== b) return false;
+
+    // b already has a different source?
+    if (cameFrom !== undefined &amp;&amp; cameFrom !== a) return false;
+
+    forward[a] = b;
+    backward[b] = a;
+  }
+
+  return true;
+}
+
+console.log(isIsomorphicManual('egg', 'add'));       // true
+console.log(isIsomorphicManual('paper', 'title'));   // true
+console.log(isIsomorphicManual('foo', 'bar'));       // false
+console.log(isIsomorphicManual('ab', 'aa'));         // false
+console.log(isIsomorphicManual('badc', 'baba'));     // false
+console.log(isIsomorphicManual('', ''));             // true
+console.log(isIsomorphicManual('a', 'a'));           // true
+console.log(isIsomorphicManual('abab', 'baba'));     // true
+console.log(isIsomorphicManual('abcd', 'aabb'));     // false</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; the first-occurrence pattern</span></div>
+<pre><code>function patternOf(s) {
+  const firstSeen = {};       // character -> the index it first appeared at
+  const pattern = [];
+
+  for (let i = 0; i &lt; s.length; i++) {
+    const ch = s[i];
+    if (firstSeen[ch] === undefined) {
+      firstSeen[ch] = i;
+    }
+    pattern[i] = firstSeen[ch];
+  }
+
+  return pattern;
+}
+
+function isIsomorphicPattern(s, t) {
+  if (s.length !== t.length) return false;
+
+  const a = patternOf(s);
+  const b = patternOf(t);
+
+  for (let i = 0; i &lt; a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+
+  return true;
+}
+
+console.log(patternOf('paper'));    // [0, 1, 0, 3, 4]
+console.log(patternOf('title'));    // [0, 1, 0, 3, 4]
+console.log(patternOf('foo'));      // [0, 1, 1]
+console.log(patternOf('bar'));      // [0, 1, 2]
+console.log('');
+console.log(isIsomorphicPattern('paper', 'title'));   // true
+console.log(isIsomorphicPattern('egg', 'add'));       // true
+console.log(isIsomorphicPattern('foo', 'bar'));       // false
+console.log(isIsomorphicPattern('ab', 'aa'));         // false
+console.log(isIsomorphicPattern('badc', 'baba'));     // false
+
+// No explicit mapping, no direction to forget. The pattern IS the
+// structure, and two structures either match or they do not.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2a &mdash; two Maps, the interview answer</span></div>
+<pre><code>function isIsomorphic(s, t) {
+  if (s.length !== t.length) return false;
+
+  const forward = new Map();
+  const backward = new Map();
+
+  for (let i = 0; i &lt; s.length; i++) {
+    const a = s[i], b = t[i];
+
+    if (forward.has(a) &amp;&amp; forward.get(a) !== b) return false;
+    if (backward.has(b) &amp;&amp; backward.get(b) !== a) return false;
+
+    forward.set(a, b);
+    backward.set(b, a);
+  }
+
+  return true;
+}
+
+console.log(isIsomorphic('egg', 'add'));       // true
+console.log(isIsomorphic('paper', 'title'));   // true
+console.log(isIsomorphic('foo', 'bar'));       // false
+console.log(isIsomorphic('ab', 'aa'));         // false
+console.log(isIsomorphic('13', '42'));         // true  -- digits work too</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2b &mdash; pattern comparison, one line each</span></div>
+<pre><code>const pattern = s =&gt; [...s].map((ch, i) =&gt; s.indexOf(ch)).join(',');
+
+const isIsomorphicPattern = (s, t) =&gt;
+  s.length === t.length &amp;&amp; pattern(s) === pattern(t);
+
+console.log(pattern('paper'));    // '0,1,0,3,4'
+console.log(pattern('title'));    // '0,1,0,3,4'
+console.log('');
+console.log(isIsomorphicPattern('paper', 'title'));   // true
+console.log(isIsomorphicPattern('foo', 'bar'));       // false
+console.log(isIsomorphicPattern('ab', 'aa'));         // false
+
+// Beautiful, and O(n^2): indexOf scans the string for every
+// character. Fine for short strings, quietly quadratic for long ones.
+// The Step 6 version builds the same pattern in one pass with a map.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the same idea, generalised</span></div>
+<pre><code>// Isomorphism is really "do these two sequences have the same
+// structure?" -- which applies far beyond strings.
+function sameStructure(a, b) {
+  if (a.length !== b.length) return false;
+
+  const forward = new Map(), backward = new Map();
+
+  for (let i = 0; i &lt; a.length; i++) {
+    const x = a[i], y = b[i];
+    if (forward.has(x) &amp;&amp; forward.get(x) !== y) return false;
+    if (backward.has(y) &amp;&amp; backward.get(y) !== x) return false;
+    forward.set(x, y);
+    backward.set(y, x);
+  }
+
+  return true;
+}
+
+console.log(sameStructure([1,2,1,3], ['a','b','a','c']));     // true
+console.log(sameStructure([1,2,1,3], ['a','b','a','a']));     // false
+console.log(sameStructure('abba'.split(''), [9,8,8,9]));      // true
+
+// Word Pattern -- the classic follow-up -- is exactly this with a
+// string on one side and a list of words on the other.
+function wordPattern(pattern, sentence) {
+  return sameStructure([...pattern], sentence.split(' '));
+}
+
+console.log(wordPattern('abba', 'dog cat cat dog'));   // true
+console.log(wordPattern('abba', 'dog cat cat fish'));  // false
+console.log(wordPattern('aaaa', 'dog cat cat dog'));   // false
+console.log(wordPattern('abba', 'dog dog dog dog'));   // false  -- needs both maps</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>Correct?</th></tr></thead>
+      <tbody>
+        <tr><td>One map</td><td class="mono">O(n)</td><td class="mono">O(k)</td><td><strong>no</strong></td></tr>
+        <tr><td><strong>Two maps</strong></td><td class="mono">O(n)</td><td class="mono">O(k)</td><td>yes</td></tr>
+        <tr><td>Pattern with <code>indexOf</code></td><td class="mono">O(n&sup2;)</td><td class="mono">O(n)</td><td>yes</td></tr>
+        <tr><td>Pattern with a map</td><td class="mono">O(n)</td><td class="mono">O(n)</td><td>yes</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>One pass, two constant-time map operations per character. O(n) time, O(k) space where
+  <code>k</code> is the number of distinct characters &mdash; bounded by the alphabet, so effectively
+  constant.</p>
+
+  <p>Notice that the wrong answer has the <em>same</em> complexity as the right one. This is not a
+  performance problem; it is a correctness problem, and the fix costs nothing. That is worth
+  remembering: not every improvement is about speed.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;A single map only checks that each character of <code>s</code> maps consistently. It
+    misses the case where two different characters of <code>s</code> map to the <em>same</em>
+    character of <code>t</code> &mdash; <code>"ab"</code> to <code>"aa"</code>. Isomorphism needs a
+    one-to-one mapping, so I keep two maps, forward and backward, and reject if either disagrees.
+    O(n) time, O(k) space. An equivalent trick is to replace each character with the index of its
+    first occurrence and compare those patterns &mdash; that is symmetric, so it checks both
+    directions automatically.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Only mapping one way</h3>
+
+  <p>Covered in Step 2, and it is the reason this problem exists. If you take one thing from this
+  page: <strong>a renaming has to be reversible</strong>.</p>
+
+  <h3>2. Using one map for both directions</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the namespaces collide</span></div>
+<pre><code>function broken(s, t) {
+  if (s.length !== t.length) return false;
+  const map = new Map();
+  for (let i = 0; i &lt; s.length; i++) {
+    const a = s[i], b = t[i];
+    if (map.has(a) &amp;&amp; map.get(a) !== b) return false;
+    if (map.has(b) &amp;&amp; map.get(b) !== a) return false;
+    map.set(a, b);
+    map.set(b, a);            // same map -- bug
+  }
+  return true;
+}
+
+console.log(broken('egg', 'add'));       // true    fine
+console.log(broken('ab', 'aa'));         // false   fine
+console.log(broken('paper', 'title'));   // false   WRONG, should be true
+
+// In "paper"/"title", 'e' maps to 'l' AND 'e' is what 'r' maps to.
+// Sharing one map means map.set('e','l') then map.set('e','r')
+// overwrite each other, and the check fails on a valid input.
+// The two directions need two separate maps.</code></pre>
+  </div>
+
+  <h3>3. Comparing distinct-character counts instead</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; ignores position</span></div>
+<pre><code>function broken(s, t) {
+  return s.length === t.length &amp;&amp; new Set(s).size === new Set(t).size;
+}
+
+console.log(broken('egg', 'add'));       // true   right, by luck
+console.log(broken('foo', 'bar'));       // false  right
+console.log(broken('ab', 'aa'));         // false  right
+console.log(broken('abc', 'aab'));       // false  right
+console.log(broken('aab', 'abb'));       // TRUE   WRONG, should be false
+
+// "aab" has structure 0,0,2 and "abb" has 0,1,1 -- different shapes,
+// same number of distinct characters. Counting distinct characters
+// throws away WHERE the repeats are, which is the whole question.</code></pre>
+  </div>
+
+  <h3>4. Forgetting the length check</h3>
+
+  <p><code>"ab"</code> and <code>"abc"</code> cannot be isomorphic. Without the guard the loop reads
+  <code>t[i]</code> past the end, gets <code>undefined</code>, and happily maps a character to
+  <code>undefined</code> &mdash; producing <code>true</code> on inputs of different lengths.</p>
+
+  <h3>5. Using <code>if (forward[a])</code> instead of checking existence</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">a falsy-value trap waiting to happen</span></div>
+<pre><code>// With characters this is safe, because no character is falsy...
+console.log(Boolean('a'), Boolean('0'), Boolean(' '));   // true true true
+
+// ...but the moment you generalise to the sameStructure version,
+// falsy values appear and truthiness checks break:
+const forward = new Map();
+forward.set('x', 0);
+
+console.log('truthiness says unmapped:', !forward.get('x'));   // true -- WRONG
+console.log('has() says mapped:', forward.has('x'));           // true -- correct
+
+// The empty string is the trap for strings specifically:
+forward.set('y', '');
+console.log('truthiness on "":', !forward.get('y'));           // true -- WRONG
+console.log('has() on "":', forward.has('y'));                 // true -- correct
+
+// Always ask "does the key exist?" (has / hasOwnProperty /
+// !== undefined), never "is the value truthy?".</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the two-map version from memory</strong>, then say in one sentence why one map
+    is not enough. That sentence is the answer to this problem.</li>
+    <li><strong>Word Pattern.</strong> Does <code>"abba"</code> match
+    <code>"dog cat cat dog"</code>? It is in Step 7 &mdash; write it from memory, and check
+    <code>"abba"</code> against <code>"dog dog dog dog"</code>, which needs the backward map.</li>
+    <li><strong>Write the pattern version in one pass</strong> (no <code>indexOf</code>), and confirm
+    it agrees with the two-map version on every test case on this page.</li>
+    <li><strong>Group isomorphic strings.</strong> Given a list of words, group the ones with the same
+    structure. The pattern <em>is</em> the canonical key &mdash; the same idea as Group Anagrams,
+    with a different key function.</li>
+    <li><strong>Find the actual mapping.</strong> Return the character correspondence rather than a
+    boolean, so a caller could perform the renaming. You have already built it; you just have to
+    return <code>forward</code>.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>&ldquo;Consistent&rdquo; usually means consistent in both directions.</strong> Any time
+    you build a correspondence between two sets &mdash; renaming, matching, pairing, joining &mdash;
+    ask whether it needs to be reversible. If two different inputs can produce the same output, you
+    have a function, not a bijection, and a single map will silently accept the merge. Two maps, or a
+    symmetric canonical form, is the fix.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="02-subarray-with-given-sum.html">&larr; Subarray With Given Sum</a>
+  <a href="04-longest-consecutive-sequence.html">Next: Longest Consecutive Sequence &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

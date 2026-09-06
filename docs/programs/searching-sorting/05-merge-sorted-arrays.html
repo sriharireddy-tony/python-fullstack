@@ -1,0 +1,831 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Merge Sorted Arrays</title>
+<meta name="description" content="The merge step of merge sort — and why merging in place has to run backwards.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Searching &amp; sorting &middot; Problem 05</p>
+  <h1>Merge Sorted Arrays</h1>
+  <p class="standfirst">Two sorted arrays into one. The forward version is the merge step of merge
+  sort, and worth knowing cold. The in-place version has one trick worth the whole page:
+  <strong>fill backwards</strong>, because that is the only direction with free space.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Two versions, and they are genuinely different exercises.</p>
+
+  <p><strong>A &mdash; return a new array.</strong> Given two sorted arrays, return one sorted array
+  containing everything.</p>
+
+  <p><strong>B &mdash; merge in place.</strong> <code>nums1</code> has length <code>m + n</code>,
+  where the first <code>m</code> slots hold sorted values and the last <code>n</code> are empty
+  padding. Merge <code>nums2</code> (<code>n</code> values) into it.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th class="mono">nums1</th><th class="mono">m</th><th class="mono">nums2</th><th class="mono">n</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[1,2,3,_,_,_]</td><td class="mono">3</td><td class="mono">[2,5,6]</td><td class="mono">3</td><td class="mono">[1,2,2,3,5,6]</td></tr>
+        <tr><td class="mono">[1]</td><td class="mono">1</td><td class="mono">[]</td><td class="mono">0</td><td class="mono">[1]</td></tr>
+        <tr><td class="mono">[_]</td><td class="mono">0</td><td class="mono">[1]</td><td class="mono">1</td><td class="mono">[1]</td></tr>
+        <tr><td class="mono">[4,5,6,_,_,_]</td><td class="mono">3</td><td class="mono">[1,2,3]</td><td class="mono">3</td><td class="mono">[1,2,3,4,5,6]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why the in-place version is interesting</span>
+    <p>Merging forwards would write into <code>nums1[0]</code>, <code>nums1[1]</code> and so on
+    &mdash; slots that still hold values you have not read yet. You would have to shift everything
+    along, which is O(m &middot; n).</p>
+    <p>But the <strong>back</strong> of <code>nums1</code> is empty. Writing there destroys nothing.
+    So fill from the end, taking the <em>largest</em> remaining value each time.</p>
+  </div>
+
+  <p>Row four is the worst case for the naive approach: every value in <code>nums2</code> belongs
+  before every value in <code>nums1</code>, so a forward merge would shift the entire array three
+  times.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; concatenate and sort</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; the one-liner</span></div>
+<pre><code>function mergeSimple(a, b) {
+  return [...a, ...b].sort((x, y) =&gt; x - y);
+}
+
+console.log(mergeSimple([1,2,3], [2,5,6]));   // [1,2,2,3,5,6]
+console.log(mergeSimple([4,5,6], [1,2,3]));   // [1,2,3,4,5,6]
+console.log(mergeSimple([], [1]));            // [1]
+console.log(mergeSimple([1], []));            // [1]
+
+// The in-place variant, using splice and sort:
+function mergeInPlaceSort(nums1, m, nums2, n) {
+  nums1.splice(m, n, ...nums2);         // overwrite the padding
+  nums1.sort((a, b) =&gt; a - b);
+  return nums1;
+}
+
+const a = [1,2,3,0,0,0];
+console.log(mergeInPlaceSort(a, 3, [2,5,6], 3));   // [1,2,2,3,5,6]
+
+// O((m+n) log(m+n)). Correct, short, and it throws away the fact
+// that both inputs were ALREADY SORTED.</code></pre>
+  </div>
+
+  <p>Say this out loud, quote its complexity, and then point out what it wastes: sorting rediscovers
+  an order you were handed. Merging two sorted lists is <strong>linear</strong>.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why sorting again is wasteful</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const M = 1000000, N = 1000000;
+const a = [], b = [];
+for (let i = 0; i &lt; M; i++) a.push(i * 2);        // evens
+for (let i = 0; i &lt; N; i++) b.push(i * 2 + 1);    // odds
+
+function concatSort(x, y) {
+  return [...x, ...y].sort((p, q) =&gt; p - q);
+}
+
+function mergeTwoPointers(x, y) {
+  const out = new Array(x.length + y.length);
+  let i = 0, j = 0, k = 0;
+  while (i &lt; x.length &amp;&amp; j &lt; y.length) {
+    out[k++] = x[i] &lt;= y[j] ? x[i++] : y[j++];
+  }
+  while (i &lt; x.length) out[k++] = x[i++];
+  while (j &lt; y.length) out[k++] = y[j++];
+  return out;
+}
+
+let t = performance.now();
+const r1 = concatSort(a, b);
+const sortMs = performance.now() - t;
+
+t = performance.now();
+const r2 = mergeTwoPointers(a, b);
+const mergeMs = performance.now() - t;
+
+console.log('concat + sort : ' + sortMs.toFixed(1) + ' ms');
+console.log('merge         : ' + mergeMs.toFixed(1) + ' ms');
+console.log('same result:', r1.length === r2.length &amp;&amp;
+            r1[0] === r2[0] &amp;&amp; r1[r1.length - 1] === r2[r2.length - 1]);
+console.log('speed-up:', Math.round(sortMs / Math.max(mergeMs, 0.01)) + 'x');</code></pre>
+  </div>
+
+  <p>And the in-place forward merge is worse than either &mdash; it is O(m &middot; n) because of the
+  shifting:</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; forward with shifting vs backward</span></div>
+<pre><code>const M = 20000, N = 20000;
+
+function build() {
+  const a = [];
+  for (let i = 0; i &lt; M; i++) a.push(i + N);      // all LARGER than nums2
+  for (let i = 0; i &lt; N; i++) a.push(0);           // padding
+  const b = [];
+  for (let i = 0; i &lt; N; i++) b.push(i);
+  return [a, b];
+}
+
+function forwardWithShifting(nums1, m, nums2, n) {
+  let i = 0, j = 0, count = m;
+  while (j &lt; n) {
+    if (i &gt;= count || nums2[j] &lt; nums1[i]) {
+      // make room: shift everything from i onwards right by one
+      for (let k = count; k &gt; i; k--) nums1[k] = nums1[k - 1];
+      nums1[i] = nums2[j];
+      count++; i++; j++;
+    } else {
+      i++;
+    }
+  }
+  return nums1;
+}
+
+function backwardMerge(nums1, m, nums2, n) {
+  let i = m - 1, j = n - 1, k = m + n - 1;
+  while (j &gt;= 0) {
+    if (i &gt;= 0 &amp;&amp; nums1[i] &gt; nums2[j]) nums1[k--] = nums1[i--];
+    else nums1[k--] = nums2[j--];
+  }
+  return nums1;
+}
+
+let [a1, b1] = build();
+let t = performance.now();
+forwardWithShifting(a1, M, b1, N);
+const fwdMs = performance.now() - t;
+
+let [a2, b2] = build();
+t = performance.now();
+backwardMerge(a2, M, b2, N);
+const bwdMs = performance.now() - t;
+
+console.log('forward, shifting : ' + fwdMs.toFixed(1) + ' ms');
+console.log('backward          : ' + bwdMs.toFixed(2) + ' ms');
+console.log('same result:', a1[0] === a2[0] &amp;&amp; a1[M + N - 1] === a2[M + N - 1]);
+console.log('speed-up:', Math.round(fwdMs / Math.max(bwdMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; two pointers, and the direction</h2>
+
+  <h3>Version A: forward merge into a new array</h3>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Point at the front of each array. Compare the two heads and take the <strong>smaller</strong>,
+    advancing that pointer. Repeat. When one array runs out, copy the rest of the other.</p>
+  </div>
+
+  <div class="trace">
+<pre>  a = [1, 2, 3]      b = [2, 5, 6]
+       i                  j
+
+  1 vs 2  ->  take 1    out = [1]           i++
+  2 vs 2  ->  take 2 from a (see below)   out = [1,2]   i++
+  3 vs 2  ->  take 2 from b   out = [1,2,2]   j++
+  3 vs 5  ->  take 3    out = [1,2,2,3]     i++
+  a is exhausted  ->  copy the rest of b:  5, 6
+
+  out = [1,2,2,3,5,6]
+</pre>
+  </div>
+
+  <p>On a tie, take from <code>a</code> &mdash; use <code>a[i] &lt;= b[j]</code>. That makes the merge
+  <strong>stable</strong>: equal elements keep their original relative order, with everything from
+  <code>a</code> before everything from <code>b</code>. It is invisible for plain numbers and matters
+  enormously when you are sorting objects by one field.</p>
+
+  <h3>Version B: backward merge, in place</h3>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Write into the <strong>last</strong> slot of <code>nums1</code> and walk backwards, taking the
+    <strong>larger</strong> of the two remaining tails each time.</p>
+    <p>Why it is safe: the write pointer starts at <code>m + n - 1</code> and the read pointer into
+    <code>nums1</code> starts at <code>m - 1</code>. The write pointer is always <em>ahead</em> of the
+    read pointer, so it can never overwrite a value that has not been read.</p>
+  </div>
+
+  <div class="trace">
+<pre>  nums1 = [1, 2, 3, _, _, _]        m = 3
+  nums2 = [2, 5, 6]                 n = 3
+
+           i           k                i = m-1 = 2   (last real value)
+                                        j = n-1 = 2   (last of nums2)
+                                        k = m+n-1 = 5 (last slot)
+
+  nums1[2]=3  vs  nums2[2]=6   ->  6 is larger  ->  nums1[5] = 6
+  nums1[2]=3  vs  nums2[1]=5   ->  5 is larger  ->  nums1[4] = 5
+  nums1[2]=3  vs  nums2[0]=2   ->  3 is larger  ->  nums1[3] = 3
+  nums1[1]=2  vs  nums2[0]=2   ->  tie, take nums2  ->  nums1[2] = 2
+  nums2 exhausted  ->  done. [1,2] is already in place.
+
+  nums1 = [1, 2, 2, 3, 5, 6]
+</pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The loop only needs to run while <code>nums2</code> has values left</span>
+    <p>If <code>nums1</code> runs out first, the remaining <code>nums2</code> values must still be
+    copied in. But if <code>nums2</code> runs out first, the remaining <code>nums1</code> values are
+    <strong>already in their correct positions</strong> &mdash; they were never moved. So
+    <code>while (j &gt;= 0)</code> is the whole loop, and there is no clean-up pass.</p>
+    <p>That asymmetry is a genuinely satisfying detail, and interviewers ask about it.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace the backward merge</h2>
+
+  <p><code>nums1 = [4,5,6,0,0,0]</code>, <code>m = 3</code>, <code>nums2 = [1,2,3]</code>,
+  <code>n = 3</code>. Everything in <code>nums2</code> is smaller, so this is the case that would
+  destroy a forward merge.</p>
+
+  <div class="trace">
+<pre>i=2 (nums1[2]=6)   j=2 (nums2[2]=3)   k=5
+
+6 > 3  ->  take from nums1:  nums1[5] = 6
+           [4,5,6,0,0,6]     i=1  k=4
+
+nums1[1]=5  vs  3
+5 > 3  ->  take from nums1:  nums1[4] = 5
+           [4,5,6,0,5,6]     i=0  k=3
+
+nums1[0]=4  vs  3
+4 > 3  ->  take from nums1:  nums1[3] = 4
+           [4,5,6,4,5,6]     i=-1  k=2
+
+i is now -1: nums1 is exhausted, so take from nums2
+           nums1[2] = 3      [4,5,3,4,5,6]     j=1  k=1
+           nums1[1] = 2      [4,2,3,4,5,6]     j=0  k=0
+           nums1[0] = 1      [1,2,3,4,5,6]     j=-1  k=-1
+
+j &lt; 0  ->  stop.   nums1 = [1,2,3,4,5,6]
+</pre>
+  </div>
+
+  <p>Watch the intermediate state <code>[4,5,6,4,5,6]</code>. It looks wrong, and it is fine &mdash;
+  the front half is stale data that is about to be overwritten. The write pointer being ahead of the
+  read pointer is what guarantees nothing needed is lost.</p>
+
+  <p>Now the case where <code>nums2</code> runs out first, <code>nums1 = [1,2,3,_,_,_]</code>,
+  <code>nums2 = [4,5,6]</code>:</p>
+
+  <div class="trace">
+<pre>i=2(3)  j=2(6)  k=5
+3 > 6?  no  ->  take nums2:  nums1[5] = 6   j=1  k=4
+3 > 5?  no  ->  take nums2:  nums1[4] = 5   j=0  k=3
+3 > 4?  no  ->  take nums2:  nums1[3] = 4   j=-1 k=2
+
+j &lt; 0  ->  stop.
+
+nums1 = [1,2,3,4,5,6]
+
+The [1,2,3] at the front was never touched -- and did not need to
+be. That is why there is no clean-up loop for nums1.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function mergeExplained(nums1, m, nums2, n) {
+  console.log('nums1 =', nums1, ' m =', m);
+  console.log('nums2 =', nums2, ' n =', n);
+  console.log('');
+
+  let i = m - 1;          // last real value in nums1
+  let j = n - 1;          // last value in nums2
+  let k = m + n - 1;      // last slot overall
+
+  console.log('start: i=' + i + ' j=' + j + ' k=' + k);
+
+  while (j &gt;= 0) {
+    if (i &gt;= 0 &amp;&amp; nums1[i] &gt; nums2[j]) {
+      console.log('  nums1[' + i + ']=' + nums1[i] + ' &gt; nums2[' + j + ']=' + nums2[j] +
+                  '   -> nums1[' + k + '] = ' + nums1[i]);
+      nums1[k] = nums1[i];
+      i--;
+    } else {
+      const why = i &lt; 0 ? 'nums1 exhausted' :
+                  'nums2[' + j + ']=' + nums2[j] + ' &gt;= nums1[' + i + ']=' + nums1[i];
+      console.log('  ' + why + '   -> nums1[' + k + '] = ' + nums2[j]);
+      nums1[k] = nums2[j];
+      j--;
+    }
+    k--;
+    console.log('        ' + JSON.stringify(nums1) + '   i=' + i + ' j=' + j + ' k=' + k);
+  }
+
+  console.log('');
+  console.log('nums2 exhausted -- anything left in nums1 is already in place');
+  console.log('');
+  return nums1;
+}
+
+mergeExplained([4,5,6,0,0,0], 3, [1,2,3], 3);
+console.log('==========================================');
+mergeExplained([1,2,3,0,0,0], 3, [2,5,6], 3);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; forward merge into a new array</span></div>
+<pre><code>function mergeForwardManual(a, b) {
+  const out = [];
+  let i = 0;      // index into a
+  let j = 0;      // index into b
+  let k = 0;      // index into out
+
+  // while BOTH have values, take the smaller head
+  while (i &lt; a.length &amp;&amp; j &lt; b.length) {
+    if (a[i] &lt;= b[j]) {         // &lt;= keeps the merge STABLE
+      out[k] = a[i];
+      i = i + 1;
+    } else {
+      out[k] = b[j];
+      j = j + 1;
+    }
+    k = k + 1;
+  }
+
+  // one of them is empty -- copy whatever is left of the other
+  while (i &lt; a.length) { out[k] = a[i]; i = i + 1; k = k + 1; }
+  while (j &lt; b.length) { out[k] = b[j]; j = j + 1; k = k + 1; }
+
+  return out;
+}
+
+console.log(mergeForwardManual([1,2,3], [2,5,6]));      // [1,2,2,3,5,6]
+console.log(mergeForwardManual([4,5,6], [1,2,3]));      // [1,2,3,4,5,6]
+console.log(mergeForwardManual([], [1,2]));             // [1,2]
+console.log(mergeForwardManual([1,2], []));             // [1,2]
+console.log(mergeForwardManual([], []));                // []
+console.log(mergeForwardManual([1,1,1], [1,1]));        // [1,1,1,1,1]
+console.log(mergeForwardManual([-5,0], [-3,7]));        // [-5,-3,0,7]</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; backward merge, in place</span></div>
+<pre><code>function mergeInPlaceManual(nums1, m, nums2, n) {
+  let i = m - 1;            // last real value in nums1
+  let j = n - 1;            // last value in nums2
+  let k = m + n - 1;        // where we write
+
+  // only nums2 needs draining: leftover nums1 values are already
+  // sitting in their final positions
+  while (j &gt;= 0) {
+
+    if (i &gt;= 0 &amp;&amp; nums1[i] &gt; nums2[j]) {
+      nums1[k] = nums1[i];
+      i = i - 1;
+    } else {
+      nums1[k] = nums2[j];
+      j = j - 1;
+    }
+
+    k = k - 1;
+  }
+
+  return nums1;
+}
+
+function show(nums1, m, nums2, n) {
+  const copy = [...nums1];
+  mergeInPlaceManual(copy, m, nums2, n);
+  return copy;
+}
+
+console.log(show([1,2,3,0,0,0], 3, [2,5,6], 3));    // [1,2,2,3,5,6]
+console.log(show([4,5,6,0,0,0], 3, [1,2,3], 3));    // [1,2,3,4,5,6]
+console.log(show([1], 1, [], 0));                   // [1]
+console.log(show([0], 0, [1], 1));                  // [1]
+console.log(show([2,0], 1, [1], 1));                // [1,2]
+console.log(show([1,0], 1, [2], 1));                // [1,2]
+console.log(show([0,0,0], 0, [1,2,3], 3));          // [1,2,3]
+console.log(show([1,2,4,5,6,0], 5, [3], 1));        // [1,2,3,4,5,6]</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">an exhaustive check</span></div>
+<pre><code>function mergeInPlace(nums1, m, nums2, n) {
+  let i = m - 1, j = n - 1, k = m + n - 1;
+  while (j &gt;= 0) {
+    if (i &gt;= 0 &amp;&amp; nums1[i] &gt; nums2[j]) nums1[k--] = nums1[i--];
+    else nums1[k--] = nums2[j--];
+  }
+  return nums1;
+}
+
+let checked = 0, failed = 0;
+
+for (let trial = 0; trial &lt; 5000; trial++) {
+  const m = Math.floor(Math.random() * 6);
+  const n = Math.floor(Math.random() * 6);
+
+  const front = [];
+  for (let i = 0; i &lt; m; i++) front.push(Math.floor(Math.random() * 10));
+  front.sort((a, b) =&gt; a - b);
+
+  const second = [];
+  for (let i = 0; i &lt; n; i++) second.push(Math.floor(Math.random() * 10));
+  second.sort((a, b) =&gt; a - b);
+
+  const nums1 = [...front, ...new Array(n).fill(0)];
+  const expected = [...front, ...second].sort((a, b) =&gt; a - b);
+
+  checked++;
+  mergeInPlace(nums1, m, second, n);
+
+  if (JSON.stringify(nums1) !== JSON.stringify(expected)) {
+    failed++;
+    if (failed &lt; 4) {
+      console.log('FAIL m=' + m + ' n=' + n,
+                  JSON.stringify(front), JSON.stringify(second),
+                  'got', JSON.stringify(nums1),
+                  'expected', JSON.stringify(expected));
+    }
+  }
+}
+
+console.log(checked + ' random merges checked,  ' + failed + ' failures');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; both, the interview answers</span></div>
+<pre><code>// A: new array, forward merge
+function merge(a, b) {
+  const out = [];
+  let i = 0, j = 0;
+
+  while (i &lt; a.length &amp;&amp; j &lt; b.length) {
+    out.push(a[i] &lt;= b[j] ? a[i++] : b[j++]);
+  }
+
+  // whichever is left over is already sorted
+  return out.concat(a.slice(i), b.slice(j));
+}
+
+console.log(merge([1,2,3], [2,5,6]));   // [1,2,2,3,5,6]
+console.log(merge([4,5,6], [1,2,3]));   // [1,2,3,4,5,6]
+console.log(merge([], [1]));            // [1]
+
+// B: in place, backward merge
+function mergeInPlace(nums1, m, nums2, n) {
+  let i = m - 1, j = n - 1, k = m + n - 1;
+
+  while (j &gt;= 0) {
+    nums1[k--] = (i &gt;= 0 &amp;&amp; nums1[i] &gt; nums2[j]) ? nums1[i--] : nums2[j--];
+  }
+
+  return nums1;
+}
+
+const x = [1,2,3,0,0,0];
+console.log(mergeInPlace(x, 3, [2,5,6], 3));   // [1,2,2,3,5,6]
+
+const y = [4,5,6,0,0,0];
+console.log(mergeInPlace(y, 3, [1,2,3], 3));   // [1,2,3,4,5,6]</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">merging k sorted arrays</span></div>
+<pre><code>// Naive: merge them one at a time.
+function mergeTwo(a, b) {
+  const out = [];
+  let i = 0, j = 0;
+  while (i &lt; a.length &amp;&amp; j &lt; b.length) out.push(a[i] &lt;= b[j] ? a[i++] : b[j++]);
+  return out.concat(a.slice(i), b.slice(j));
+}
+
+function mergeKSequential(lists) {
+  let acc = [];
+  for (const list of lists) acc = mergeTwo(acc, list);
+  return acc;
+}
+
+// Better: merge in PAIRS, halving the number of lists each round.
+function mergeKPairwise(lists) {
+  let current = lists;
+  while (current.length &gt; 1) {
+    const next = [];
+    for (let i = 0; i &lt; current.length; i += 2) {
+      next.push(i + 1 &lt; current.length ? mergeTwo(current[i], current[i + 1])
+                                       : current[i]);
+    }
+    current = next;
+  }
+  return current[0] || [];
+}
+
+const lists = [[1,4,5],[1,3,4],[2,6],[0,9]];
+console.log('sequential:', mergeKSequential(lists));
+console.log('pairwise  :', mergeKPairwise(lists));
+
+// Why pairwise is better: sequential re-copies the growing
+// accumulator every time -- O(k * total). Pairwise does log k
+// rounds, each touching every element once -- O(total * log k).
+const K = 200, LEN = 400;
+const many = [];
+for (let i = 0; i &lt; K; i++) {
+  const l = [];
+  for (let j = 0; j &lt; LEN; j++) l.push(i + j * K);
+  many.push(l);
+}
+
+let t = performance.now();
+const s1 = mergeKSequential(many);
+const seqMs = performance.now() - t;
+
+t = performance.now();
+const s2 = mergeKPairwise(many);
+const pairMs = performance.now() - t;
+
+console.log('');
+console.log('sequential: ' + seqMs.toFixed(1) + ' ms');
+console.log('pairwise  : ' + pairMs.toFixed(1) + ' ms');
+console.log('same result:', s1.length === s2.length &amp;&amp; s1[0] === s2[0]);</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">merging objects, and why stability matters</span></div>
+<pre><code>// Merging by one field. With `<=` the merge is STABLE: when two
+// records tie, the one from the FIRST list comes first.
+function mergeBy(a, b, keyOf) {
+  const out = [];
+  let i = 0, j = 0;
+  while (i &lt; a.length &amp;&amp; j &lt; b.length) {
+    out.push(keyOf(a[i]) &lt;= keyOf(b[j]) ? a[i++] : b[j++]);
+  }
+  return out.concat(a.slice(i), b.slice(j));
+}
+
+const teamA = [{ n: 'ana', score: 5 }, { n: 'bo', score: 9 }];
+const teamB = [{ n: 'cy', score: 5 }, { n: 'di', score: 9 }];
+
+console.log(mergeBy(teamA, teamB, p =&gt; p.score).map(p =&gt; p.n + ':' + p.score));
+// ana:5  cy:5  bo:9  di:9      -- team A wins every tie
+
+// Change &lt;= to &lt; and the ties flip:
+function mergeByUnstable(a, b, keyOf) {
+  const out = [];
+  let i = 0, j = 0;
+  while (i &lt; a.length &amp;&amp; j &lt; b.length) {
+    out.push(keyOf(a[i]) &lt; keyOf(b[j]) ? a[i++] : b[j++]);
+  }
+  return out.concat(a.slice(i), b.slice(j));
+}
+
+console.log(mergeByUnstable(teamA, teamB, p =&gt; p.score).map(p =&gt; p.n + ':' + p.score));
+// cy:5  ana:5  di:9  bo:9      -- team B wins every tie
+
+// One character. It is invisible on numbers and very visible the
+// moment the elements carry other data.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Extra space</th></tr></thead>
+      <tbody>
+        <tr><td>Concatenate and sort</td><td class="mono">O((m+n) log(m+n))</td><td class="mono">O(m+n)</td></tr>
+        <tr><td>Forward merge, new array</td><td class="mono">O(m + n)</td><td class="mono">O(m+n)</td></tr>
+        <tr><td>Forward merge, in place with shifting</td><td class="mono">O(m &middot; n)</td><td class="mono">O(1)</td></tr>
+        <tr><td><strong>Backward merge, in place</strong></td><td class="mono">O(m + n)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Every element is written exactly once, and each write costs one comparison. So O(m + n) &mdash;
+  and that is optimal, since you must touch every element to place it.</p>
+
+  <p>The backward version is the only one that is both linear <em>and</em> constant-space. That
+  combination is the reason the problem is posed the way it is, with the padding at the end of
+  <code>nums1</code>.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Both arrays are already sorted, so I merge with two pointers rather than sorting again:
+    O(m+n) instead of O((m+n) log(m+n)). For the in-place version I fill <em>backwards</em> from index
+    <code>m+n-1</code>, taking the larger of the two tails, because the free space is at the end of
+    <code>nums1</code> &mdash; and the write pointer is always ahead of the read pointer, so nothing
+    unread is overwritten. The loop only needs to drain <code>nums2</code>: whatever is left in
+    <code>nums1</code> is already in place. O(m+n) time, O(1) space.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Merging in place forwards</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; overwrites unread values</span></div>
+<pre><code>function broken(nums1, m, nums2, n) {
+  let i = 0, j = 0, k = 0;
+  while (i &lt; m &amp;&amp; j &lt; n) {
+    if (nums1[i] &lt;= nums2[j]) nums1[k++] = nums1[i++];   // writing over nums1!
+    else nums1[k++] = nums2[j++];
+  }
+  while (j &lt; n) nums1[k++] = nums2[j++];
+  return nums1;
+}
+
+console.log(broken([1,2,3,0,0,0], 3, [2,5,6], 3));
+// [1,2,2,2,5,6]  WRONG -- should be [1,2,2,3,5,6]
+
+console.log(broken([4,5,6,0,0,0], 3, [1,2,3], 3));
+// [1,1,1,1,2,3]  WRONG -- should be [1,2,3,4,5,6]
+
+// The moment nums2 supplies several values in a row, the write
+// pointer k races past the read pointer i and destroys the 4,5,6
+// before they are read. Forwards, the free space is in the wrong
+// place.</code></pre>
+  </div>
+
+  <h3>2. Forgetting the leftover pass in the forward merge</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; drops the tail</span></div>
+<pre><code>function broken(a, b) {
+  const out = [];
+  let i = 0, j = 0;
+  while (i &lt; a.length &amp;&amp; j &lt; b.length) {
+    out.push(a[i] &lt;= b[j] ? a[i++] : b[j++]);
+  }
+  return out;                      // no leftover copy -- bug
+}
+
+console.log(broken([1,2,3], [2,5,6]));   // [1,2,2,3]  WRONG, 5 and 6 lost
+console.log(broken([1,2,3], [4,5,6]));   // [1,2,3]    WRONG, all of b lost
+console.log(broken([], [1,2]));          // []         WRONG
+
+// The main loop stops as soon as EITHER array empties. Whatever
+// remains in the other one still has to be copied -- and it is
+// already sorted, so it is a straight copy.</code></pre>
+  </div>
+
+  <h3>3. Draining <code>nums1</code> in the backward merge</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">harmless, but revealing</span></div>
+<pre><code>// Adding a nums1 drain loop is not WRONG -- it just never does
+// anything useful, and its presence suggests you have not seen why.
+function withExtraLoop(nums1, m, nums2, n) {
+  let i = m - 1, j = n - 1, k = m + n - 1;
+  while (i &gt;= 0 &amp;&amp; j &gt;= 0) {
+    nums1[k--] = nums1[i] &gt; nums2[j] ? nums1[i--] : nums2[j--];
+  }
+  while (j &gt;= 0) nums1[k--] = nums2[j--];
+  let moved = 0, realMoves = 0;
+  while (i &gt;= 0) {
+    if (k !== i) realMoves++;          // did it actually move anything?
+    nums1[k--] = nums1[i--];
+    moved++;
+  }
+  console.log('  nums1 drain ran ' + moved + ' times, ' +
+              realMoves + ' of which moved a value');
+  return nums1;
+}
+
+console.log(withExtraLoop([1,2,3,0,0,0], 3, [2,5,6], 3));
+console.log(withExtraLoop([4,5,6,0,0,0], 3, [1,2,3], 3));
+console.log(withExtraLoop([1,2,3,0,0,0], 3, [4,5,6], 3));
+
+// "0 of which moved a value" every time. When nums2 empties, every
+// remaining nums1 value is already at its final index -- k and i
+// are equal, so nums1[k] = nums1[i] is a no-op. The loop can run,
+// but it never has anything to do.</code></pre>
+  </div>
+
+  <h3>4. Using <code>&lt;</code> and quietly losing stability</h3>
+
+  <p>Shown in Step 7. For numbers it makes no observable difference. For objects sorted by one field
+  it reverses every tie &mdash; and merge sort&rsquo;s reputation for being <em>stable</em> rests
+  entirely on this one character. Use <code>&lt;=</code> and know why.</p>
+
+  <h3>5. Trusting <code>nums1.length</code> instead of <code>m</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; counts the padding as data</span></div>
+<pre><code>function broken(nums1, m, nums2, n) {
+  let i = nums1.length - 1;        // should be m - 1
+  let j = n - 1;
+  let k = m + n - 1;
+  while (j &gt;= 0) {
+    if (i &gt;= 0 &amp;&amp; nums1[i] &gt; nums2[j]) nums1[k--] = nums1[i--];
+    else nums1[k--] = nums2[j--];
+  }
+  return nums1;
+}
+
+console.log(broken([1,2,3,0,0,0], 3, [2,5,6], 3));
+// [6,6,6,6,6,6] plus junk at NEGATIVE indexes -- total nonsense
+
+console.log(broken([4,5,6,0,0,0], 3, [1,2,3], 3));
+// [3,3,3,3,3,3] plus junk -- the padding zeros were read as data,
+// they compared smaller than everything, and the write pointer ran
+// off the front of the array into negative indexes.
+
+// nums1.length is m + n. The last n slots are PADDING, not data.
+// The problem gives you m precisely so you know where the real
+// values end -- use it.</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the forward merge from memory</strong>, including both leftover loops. It is the
+    core of merge sort, which is the next page.</li>
+    <li><strong>Write the backward in-place merge from memory</strong>, then say why there is no
+    <code>nums1</code> drain loop.</li>
+    <li><strong>Merge k sorted arrays.</strong> In Step 7 &mdash; do the pairwise version and work out
+    why it beats merging one at a time. With a min-heap you can also do it in one pass.</li>
+    <li><strong>Intersection of two sorted arrays.</strong> The same two pointers: advance the smaller
+    one, and record a value only when both match. Then do the union, and the difference.</li>
+    <li><strong>Median of two sorted arrays.</strong> The famously hard one. Merging gives O(m+n);
+    the O(log(min(m,n))) solution binary-searches the split point. Try the merge version first, then
+    read about the fast one.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Fill from the end when the free space is at the end.</strong> Squares of a Sorted Array
+    used the same move for a different reason; here it is the difference between O(m+n) and
+    O(m&middot;n). The general question when writing into an array you are also reading:
+    <em>where is the space I am allowed to destroy, and can I arrange for the write pointer to stay
+    ahead of the read pointer?</em></p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="04-kth-largest-element.html">&larr; Kth Largest Element</a>
+  <a href="06-merge-sort-quick-sort.html">Next: Merge Sort &amp; Quick Sort &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

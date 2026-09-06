@@ -1,0 +1,1007 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Custom Promise</title>
+<meta name="description" content="Build a Promise from the state machine up, then all, allSettled, race and any.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">JavaScript semantics &middot; Problem 05</p>
+  <h1>Build a Promise from scratch</h1>
+  <p class="standfirst">A promise is a three-state machine with a list of callbacks attached. That much
+  is twenty lines. The parts that take thought are: what happens when <code>then</code> is called
+  <em>after</em> it already settled, and what happens when your callback returns another promise.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem &mdash; the state machine</h2>
+
+  <div class="trace">
+<pre>                        +-----------+
+                        |  PENDING  |
+                        +-----------+
+                         /         \
+              resolve(v)/           \reject(e)
+                       /             \
+             +-------------+   +------------+
+             |  FULFILLED  |   |  REJECTED  |
+             |   value: v  |   |  reason: e |
+             +-------------+   +------------+
+
+  Three rules, and they are the whole specification:
+
+    1. A promise starts PENDING.
+    2. It moves to FULFILLED or REJECTED at most ONCE.
+       Every later resolve or reject is ignored, silently.
+    3. Once settled, it never changes again -- so a `then`
+       attached afterwards fires immediately (well: on the next
+       microtask) with the value it already has.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">all three rules, observable</span></div>
+<pre><code>// rule 2: settling is one-way and once only
+const p = new Promise((resolve, reject) =&gt; {
+  resolve('first');
+  resolve('second');       // ignored
+  reject(new Error('no')); // ignored
+});
+p.then((v) =&gt; console.log('1. settled once with:', v));
+
+// rule 3: attaching then() later still works
+const settled = Promise.resolve('already done');
+setTimeout(() =&gt; {
+  settled.then((v) =&gt; console.log('2. attached 20 ms late, still got:', v));
+}, 20);
+
+// and you can attach as many as you like, all get the same value
+const shared = Promise.resolve('one value');
+shared.then((v) =&gt; console.log('3a.', v));
+shared.then((v) =&gt; console.log('3b.', v));
+shared.then((v) =&gt; console.log('3c.', v));
+
+// the executor runs SYNCHRONOUSLY; the callbacks do not
+console.log('A. before the constructor');
+new Promise((resolve) =&gt; {
+  console.log('B. inside the executor -- synchronous');
+  resolve();
+}).then(() =&gt; console.log('D. inside then -- a microtask'));
+console.log('C. after the constructor');
+
+await new Promise((r) =&gt; setTimeout(r, 60));</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The distinction that trips everyone</span>
+    <p>The <strong>executor</strong> &mdash; the function you pass to <code>new Promise</code> &mdash;
+    runs immediately and synchronously. The <strong>callbacks</strong> you pass to <code>then</code>
+    never do: they are queued as microtasks, even when the promise is already settled.</p>
+    <p>That is why the output above is A, B, C, D and not A, B, D, C.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the callback version this replaces</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0 &mdash; callback hell, and why promises exist</span></div>
+<pre><code>function fetchUser(id, cb) {
+  setTimeout(() =&gt; cb(null, { id, name: 'user' + id }), 10);
+}
+function fetchPosts(user, cb) {
+  setTimeout(() =&gt; cb(null, ['post A', 'post B']), 10);
+}
+function fetchComments(post, cb) {
+  setTimeout(() =&gt; cb(null, [post + ' comment']), 10);
+}
+
+// three problems, all visible at once
+fetchUser(1, (err, user) =&gt; {
+  if (err) return console.log('error', err);           // 1. repeated everywhere
+  fetchPosts(user, (err, posts) =&gt; {                   // 2. rightward drift
+    if (err) return console.log('error', err);
+    fetchComments(posts[0], (err, comments) =&gt; {       // 3. no way to compose
+      if (err) return console.log('error', err);
+      console.log('callbacks   ->', comments);
+    });
+  });
+});
+
+// the same thing with promises
+const promisify = (fn) =&gt; (...args) =&gt;
+  new Promise((res, rej) =&gt; fn(...args, (e, v) =&gt; (e ? rej(e) : res(v))));
+
+const pUser = promisify(fetchUser);
+const pPosts = promisify(fetchPosts);
+const pComments = promisify(fetchComments);
+
+const comments = await pUser(1)
+  .then(pPosts)
+  .then((posts) =&gt; pComments(posts[0]));
+
+console.log('promises    ->', comments);
+
+// and with async/await, which is promises with different syntax
+const user = await pUser(1);
+const posts = await pPosts(user);
+console.log('async/await ->', await pComments(posts[0]));
+
+await new Promise((r) =&gt; setTimeout(r, 60));</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">What the promise actually bought</span>
+    <p>Not fewer lines &mdash; a <strong>value</strong>. A callback is a hole in your program that
+    someone else fills. A promise is a first-class object you can return, store in an array, pass to
+    <code>Promise.all</code>, and attach handlers to later. Everything else follows from that.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why the microtask queue matters</h2>
+
+  <p>Promise callbacks run on the <strong>microtask</strong> queue, which drains completely before any
+  timer. Get this wrong in your implementation and the output order is wrong &mdash; and output-order
+  questions are the most common promise interview question there is.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the ordering, demonstrated</span></div>
+<pre><code>console.log('1. sync');
+
+setTimeout(() =&gt; console.log('6. setTimeout 0'), 0);
+
+Promise.resolve().then(() =&gt; console.log('3. microtask A'));
+Promise.resolve().then(() =&gt; console.log('4. microtask B'));
+
+queueMicrotask(() =&gt; console.log('5. queueMicrotask'));
+
+console.log('2. sync again');
+
+await new Promise((r) =&gt; setTimeout(r, 30));
+
+console.log('');
+console.log('Order: all synchronous code, then ALL microtasks, then');
+console.log('the first timer. The microtask queue is drained to empty');
+console.log('before the event loop moves on -- which is why a');
+console.log('microtask that queues another microtask can starve timers');
+console.log('completely.');
+
+// proof: a microtask that queues itself blocks the timer
+let starved = 0;
+let timerFired = false;
+setTimeout(() =&gt; { timerFired = true; }, 0);
+
+await new Promise((done) =&gt; {
+  function spin() {
+    starved++;
+    if (starved &lt; 5000) queueMicrotask(spin);
+    else done();
+  }
+  queueMicrotask(spin);
+});
+
+console.log('');
+console.log('after ' + starved + ' chained microtasks, did the 0 ms timer run?',
+            timerFired);
+console.log('No -- microtasks all ran first. setTimeout(fn, 0) does not');
+console.log('mean "soon", it means "after the current microtask queue".');
+
+await new Promise((r) =&gt; setTimeout(r, 30));</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; setTimeout is not a microtask</span></div>
+<pre><code>// A naive implementation uses setTimeout(fn, 0) to defer callbacks.
+// It gives roughly the right SHAPE and the wrong ORDER -- and it is
+// dramatically slower, because timers are clamped and go through
+// the event loop.
+const N = 20000;
+
+let t = performance.now();
+await new Promise((done) =&gt; {
+  let left = N;
+  for (let i = 0; i &lt; N; i++) {
+    queueMicrotask(() =&gt; { if (--left === 0) done(); });
+  }
+});
+const microMs = performance.now() - t;
+
+t = performance.now();
+await new Promise((done) =&gt; {
+  let left = N;
+  for (let i = 0; i &lt; N; i++) {
+    setTimeout(() =&gt; { if (--left === 0) done(); }, 0);
+  }
+});
+const timerMs = performance.now() - t;
+
+console.log(N.toLocaleString('en-US') + ' deferred callbacks');
+console.log('  queueMicrotask : ' + microMs.toFixed(1) + ' ms');
+console.log('  setTimeout(,0) : ' + timerMs.toFixed(1) + ' ms');
+console.log('  ratio          : ' +
+            (timerMs / Math.max(microMs, 0.01)).toFixed(1) + 'x');
+console.log('');
+console.log('Speed is the smaller problem. The real one is that a');
+console.log('setTimeout-based promise fires AFTER every pending timer,');
+console.log('so it produces a different, wrong interleaving.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; three fields and two queues</h2>
+
+  <div class="trace">
+<pre>  class MyPromise {
+
+      state  = 'pending' | 'fulfilled' | 'rejected'
+      value  = the fulfilment value, or the rejection reason
+      onFulfilledCallbacks = []      <-- queued while pending
+      onRejectedCallbacks  = []
+
+      constructor(executor):
+          define resolve(v) and reject(e) as closures over `this`
+          run executor(resolve, reject) IMMEDIATELY
+          if it throws, reject with what it threw
+
+      resolve(v):
+          if state !== 'pending': return        <-- rule 2
+          state = 'fulfilled'; value = v
+          run every queued onFulfilled callback
+
+      then(onFulfilled, onRejected):
+          return a NEW promise
+          if already settled  -> queue the handler as a microtask
+          if still pending    -> push it into the callback array
+  }
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The two cases <code>then</code> must handle</span>
+    <p><strong>Still pending:</strong> there is nothing to run yet. Push the handler into an array; the
+    eventual <code>resolve</code> will drain it.</p>
+    <p><strong>Already settled:</strong> there is no future <code>resolve</code> to drain anything, so
+    schedule the handler yourself &mdash; as a microtask, never synchronously.</p>
+    <p>Forget the second case and every promise that settles before <code>then</code> is attached hangs
+    forever. That is the single most common bug in a hand-written promise.</p>
+  </div>
+
+  <p>Then the part that makes chaining work.</p>
+
+  <div class="trace">
+<pre>  then() returns a new promise P2. What settles P2?
+
+      handler returns a plain value v   ->  resolve P2 with v
+      handler THROWS e                  ->  reject P2 with e
+      handler returns a PROMISE         ->  P2 adopts it:
+                                            wait for it, then settle
+                                            P2 the same way
+
+  That third line is why you can write
+
+      fetchUser().then(u => fetchPosts(u)).then(posts => ...)
+
+  instead of getting a promise-of-a-promise. The spec calls this
+  step "the resolution procedure", and it is the only genuinely
+  subtle part of the whole object.
+</pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; a chain, step by step</h2>
+
+  <div class="trace">
+<pre>  const p1 = new MyPromise(res => setTimeout(() => res(1), 10));
+  const p2 = p1.then(v => v + 1);
+  const p3 = p2.then(v => { throw new Error('boom'); });
+  const p4 = p3.catch(e => 'recovered');
+
+  t=0   p1 created, executor runs, timer scheduled. p1 PENDING.
+        p2 = p1.then(...)   p1 is pending -> push handler onto p1's
+                            fulfil queue. p2 PENDING.
+        p3 = p2.then(...)   p2 pending -> push onto p2's queue.
+        p4 = p3.catch(...)  p3 pending -> push onto p3's REJECT queue.
+
+        Four promises exist, all pending, wired together.
+
+  t=10  the timer fires: res(1)
+        p1 -> FULFILLED with 1
+        drain p1's queue as a microtask:
+            handler v => v + 1  runs with 1  -> returns 2
+            2 is not a promise, so resolve p2 with 2
+        p2 -> FULFILLED with 2
+        drain p2's queue:
+            handler throws Error('boom')
+            a throw REJECTS the next promise
+        p3 -> REJECTED with the error
+        drain p3's reject queue:
+            catch handler runs, returns 'recovered'
+            a normal return from catch FULFILS the next promise
+        p4 -> FULFILLED with 'recovered'
+
+  The error travelled forward until something handled it, and
+  handling it put the chain back on the success track.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the chain, narrating itself</span></div>
+<pre><code>const trace = [];
+function step(s) { trace.push(s); console.log(s); }
+
+const p1 = new Promise((res) =&gt; {
+  step('t0  p1 created, executor runs now (synchronously)');
+  setTimeout(() =&gt; { step('t10 timer fires, resolving p1 with 1'); res(1); }, 10);
+});
+
+const p2 = p1.then((v) =&gt; {
+  step('    p2 handler got ' + v + ', returning ' + (v + 1));
+  return v + 1;
+});
+
+const p3 = p2.then((v) =&gt; {
+  step('    p3 handler got ' + v + ', throwing');
+  throw new Error('boom');
+});
+
+const p4 = p3.then(
+  () =&gt; step('    THIS NEVER RUNS -- p3 rejected'),
+  (e) =&gt; { step('    p4 onRejected got "' + e.message + '", recovering'); return 'recovered'; }
+);
+
+p4.then((v) =&gt; step('    final value: ' + v));
+
+step('t0  all four promises wired up, all pending');
+
+await new Promise((r) =&gt; setTimeout(r, 60));
+console.log('');
+console.log(trace.length + ' steps, in that exact order, every time.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; the minimum that works</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; state, queues and then</span></div>
+<pre><code>class SimplePromise {
+  constructor(executor) {
+    this.state = 'pending';
+    this.value = undefined;
+    this.onFulfilled = [];
+    this.onRejected = [];
+
+    const resolve = (value) =&gt; {
+      if (this.state !== 'pending') return;        // rule 2: once only
+      this.state = 'fulfilled';
+      this.value = value;
+      this.onFulfilled.forEach((cb) =&gt; queueMicrotask(() =&gt; cb(value)));
+      this.onFulfilled = this.onRejected = [];
+    };
+
+    const reject = (reason) =&gt; {
+      if (this.state !== 'pending') return;
+      this.state = 'rejected';
+      this.value = reason;
+      this.onRejected.forEach((cb) =&gt; queueMicrotask(() =&gt; cb(reason)));
+      this.onFulfilled = this.onRejected = [];
+    };
+
+    try {
+      executor(resolve, reject);                   // synchronous
+    } catch (err) {
+      reject(err);                                 // a throwing executor rejects
+    }
+  }
+
+  then(onFulfilled, onRejected) {
+    return new SimplePromise((resolve, reject) =&gt; {
+      const handleFulfil = (value) =&gt; {
+        if (typeof onFulfilled !== 'function') { resolve(value); return; }  // pass through
+        try {
+          const result = onFulfilled(value);
+          // if the handler returned a thenable, adopt it
+          if (result &amp;&amp; typeof result.then === 'function') result.then(resolve, reject);
+          else resolve(result);
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      const handleReject = (reason) =&gt; {
+        if (typeof onRejected !== 'function') { reject(reason); return; }   // pass through
+        try {
+          const result = onRejected(reason);
+          if (result &amp;&amp; typeof result.then === 'function') result.then(resolve, reject);
+          else resolve(result);                    // recovering puts us back on track
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      if (this.state === 'fulfilled') queueMicrotask(() =&gt; handleFulfil(this.value));
+      else if (this.state === 'rejected') queueMicrotask(() =&gt; handleReject(this.value));
+      else { this.onFulfilled.push(handleFulfil); this.onRejected.push(handleReject); }
+    });
+  }
+
+  catch(onRejected) { return this.then(undefined, onRejected); }
+}
+
+// --- exercise it ------------------------------------------------
+const results = [];
+
+new SimplePromise((res) =&gt; setTimeout(() =&gt; res(1), 5))
+  .then((v) =&gt; { results.push('got ' + v); return v * 2; })
+  .then((v) =&gt; { results.push('doubled to ' + v); throw new Error('boom'); })
+  .then(() =&gt; results.push('SKIPPED'))
+  .catch((e) =&gt; { results.push('caught: ' + e.message); return 'recovered'; })
+  .then((v) =&gt; results.push('final: ' + v));
+
+// attaching after it settles
+const already = new SimplePromise((res) =&gt; res('immediate'));
+already.then((v) =&gt; results.push('late attach 1: ' + v));
+
+// a handler returning a promise
+new SimplePromise((res) =&gt; res('a'))
+  .then((v) =&gt; new SimplePromise((r) =&gt; setTimeout(() =&gt; r(v + 'b'), 5)))
+  .then((v) =&gt; results.push('adopted: ' + v));
+
+// a throwing executor
+new SimplePromise(() =&gt; { throw new Error('executor blew up'); })
+  .catch((e) =&gt; results.push('executor error: ' + e.message));
+
+await new Promise((r) =&gt; setTimeout(r, 60));
+results.forEach((r) =&gt; console.log(' ', r));
+
+console.log('');
+setTimeout(() =&gt; already.then((v) =&gt; console.log('  late attach 2:', v)), 0);
+await new Promise((r) =&gt; setTimeout(r, 30));</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Two lines that look optional and are not</span>
+    <p><code>if (typeof onFulfilled !== 'function') { resolve(value); return; }</code> is what makes
+    <code>p.then(null).then(v =&gt; ...)</code> and <code>p.catch(...)</code> work &mdash; a missing
+    handler must <em>pass the value through</em>, not swallow it.</p>
+    <p>And in <code>handleReject</code>, a handler that returns normally calls <strong>resolve</strong>,
+    not reject. Catching an error means you have dealt with it, so the chain continues on the success
+    track. Getting that backwards makes every <code>catch</code> re-throw forever.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the statics</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Combinator</th><th>Fulfils when</th><th>Rejects when</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">all</td><td>every input fulfils</td><td>the <em>first</em> rejects</td><td>an array of values, in input order</td></tr>
+        <tr><td class="mono">allSettled</td><td>every input settles</td><td><strong>never</strong></td><td>an array of <code>{status, value|reason}</code></td></tr>
+        <tr><td class="mono">race</td><td colspan="2">the first to settle, either way</td><td>that one value or reason</td></tr>
+        <tr><td class="mono">any</td><td>the first to fulfil</td><td>only if <em>all</em> reject</td><td>an <code>AggregateError</code> on failure</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; all four, implemented</span></div>
+<pre><code>function myAll(promises) {
+  return new Promise((resolve, reject) =&gt; {
+    const list = Array.from(promises);
+    const results = new Array(list.length);
+    let remaining = list.length;
+
+    if (remaining === 0) { resolve([]); return; }    // empty input fulfils at once
+
+    list.forEach((p, i) =&gt; {
+      // Promise.resolve() so plain values work too
+      Promise.resolve(p).then(
+        (value) =&gt; {
+          results[i] = value;          // by INDEX -- order must be preserved
+          if (--remaining === 0) resolve(results);
+        },
+        reject                          // first rejection wins; later ones ignored
+      );
+    });
+  });
+}
+
+function myAllSettled(promises) {
+  return new Promise((resolve) =&gt; {
+    const list = Array.from(promises);
+    const results = new Array(list.length);
+    let remaining = list.length;
+
+    if (remaining === 0) { resolve([]); return; }
+
+    list.forEach((p, i) =&gt; {
+      Promise.resolve(p).then(
+        (value) =&gt; { results[i] = { status: 'fulfilled', value }; },
+        (reason) =&gt; { results[i] = { status: 'rejected', reason }; }
+      ).then(() =&gt; { if (--remaining === 0) resolve(results); });
+    });
+  });
+}
+
+function myRace(promises) {
+  return new Promise((resolve, reject) =&gt; {
+    // no counter at all -- settling a promise twice is a no-op,
+    // so the first one through simply wins
+    for (const p of promises) Promise.resolve(p).then(resolve, reject);
+    // note: an EMPTY input means this promise stays pending forever,
+    // which is exactly what the real Promise.race does
+  });
+}
+
+function myAny(promises) {
+  return new Promise((resolve, reject) =&gt; {
+    const list = Array.from(promises);
+    const errors = new Array(list.length);
+    let remaining = list.length;
+
+    if (remaining === 0) {
+      reject(new AggregateError([], 'All promises were rejected'));
+      return;
+    }
+
+    list.forEach((p, i) =&gt; {
+      Promise.resolve(p).then(
+        resolve,
+        (reason) =&gt; {
+          errors[i] = reason;
+          if (--remaining === 0) {
+            reject(new AggregateError(errors, 'All promises were rejected'));
+          }
+        }
+      );
+    });
+  });
+}
+
+// --- compare against the real statics ---------------------------
+const delay = (ms, v) =&gt; new Promise((r) =&gt; setTimeout(() =&gt; r(v), ms));
+const fail = (ms, e) =&gt; new Promise((_, r) =&gt; setTimeout(() =&gt; r(new Error(e)), ms));
+
+const settle = async (p) =&gt; {
+  try { return ['fulfilled', await p]; }
+  catch (e) { return ['rejected', e instanceof AggregateError
+                                   ? 'AggregateError(' + e.errors.length + ')'
+                                   : e.message]; }
+};
+
+const scenarios = {
+  'all, success   ': [() =&gt; [delay(20, 'a'), delay(5, 'b'), 'plain'],
+                      myAll, Promise.all],
+  'all, one fails ': [() =&gt; [delay(20, 'a'), fail(5, 'nope')], myAll, Promise.all],
+  'all, empty     ': [() =&gt; [], myAll, Promise.all],
+  'allSettled     ': [() =&gt; [delay(5, 'a'), fail(5, 'nope')],
+                      myAllSettled, Promise.allSettled],
+  'race, fast ok  ': [() =&gt; [delay(5, 'fast'), delay(30, 'slow')], myRace, Promise.race],
+  'race, fast fail': [() =&gt; [fail(5, 'quick fail'), delay(30, 'slow')],
+                      myRace, Promise.race],
+  'any, one ok    ': [() =&gt; [fail(5, 'x'), delay(20, 'winner')], myAny, Promise.any],
+  'any, all fail  ': [() =&gt; [fail(5, 'x'), fail(10, 'y')], myAny, Promise.any],
+};
+
+for (const [label, [make, mine, real]] of Object.entries(scenarios)) {
+  const a = await settle(mine(make()));
+  const b = await settle(real.call(Promise, make()));
+  const same = JSON.stringify(a) === JSON.stringify(b);
+  console.log(label + ' ' + (same ? 'match' : 'DIFFER') + '   ' + JSON.stringify(a));
+}
+
+console.log('');
+console.log('allSettled result shape:');
+const shape = await myAllSettled([delay(5, 'a'), fail(5, 'nope')]);
+for (const r of shape) {
+  console.log('  ' + JSON.stringify(
+    r.status === 'fulfilled'
+      ? { status: r.status, value: r.value }
+      : { status: r.status, reason: r.reason.message }
+  ));
+}
+console.log('');
+console.log('Note the asymmetry: fulfilled entries carry `value`,');
+console.log('rejected ones carry `reason`. There is no single key you');
+console.log('can read blindly -- always branch on `status` first.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the behaviours worth knowing about the statics</span></div>
+<pre><code>const delay = (ms, v) =&gt; new Promise((r) =&gt; setTimeout(() =&gt; r(v), ms));
+const fail = (ms, e) =&gt; new Promise((_, r) =&gt; setTimeout(() =&gt; r(new Error(e)), ms));
+
+// 1. all() does NOT cancel the others -- there is no cancellation
+let stillRunning = false;
+const slow = new Promise((r) =&gt; setTimeout(() =&gt; { stillRunning = true; r('slow'); }, 40));
+try { await Promise.all([fail(5, 'early'), slow]); } catch (e) { /* expected */ }
+console.log('1. all() rejected at 5 ms.');
+console.log('   Did the 40 ms one keep going?', !stillRunning ? 'not yet' : 'yes');
+await delay(60);
+console.log('   And after waiting:', stillRunning, '-- it ran to completion.');
+console.log('   Promises cannot be cancelled. Use AbortController for that.');
+
+// 2. results are in INPUT order, not completion order
+console.log('');
+const ordered = await Promise.all([delay(30, 'first'), delay(5, 'second')]);
+console.log('2. slow first, fast second ->', ordered);
+console.log('   Input order, always. Only the TIMING is concurrent.');
+
+// 3. all() starts them concurrently only because they already started
+console.log('');
+let t = Date.now();
+await Promise.all([delay(30, 1), delay(30, 2), delay(30, 3)]);
+console.log('3. three 30 ms tasks with all()      : ~' + (Date.now() - t) + ' ms');
+t = Date.now();
+for (const p of [30, 30, 30]) await delay(p, 1);
+console.log('   the same three, awaited in a loop  : ~' + (Date.now() - t) + ' ms');
+
+// 4. an unhandled rejection inside allSettled is still handled
+console.log('');
+const settled = await Promise.allSettled([fail(5, 'handled by allSettled')]);
+console.log('4. allSettled never rejects:', settled[0].status);
+
+// 5. race with a never-settling promise
+console.log('');
+const never = new Promise(() =&gt; {});
+console.log('5. race(never, delay) ->', await Promise.race([never, delay(5, 'the timer')]));
+console.log('   which is exactly how a timeout is built.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the small helpers that come up</span></div>
+<pre><code>// promisify: callback API -> promise API
+function promisify(fn) {
+  return function (...args) {
+    return new Promise((resolve, reject) =&gt; {
+      fn.call(this, ...args, (err, value) =&gt; (err ? reject(err) : resolve(value)));
+    });
+  };
+}
+
+const readThing = (id, cb) =&gt;
+  setTimeout(() =&gt; (id &gt; 0 ? cb(null, 'thing ' + id) : cb(new Error('bad id'))), 5);
+
+const readThingAsync = promisify(readThing);
+console.log('promisify ok  :', await readThingAsync(7));
+try { await readThingAsync(-1); } catch (e) { console.log('promisify err :', e.message); }
+
+// deferred: a promise whose resolve/reject you hold from outside.
+// Handy for tests and for bridging event-based code.
+function deferred() {
+  let resolve, reject;
+  const promise = new Promise((res, rej) =&gt; { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+
+const d = deferred();
+setTimeout(() =&gt; d.resolve('resolved from outside'), 5);
+console.log('');
+console.log('deferred      :', await d.promise);
+console.log('(Promise.withResolvers() is the standard version of this,');
+console.log(' available here?', typeof Promise.withResolvers === 'function', ')');
+
+// a sleep you will write a hundred times
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const t0 = Date.now();
+await sleep(20);
+console.log('');
+console.log('sleep(20)     : took ~' + (Date.now() - t0) + ' ms');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Operation</th><th>Cost</th></tr></thead>
+      <tbody>
+        <tr><td><code>then</code> on a pending promise</td><td class="mono">O(1) &mdash; one array push</td></tr>
+        <tr><td><code>resolve</code></td><td class="mono">O(k) for k attached handlers</td></tr>
+        <tr><td>A chain of <code>d</code> <code>then</code>s</td><td class="mono">O(d) promise objects, O(d) microtasks</td></tr>
+        <tr><td><code>Promise.all</code> of n</td><td class="mono">O(n) time, O(n) space</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Nothing here is algorithmically interesting, and that is the point &mdash; a promise is
+  bookkeeping. The costs that bite in practice are different in kind:</p>
+
+  <ul>
+    <li><strong>Each link in a chain is a microtask.</strong> A ten-deep chain means at least ten
+    microtask hops before the final value, which is why <code>await</code> in a hot loop is
+    slow.</li>
+    <li><strong>A pending promise holds its handlers, and its handlers hold their closures.</strong> A
+    promise that never settles is a memory leak with an unlimited lifetime.</li>
+    <li><strong><code>Promise.all</code> keeps every result alive</strong> until the last one lands. For
+    a thousand large responses that is a thousand large responses in memory at once.</li>
+  </ul>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;A promise holds a state, a value, and two arrays of callbacks. The executor runs
+    synchronously in the constructor; <code>resolve</code> and <code>reject</code> flip the state once
+    and drain the queues. <code>then</code> returns a new promise, and has two cases: if this one is
+    still pending, push the handler into the array; if it has already settled, schedule the handler as
+    a microtask myself. The handler's return value settles the new promise &mdash; a plain value
+    fulfils it, a throw rejects it, and a thenable is adopted, which is what makes chaining flat rather
+    than nested.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Not handling the already-settled case in <code>then</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the promise hangs forever</span></div>
+<pre><code>class BrokenPromise {
+  constructor(executor) {
+    this.state = 'pending'; this.value = undefined;
+    this.callbacks = [];
+    const resolve = (v) =&gt; {
+      if (this.state !== 'pending') return;
+      this.state = 'fulfilled'; this.value = v;
+      this.callbacks.forEach((cb) =&gt; queueMicrotask(() =&gt; cb(v)));
+    };
+    executor(resolve, () =&gt; {});
+  }
+  then(cb) {
+    this.callbacks.push(cb);        // ALWAYS queues -- bug
+    return this;
+  }
+}
+
+const results = [];
+
+// pending at the time then() is called -- works
+new BrokenPromise((res) =&gt; setTimeout(() =&gt; res('async value'), 5))
+  .then((v) =&gt; results.push('A: ' + v));
+
+// ALREADY settled at the time then() is called -- silence
+new BrokenPromise((res) =&gt; res('sync value'))
+  .then((v) =&gt; results.push('B: ' + v));
+
+await new Promise((r) =&gt; setTimeout(r, 40));
+
+console.log('results:', results);
+console.log('');
+console.log('B never ran. resolve() had already drained the (empty)');
+console.log('callback list before then() pushed anything into it, and');
+console.log('nothing will ever drain it again.');
+console.log('');
+console.log('then() must branch on the current state:');
+console.log('  pending   -> push');
+console.log('  settled   -> queueMicrotask the handler right now');</code></pre>
+  </div>
+
+  <h3>2. Calling the handler synchronously</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the output order is wrong</span></div>
+<pre><code>class SyncPromise {
+  constructor(executor) {
+    this.state = 'pending'; this.value = undefined; this.cbs = [];
+    const resolve = (v) =&gt; {
+      if (this.state !== 'pending') return;
+      this.state = 'fulfilled'; this.value = v;
+      this.cbs.forEach((cb) =&gt; cb(v));            // synchronous -- bug
+    };
+    executor(resolve, () =&gt; {});
+  }
+  then(cb) {
+    if (this.state === 'fulfilled') cb(this.value);   // synchronous -- bug
+    else this.cbs.push(cb);
+    return this;
+  }
+}
+
+console.log('with a real Promise:');
+console.log('  1 before');
+Promise.resolve('x').then(() =&gt; console.log('  3 handler'));
+console.log('  2 after');
+
+await new Promise((r) =&gt; setTimeout(r, 20));
+
+console.log('');
+console.log('with the synchronous version:');
+console.log('  1 before');
+new SyncPromise((res) =&gt; res('x')).then(() =&gt; console.log('  2 handler'));
+console.log('  3 after');
+
+console.log('');
+console.log('The handler jumped the queue. That breaks the one');
+console.log('guarantee everything else relies on: a then callback');
+console.log('NEVER runs before the current synchronous code finishes.');
+console.log('Without it, whether your code sees a value depends on');
+console.log('whether the promise happened to be settled already --');
+console.log('the "releasing Zalgo" problem.');</code></pre>
+  </div>
+
+  <h3>3. Forgetting to return inside <code>then</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; undefined arrives instead of the value</span></div>
+<pre><code>const fetchUser = () =&gt; new Promise((r) =&gt; setTimeout(() =&gt; r({ id: 1 }), 5));
+const fetchPosts = (u) =&gt; new Promise((r) =&gt; setTimeout(() =&gt; r(['p1', 'p2']), 5));
+
+// missing return
+await fetchUser()
+  .then((user) =&gt; { fetchPosts(user); })          // no return -- bug
+  .then((posts) =&gt; console.log('broken  ->', posts));
+// undefined -- the second then did not wait, and got nothing
+
+// with the return
+await fetchUser()
+  .then((user) =&gt; fetchPosts(user))               // returned
+  .then((posts) =&gt; console.log('correct ->', posts));
+
+console.log('');
+console.log('The same bug wearing async/await clothing:');
+const bad = async () =&gt; { fetchPosts({ id: 1 }); };      // not awaited
+const good = async () =&gt; { return fetchPosts({ id: 1 }); };
+console.log('  without await/return:', await bad());
+console.log('  with return         :', await good());
+
+console.log('');
+console.log('An arrow with braces returns undefined unless you say');
+console.log('return. `.then(u => fetchPosts(u))` returns; ');
+console.log('`.then(u => { fetchPosts(u); })` does not.');
+
+await new Promise((r) =&gt; setTimeout(r, 30));</code></pre>
+  </div>
+
+  <h3>4. <code>await</code> inside a loop when the tasks are independent</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct, and n times slower than it needs to be</span></div>
+<pre><code>const fetchOne = (id) =&gt; new Promise((r) =&gt; setTimeout(() =&gt; r('item ' + id), 20));
+const ids = [1, 2, 3, 4, 5];
+
+let t = Date.now();
+const sequential = [];
+for (const id of ids) sequential.push(await fetchOne(id));
+const seqMs = Date.now() - t;
+
+t = Date.now();
+const parallel = await Promise.all(ids.map(fetchOne));
+const parMs = Date.now() - t;
+
+console.log('same results:', JSON.stringify(sequential) === JSON.stringify(parallel));
+console.log('  await in a loop : ~' + seqMs + ' ms  (5 x 20 ms, one after another)');
+console.log('  Promise.all     : ~' + parMs + ' ms  (all five at once)');
+
+console.log('');
+console.log('And the trap in the other direction -- forEach with async:');
+t = Date.now();
+const collected = [];
+ids.forEach(async (id) =&gt; { collected.push(await fetchOne(id)); });
+console.log('  right after forEach, collected has', collected.length, 'items');
+console.log('  because forEach does not await anything. Use for...of to');
+console.log('  go sequentially, or map + Promise.all to go concurrently.');
+
+await new Promise((r) =&gt; setTimeout(r, 60));
+console.log('  (60 ms later it has', collected.length + ') -- too late to be useful');</code></pre>
+  </div>
+
+  <h3>5. Creating a promise you never settle, or never handle</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; two silent failures</span></div>
+<pre><code>// (a) a path through the executor that settles nothing
+function maybeResolve(shouldSucceed) {
+  return new Promise((resolve, reject) =&gt; {
+    if (shouldSucceed) resolve('ok');
+    // else: nothing. The promise stays pending forever.
+  });
+}
+
+let landed = false;
+maybeResolve(false).then(() =&gt; { landed = true; }, () =&gt; { landed = true; });
+await new Promise((r) =&gt; setTimeout(r, 30));
+console.log('a) did the failing path ever settle?', landed);
+console.log('   No throw, no rejection, no log. The await just never');
+console.log('   returns, and the closure is retained forever.');
+
+// (b) a rejection with no handler attached
+console.log('');
+const orphan = Promise.reject(new Error('nobody is listening'));
+console.log('b) created a rejected promise with no catch.');
+console.log('   In Node this prints an UnhandledPromiseRejection');
+console.log('   warning and, by default since v15, KILLS the process.');
+console.log('   In a browser it fires window.onunhandledrejection.');
+orphan.catch(() =&gt; {});          // attach one so this page survives
+
+// (c) the async version of the same thing
+console.log('');
+async function forgetful() { throw new Error('thrown in an async fn'); }
+const p = forgetful();           // rejected, unhandled at this instant
+console.log('c) an async function that throws returns a REJECTED');
+console.log('   promise. Calling it without await or .catch is the');
+console.log('   same unhandled rejection.');
+try { await p; } catch (e) { console.log('   handled:', e.message); }
+
+console.log('');
+console.log('Rule: every promise must have a path to settle, and every');
+console.log('rejection must have a handler somewhere in its chain.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the state machine from memory</strong> &mdash; three fields, two queues, guarded
+    resolve and reject. Then add <code>then</code>'s two cases.</li>
+    <li><strong>Add thenable adoption.</strong> Make <code>then(v =&gt; anotherPromise)</code> work,
+    and explain why without it you would get a promise wrapping a promise.</li>
+    <li><strong>Write <code>all</code> and <code>allSettled</code> from memory.</strong> Step 7. The
+    two details to get right: results by index, and the counter reaching zero.</li>
+    <li><strong>Write <code>race</code> in three lines</strong> and explain why it needs no counter at
+    all.</li>
+    <li><strong>Add <code>finally</code>.</strong> It runs on both paths, takes no arguments, and must
+    <em>pass the original value or reason through</em> &mdash; which makes it more interesting than it
+    looks.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>&ldquo;Settle once, then replay to anyone who asks&rdquo; is the whole idea.</strong>
+    The state machine is trivial; what makes promises useful is that the result is a value you can pass
+    around, and that a late subscriber gets the same answer as an early one. The next three pages
+    &mdash; event loop order, concurrency limits, retries &mdash; are all built on exactly this
+    object.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="04-call-apply-bind.html">&larr; call, apply, bind</a>
+  <a href="06-event-loop.html">Next: Event Loop Output Order &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Find Peak Element</title>
+<meta name="description" content="Binary search with no sorted array in sight — walk uphill and halve the search space anyway.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Searching &amp; sorting &middot; Problem 03</p>
+  <h1>Find Peak Element</h1>
+  <p class="standfirst">The array is not sorted, and binary search works anyway. This is the problem
+  that breaks the habit of thinking &ldquo;binary search needs a sorted array&rdquo; &mdash; what it
+  actually needs is <strong>a rule for discarding half</strong>.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>A <strong>peak</strong> is an element strictly greater than both its neighbours. Return the index
+  of <em>any</em> peak. Treat the positions just outside the array as
+  <code>-Infinity</code>, so the first and last elements only need to beat their one real neighbour.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Valid answers</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[1, 2, 3, 1]</td><td class="mono">2</td></tr>
+        <tr><td class="mono">[1, 2, 1, 3, 5, 6, 4]</td><td class="mono">1 or 5</td></tr>
+        <tr><td class="mono">[1, 2, 3, 4, 5]</td><td class="mono">4 &mdash; the last element</td></tr>
+        <tr><td class="mono">[5, 4, 3, 2, 1]</td><td class="mono">0 &mdash; the first</td></tr>
+        <tr><td class="mono">[7]</td><td class="mono">0</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why a peak always exists</span>
+    <p>Start anywhere and keep walking uphill. You cannot walk forever &mdash; the array is finite
+    &mdash; so eventually you stop, and the place you stop is higher than both sides. That is a peak.</p>
+    <p>The <code>-Infinity</code> boundary is what guarantees you never walk off the end: an increasing
+    array peaks at its last element, a decreasing one at its first.</p>
+  </div>
+
+  <p>The problem usually adds <code>nums[i] !== nums[i + 1]</code> &mdash; no two neighbours are equal.
+  That matters: with plateaus, &ldquo;which way is uphill?&rdquo; can be unanswerable, and the
+  logarithmic solution collapses.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; just look at every element</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; linear scan</span></div>
+<pre><code>function findPeakLinear(nums) {
+  for (let i = 0; i &lt; nums.length; i++) {
+    const left  = i === 0 ? -Infinity : nums[i - 1];
+    const right = i === nums.length - 1 ? -Infinity : nums[i + 1];
+
+    if (nums[i] &gt; left &amp;&amp; nums[i] &gt; right) return i;
+  }
+  return -1;
+}
+
+console.log(findPeakLinear([1,2,3,1]));         // 2
+console.log(findPeakLinear([1,2,1,3,5,6,4]));   // 1
+console.log(findPeakLinear([1,2,3,4,5]));       // 4
+console.log(findPeakLinear([5,4,3,2,1]));       // 0
+console.log(findPeakLinear([7]));               // 0
+
+// O(n), obviously correct. And there is an even simpler version:
+// the first index where the value STARTS falling is a peak.
+function findPeakSimpler(nums) {
+  for (let i = 0; i &lt; nums.length - 1; i++) {
+    if (nums[i] &gt; nums[i + 1]) return i;    // it was climbing, now it falls
+  }
+  return nums.length - 1;                    // it climbed all the way
+}
+
+console.log('');
+console.log(findPeakSimpler([1,2,3,1]));        // 2
+console.log(findPeakSimpler([1,2,1,3,5,6,4]));  // 1
+console.log(findPeakSimpler([1,2,3,4,5]));      // 4</code></pre>
+  </div>
+
+  <p>The second version is worth pausing on. &ldquo;The first place it stops rising&rdquo; is always a
+  peak, because everything before it was climbing. That observation is the seed of the fast
+  solution.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why we can do better than O(n)</h2>
+
+  <p>O(n) is fine, and the problem asks for O(log n) &mdash; which sounds impossible, because the
+  array is unsorted and a peak could be anywhere. The resolution is that you are not asked to find a
+  <em>particular</em> peak, only <em>a</em> peak.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// A long climb then a long descent -- the peak is right in the
+// middle, so the linear scan has to walk half the array.
+const N = 4000000;
+const nums = [];
+for (let i = 0; i &lt; N / 2; i++) nums.push(i);
+for (let i = N / 2; i &gt; 0; i--) nums.push(i);
+
+function linear(a) {
+  for (let i = 0; i &lt; a.length - 1; i++) if (a[i] &gt; a[i + 1]) return i;
+  return a.length - 1;
+}
+
+function binary(a) {
+  let lo = 0, hi = a.length - 1;
+  while (lo &lt; hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (a[mid] &lt; a[mid + 1]) lo = mid + 1;    // uphill to the right
+    else hi = mid;                            // mid could be the peak
+  }
+  return lo;
+}
+
+let t = performance.now();
+const p = linear(nums);
+const linMs = performance.now() - t;
+
+t = performance.now();
+const q = binary(nums);
+const binMs = performance.now() - t;
+
+const isPeak = (a, i) =&gt;
+  (i === 0 || a[i] &gt; a[i - 1]) &amp;&amp; (i === a.length - 1 || a[i] &gt; a[i + 1]);
+
+console.log('linear scan   : index', p, 'in', linMs.toFixed(1) + ' ms');
+console.log('binary search : index', q, 'in', binMs.toFixed(3) + ' ms');
+console.log('both are peaks:', isPeak(nums, p), isPeak(nums, q));
+console.log('binary needed at most', Math.ceil(Math.log2(nums.length)), 'steps');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; walk uphill, halving</h2>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Look at <code>nums[mid]</code> and <code>nums[mid + 1]</code>.</p>
+    <p>If <code>nums[mid] &lt; nums[mid + 1]</code> &mdash; it is going <strong>up</strong> to the
+    right &mdash; then a peak is guaranteed somewhere in <code>[mid + 1, hi]</code>. Discard the left
+    half.</p>
+    <p>If <code>nums[mid] &gt; nums[mid + 1]</code> &mdash; going <strong>down</strong> &mdash; then a
+    peak is guaranteed in <code>[lo, mid]</code>. Discard the right half.</p>
+  </div>
+
+  <h3>Why the guarantee holds</h3>
+
+  <p>This is the whole problem, so read it slowly. Suppose <code>nums[mid] &lt; nums[mid + 1]</code>.
+  Start walking right from <code>mid + 1</code>. Either the values keep rising until you fall off the
+  end &mdash; in which case the last element is a peak, because the boundary is
+  <code>-Infinity</code> &mdash; or at some point they stop rising, and that point is a peak.</p>
+
+  <p>Either way, <strong>the right side must contain a peak</strong>. You do not know where, and it
+  does not matter. That is enough to throw away everything to the left.</p>
+
+  <div class="trace">
+<pre>  [1, 2, 1, 3, 5, 6, 4]
+   0  1  2  3  4  5  6
+
+  lo=0 hi=6   mid=3   nums[3]=3  vs  nums[4]=5
+              3 &lt; 5  ->  climbing right  ->  a peak exists to the right
+              lo = 4        (indexes 0..3 discarded)
+
+  lo=4 hi=6   mid=5   nums[5]=6  vs  nums[6]=4
+              6 > 4  ->  falling  ->  a peak exists at or before 5
+              hi = 5        (index 6 discarded)
+
+  lo=4 hi=5   mid=4   nums[4]=5  vs  nums[5]=6
+              5 &lt; 6  ->  climbing  ->  lo = 5
+
+  lo === hi === 5  ->  stop.   index 5 is a peak (6 > 5 and 6 > 4).
+</pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Two details that make the loop safe</span>
+    <p><code>while (lo &lt; hi)</code>, not <code>&lt;=</code>. The loop narrows until exactly one
+    candidate remains, and that survivor <em>is</em> the answer &mdash; there is no separate
+    &ldquo;did we find it?&rdquo; check.</p>
+    <p><code>hi = mid</code>, not <code>mid - 1</code>. When the values are falling,
+    <code>mid</code> itself might be the peak, so it must stay in the range. And since
+    <code>mid &lt; hi</code> always holds inside the loop, <code>hi = mid</code> still shrinks the
+    range &mdash; no infinite loop.</p>
+  </div>
+
+  <p>Note this is the <strong>half-open</strong> shape from the binary search page: narrow to one
+  survivor, never compare against a target, never return early.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>nums = [1, 2, 3, 1]</code>.</p>
+
+  <div class="trace">
+<pre>lo=0 hi=3   mid = 0 + (3-0)/2 = 1
+            nums[1]=2  vs  nums[2]=3     2 &lt; 3  climbing
+            lo = 2
+
+lo=2 hi=3   mid = 2 + (3-2)/2 = 2
+            nums[2]=3  vs  nums[3]=1     3 > 1  falling
+            hi = 2
+
+lo === hi === 2  ->  return 2
+
+check: nums[2]=3, left neighbour 2, right neighbour 1.  A peak.
+</pre>
+  </div>
+
+  <p>A strictly increasing array, <code>nums = [1,2,3,4,5]</code>:</p>
+
+  <div class="trace">
+<pre>lo=0 hi=4   mid=2   nums[2]=3 &lt; nums[3]=4   climbing   lo=3
+lo=3 hi=4   mid=3   nums[3]=4 &lt; nums[4]=5   climbing   lo=4
+lo === hi === 4  ->  return 4
+
+The last element. Its "right neighbour" is -Infinity, so it wins
+by default. The algorithm never had to special-case it.
+</pre>
+  </div>
+
+  <p>And a strictly decreasing one, <code>nums = [5,4,3,2,1]</code>:</p>
+
+  <div class="trace">
+<pre>lo=0 hi=4   mid=2   nums[2]=3 > nums[3]=2   falling   hi=2
+lo=0 hi=2   mid=1   nums[1]=4 > nums[2]=3   falling   hi=1
+lo=0 hi=1   mid=0   nums[0]=5 > nums[1]=4   falling   hi=0
+lo === hi === 0  ->  return 0
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function peakExplained(nums) {
+  console.log('nums =', nums);
+
+  let lo = 0, hi = nums.length - 1;
+  let steps = 0;
+
+  while (lo &lt; hi) {
+    steps++;
+    const mid = lo + Math.floor((hi - lo) / 2);
+
+    if (nums[mid] &lt; nums[mid + 1]) {
+      console.log('  lo=' + lo + ' hi=' + hi + ' mid=' + mid +
+                  '   nums[' + mid + ']=' + nums[mid] + ' &lt; nums[' + (mid + 1) + ']=' +
+                  nums[mid + 1] + '  climbing -> a peak is to the RIGHT, lo=' + (mid + 1));
+      lo = mid + 1;
+    } else {
+      console.log('  lo=' + lo + ' hi=' + hi + ' mid=' + mid +
+                  '   nums[' + mid + ']=' + nums[mid] + ' &gt; nums[' + (mid + 1) + ']=' +
+                  nums[mid + 1] + '  falling  -> a peak is at or LEFT of mid, hi=' + mid);
+      hi = mid;
+    }
+  }
+
+  const left  = lo === 0 ? '-inf' : nums[lo - 1];
+  const right = lo === nums.length - 1 ? '-inf' : nums[lo + 1];
+  console.log('  one candidate left: index ' + lo + ' (value ' + nums[lo] + ')');
+  console.log('  neighbours: ' + left + ' and ' + right + '   -> a peak');
+  console.log('  ' + steps + ' steps for ' + nums.length + ' elements');
+  console.log('');
+  return lo;
+}
+
+console.log('RESULT:', peakExplained([1,2,3,1]));
+console.log('==========================================');
+console.log('RESULT:', peakExplained([1,2,1,3,5,6,4]));
+console.log('==========================================');
+console.log('RESULT:', peakExplained([5,4,3,2,1]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; loops only</span></div>
+<pre><code>function findPeakManual(nums) {
+  let lo = 0;
+  let hi = nums.length - 1;
+
+  // narrow until ONE candidate remains -- that survivor is the answer
+  while (lo &lt; hi) {
+    const mid = lo + ((hi - lo) - ((hi - lo) % 2)) / 2;
+
+    if (nums[mid] &lt; nums[mid + 1]) {
+      // climbing to the right: a peak must exist in [mid+1, hi]
+      lo = mid + 1;
+    } else {
+      // falling: a peak must exist in [lo, mid] -- mid itself may be it
+      hi = mid;
+    }
+  }
+
+  return lo;
+}
+
+// a checker, so we can trust the answers
+function isPeak(nums, i) {
+  const left  = i === 0 ? -Infinity : nums[i - 1];
+  const right = i === nums.length - 1 ? -Infinity : nums[i + 1];
+  return nums[i] &gt; left &amp;&amp; nums[i] &gt; right;
+}
+
+const cases = [
+  [1,2,3,1], [1,2,1,3,5,6,4], [1,2,3,4,5], [5,4,3,2,1],
+  [7], [1,2], [2,1], [1,3,2,4,1], [10,20,15,2,23,90,67]
+];
+
+for (const c of cases) {
+  const i = findPeakManual(c);
+  console.log(JSON.stringify(c) + '  ->  index ' + i +
+              ' (value ' + c[i] + ')   valid peak: ' + isPeak(c, i));
+}</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">an exhaustive check</span></div>
+<pre><code>function findPeak(nums) {
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt; hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] &lt; nums[mid + 1]) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function isPeak(nums, i) {
+  const l = i === 0 ? -Infinity : nums[i - 1];
+  const r = i === nums.length - 1 ? -Infinity : nums[i + 1];
+  return nums[i] &gt; l &amp;&amp; nums[i] &gt; r;
+}
+
+// every array of length 1..9 with no two equal neighbours
+let checked = 0, failed = 0;
+
+for (let trial = 0; trial &lt; 20000; trial++) {
+  const n = 1 + Math.floor(Math.random() * 9);
+  const a = [Math.floor(Math.random() * 20)];
+  while (a.length &lt; n) {
+    let v = Math.floor(Math.random() * 20);
+    while (v === a[a.length - 1]) v = Math.floor(Math.random() * 20);
+    a.push(v);
+  }
+
+  checked++;
+  const i = findPeak(a);
+  if (!isPeak(a, i)) {
+    failed++;
+    if (failed &lt; 4) console.log('FAIL', JSON.stringify(a), 'returned', i);
+  }
+}
+
+console.log(checked + ' random arrays checked,  ' + failed + ' failures');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function findPeakElement(nums) {
+  let lo = 0;
+  let hi = nums.length - 1;
+
+  while (lo &lt; hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+
+    if (nums[mid] &lt; nums[mid + 1]) lo = mid + 1;   // uphill -> go right
+    else hi = mid;                                  // downhill -> mid may be it
+  }
+
+  return lo;
+}
+
+console.log(findPeakElement([1,2,3,1]));         // 2
+console.log(findPeakElement([1,2,1,3,5,6,4]));   // 5
+console.log(findPeakElement([1,2,3,4,5]));       // 4
+console.log(findPeakElement([5,4,3,2,1]));       // 0
+console.log(findPeakElement([7]));               // 0
+console.log(findPeakElement([1,2]));             // 1</code></pre>
+  </div>
+
+  <p>Six lines, no target, no <code>-1</code> return, no equality check. The loop narrows to one
+  survivor and that survivor is correct by construction. That is a different <em>shape</em> of binary
+  search from &ldquo;find this value&rdquo;, and it is worth recognising as its own pattern.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the same shape, other problems</span></div>
+<pre><code>// 1. Find Minimum in Rotated Sorted Array -- narrow to one survivor
+function findMin(nums) {
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt; hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] &gt; nums[hi]) lo = mid + 1;
+    else hi = mid;
+  }
+  return nums[lo];
+}
+console.log('min of rotated:', findMin([4,5,6,7,0,1,2]));   // 0
+
+// 2. First bad version -- the predicate goes false...false...true
+function firstBadVersion(n, isBad) {
+  let lo = 1, hi = n;
+  while (lo &lt; hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (isBad(mid)) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
+}
+console.log('first bad:', firstBadVersion(100, v =&gt; v &gt;= 37));   // 37
+
+// 3. Peak in a MOUNTAIN array (guaranteed to rise then fall)
+function peakIndexInMountain(nums) {
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt; hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] &lt; nums[mid + 1]) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+console.log('mountain peak:', peakIndexInMountain([0,2,5,9,4,1]));   // 3
+
+// Identical body, three problems. The pattern: narrow [lo, hi] until
+// one element remains, moving hi to mid (never mid-1) whenever mid
+// is still a candidate.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the 2D version, for completeness</span></div>
+<pre><code>// Peak in a matrix: greater than all four neighbours.
+// Binary search on COLUMNS, taking the row maximum of each.
+function findPeakGrid(mat) {
+  let lo = 0, hi = mat[0].length - 1;
+
+  while (lo &lt;= hi) {
+    const midCol = lo + Math.floor((hi - lo) / 2);
+
+    // the largest value in this column
+    let maxRow = 0;
+    for (let r = 0; r &lt; mat.length; r++) {
+      if (mat[r][midCol] &gt; mat[maxRow][midCol]) maxRow = r;
+    }
+
+    const leftBigger  = midCol &gt; 0 &amp;&amp; mat[maxRow][midCol - 1] &gt; mat[maxRow][midCol];
+    const rightBigger = midCol &lt; mat[0].length - 1 &amp;&amp;
+                        mat[maxRow][midCol + 1] &gt; mat[maxRow][midCol];
+
+    if (!leftBigger &amp;&amp; !rightBigger) return [maxRow, midCol];
+    if (leftBigger) hi = midCol - 1;
+    else lo = midCol + 1;
+  }
+
+  return [-1, -1];
+}
+
+const grid = [[1,4],[3,2]];
+console.log(findPeakGrid(grid));         // [1,0] -- value 3, beats 1 above and 2 right
+// note [0,1] (value 4) is ALSO a valid peak -- any one will do
+
+const grid2 = [[10,20,15],[21,30,14],[7,16,32]];
+console.log(findPeakGrid(grid2));        // [1,1] -- value 30, beats 20/16/21/14
+
+// O(rows * log columns). The same "one side must contain a peak"
+// argument, applied to columns instead of positions.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Linear scan</td><td class="mono">O(n)</td><td class="mono">O(1)</td></tr>
+        <tr><td><strong>Binary search</strong></td><td class="mono">O(log n)</td><td class="mono">O(1)</td></tr>
+        <tr><td>2D grid version</td><td class="mono">O(rows &middot; log cols)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Each iteration halves the range, so O(log n) &mdash; and remarkably, the algorithm never looks at
+  most of the array. On four million elements it inspects about twenty two of them.</p>
+
+  <p>That is only possible because the question asks for <em>any</em> peak. Finding the
+  <em>global maximum</em> is provably O(n): you cannot skip an element without risking that it was the
+  largest. Being asked for &ldquo;any valid answer&rdquo; rather than &ldquo;the best answer&rdquo; is a
+  hint worth noticing in a problem statement.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;The array is not sorted, but binary search only needs a rule for discarding half.
+    I compare <code>nums[mid]</code> with <code>nums[mid+1]</code>: if it is rising, a peak must exist
+    to the right, because the values either keep rising to the end &mdash; where the boundary is
+    &minus;infinity &mdash; or turn over somewhere. If it is falling, the same argument puts a peak at
+    or before <code>mid</code>. I narrow with <code>lo &lt; hi</code> and <code>hi = mid</code> until
+    one candidate remains, which is the answer. O(log n) time, O(1) space.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Writing <code>hi = mid - 1</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; discards the peak itself</span></div>
+<pre><code>function broken(nums) {
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt; hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] &lt; nums[mid + 1]) lo = mid + 1;
+    else hi = mid - 1;                    // should be hi = mid
+  }
+  return lo;
+}
+
+function isPeak(a, i) {
+  const l = i === 0 ? -Infinity : a[i - 1];
+  const r = i === a.length - 1 ? -Infinity : a[i + 1];
+  return a[i] &gt; l &amp;&amp; a[i] &gt; r;
+}
+
+const a = [1,2,3,1];
+console.log('returned', broken(a), 'is a peak:', isPeak(a, broken(a)));   // 2, true -- lucky
+
+const b = [1,3,2];
+console.log('returned', broken(b), 'is a peak:', isPeak(b, broken(b)));   // 0, FALSE
+
+const c = [1,4,3,2];
+console.log('returned', broken(c), 'is a peak:', isPeak(c, broken(c)));   // 0, FALSE
+
+// On [1,3,2]: mid=1, nums[1]=3 > nums[2]=2, so it is falling and
+// index 1 IS the peak -- but hi = mid - 1 = 0 discards it. The loop
+// ends on index 0, which is not a peak at all.
+// When the values are falling, mid ITSELF might be the peak.</code></pre>
+  </div>
+
+  <h3>2. Writing <code>while (lo &lt;= hi)</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; infinite loop</span></div>
+<pre><code>function broken(nums) {
+  let lo = 0, hi = nums.length - 1;
+  let guard = 0;
+  while (lo &lt;= hi) {                       // should be lo &lt; hi
+    if (++guard &gt; 50) return 'INFINITE LOOP -- bailed out';
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] &lt; nums[mid + 1]) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+console.log(broken([1,2,3,1]));   // INFINITE LOOP
+
+// When lo === hi, mid === lo === hi. If the values are falling,
+// hi = mid leaves everything unchanged and the condition lo &lt;= hi
+// is still true. The half-open shape must stop AT one survivor.</code></pre>
+  </div>
+
+  <h3>3. Reading <code>nums[mid + 1]</code> off the end</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">why it is actually safe</span></div>
+<pre><code>// Inside `while (lo &lt; hi)`, mid = lo + floor((hi-lo)/2) satisfies
+// lo &lt;= mid &lt; hi. So mid + 1 &lt;= hi &lt;= length - 1 -- always in range.
+function trace(nums) {
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt; hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    console.log('lo=' + lo + ' hi=' + hi + ' mid=' + mid +
+                '   mid+1=' + (mid + 1) + ' &lt;= hi? ' + ((mid + 1) &lt;= hi));
+    if (nums[mid] &lt; nums[mid + 1]) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+trace([1,2,1,3,5,6,4]);
+
+// Change the loop to `lo &lt;= hi` and this stops being true -- which
+// is another reason the two details in Step 4 travel together.</code></pre>
+  </div>
+
+  <h3>4. Comparing with <code>nums[mid - 1]</code> as well</h3>
+
+  <p>You only need <em>one</em> comparison. Checking both neighbours turns a two-way decision into a
+  three-way one and forces you to handle <code>mid === 0</code> as a special case &mdash; more code,
+  more chances to be wrong, and no benefit. The single comparison against <code>mid + 1</code>
+  already determines which half to keep.</p>
+
+  <h3>5. Assuming plateaus are allowed</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; equal neighbours</span></div>
+<pre><code>function findPeak(nums) {
+  let lo = 0, hi = nums.length - 1;
+  while (lo &lt; hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (nums[mid] &lt; nums[mid + 1]) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function isStrictPeak(a, i) {
+  const l = i === 0 ? -Infinity : a[i - 1];
+  const r = i === a.length - 1 ? -Infinity : a[i + 1];
+  return a[i] &gt; l &amp;&amp; a[i] &gt; r;
+}
+
+const plateau = [1, 2, 2, 2, 1];
+const i = findPeak(plateau);
+console.log('returned', i, 'value', plateau[i],
+            'strict peak:', isStrictPeak(plateau, i));
+
+// With equal neighbours, "which way is uphill?" has no answer, and
+// the halving argument collapses -- a strict peak may exist on
+// either side of a plateau. The problem guarantees
+// nums[i] !== nums[i+1] precisely to rule this out. If plateaus
+// were allowed, O(n) would be unavoidable.</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the six-line version from memory</strong>, then say the &ldquo;a peak must exist
+    to the right&rdquo; argument out loud. The code is trivial; the argument is the answer.</li>
+    <li><strong>Peak Index in a Mountain Array.</strong> Same code, with the extra guarantee that the
+    array rises then falls. Confirm nothing needs to change.</li>
+    <li><strong>Find Minimum in Rotated Sorted Array.</strong> The same narrow-to-one-survivor shape.
+    It is in Step 7.</li>
+    <li><strong>First Bad Version.</strong> Also in Step 7 &mdash; and notice there is no array at all,
+    only a predicate that flips once.</li>
+    <li><strong>Find a peak in a 2D grid.</strong> In Step 7. Work out why taking the row maximum of
+    the middle column is what makes the halving argument survive in two dimensions.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Binary search needs a discard rule, not a sorted array.</strong> If one comparison lets
+    you prove &ldquo;an answer definitely exists on this side&rdquo;, you can halve &mdash; whatever
+    the data looks like. And notice the second lesson hiding in the problem statement: being asked for
+    <em>any</em> valid answer rather than <em>the best</em> one is often what makes a logarithmic
+    solution possible at all.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="02-search-in-rotated-sorted-array.html">&larr; Search in Rotated Sorted Array</a>
+  <a href="04-kth-largest-element.html">Next: Kth Largest Element &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

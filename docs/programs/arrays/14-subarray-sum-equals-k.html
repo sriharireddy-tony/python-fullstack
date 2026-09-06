@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subarray Sum Equals K</title>
+<meta name="description" content="Prefix sums plus a hash map — Two Sum's trick applied to running totals. The problem where the sliding window fails.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Arrays &middot; Problem 14</p>
+  <h1>Subarray Sum Equals K</h1>
+  <p class="standfirst">The problem that punishes you for reaching for the sliding window. Negative
+  numbers break it &mdash; and what replaces it is Two Sum&rsquo;s complement trick, applied to
+  running totals instead of values.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p><strong>Count</strong> how many contiguous subarrays add up to exactly <code>k</code>.
+  Not find one &mdash; count them all.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th class="mono">k</th><th>Answer</th><th>The subarrays</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[1, 1, 1]</td><td class="mono">2</td><td class="mono">2</td><td>[1,1] at 0&ndash;1, [1,1] at 1&ndash;2</td></tr>
+        <tr><td class="mono">[1, 2, 3]</td><td class="mono">3</td><td class="mono">2</td><td>[3], [1,2]</td></tr>
+        <tr><td class="mono">[1, -1, 0]</td><td class="mono">0</td><td class="mono">3</td><td>[1,-1], [0], [1,-1,0]</td></tr>
+        <tr><td class="mono">[3, 4, 7, 2, -3, 1, 4, 2]</td><td class="mono">7</td><td class="mono">4</td><td>[3,4], [7], [7,2,-3,1], [1,4,2]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Row one matters: the two answers <em>overlap</em>, sharing the middle 1. Overlapping subarrays
+  each count separately. Row three matters more:</p>
+
+  <div class="note warn">
+    <span class="t">The array can contain negatives, and that changes everything</span>
+    <p>With only positive numbers, a growing window&rsquo;s sum only grows, so a sliding window works:
+    too small, extend; too big, shrink. With negatives, extending a window can make the sum
+    <em>smaller</em>. There is no rule that tells you which end to move. <strong>The sliding window
+    is not applicable here</strong>, and reaching for it is the most common wrong turn on this
+    problem.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <p>Every subarray is defined by a start and an end. Two loops, carrying the running sum as the end
+  moves &mdash; the same improvement you made in Maximum Subarray.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; every subarray</span></div>
+<pre><code>function subarraySumBrute(nums, k) {
+  let count = 0;
+
+  for (let start = 0; start &lt; nums.length; start++) {
+    let sum = 0;
+
+    for (let end = start; end &lt; nums.length; end++) {
+      sum += nums[end];               // extend by one, no recomputation
+      if (sum === k) count++;         // do NOT break -- later ones may also work
+    }
+  }
+
+  return count;
+}
+
+console.log(subarraySumBrute([1, 1, 1], 2));                    // 2
+console.log(subarraySumBrute([1, 2, 3], 3));                    // 2
+console.log(subarraySumBrute([1, -1, 0], 0));                   // 3
+console.log(subarraySumBrute([3, 4, 7, 2, -3, 1, 4, 2], 7));    // 4</code></pre>
+  </div>
+
+  <p>Note the missing <code>break</code>. Once you find a match you must keep extending, because with
+  negatives the sum can dip away from <code>k</code> and come back. In <code>[1, -1, 0]</code> with
+  <code>k = 0</code>, the subarray starting at index 0 matches at length 2 <em>and</em> at length 3.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>O(n&sup2;) &mdash; every start paired with every end. Ten thousand elements is fifty million
+  additions; a hundred thousand is five billion.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 20000;
+const nums = [];
+for (let i = 0; i &lt; N; i++) nums.push(Math.floor(Math.random() * 9) - 4);   // -4..4
+const k = 3;
+
+function brute(a, k) {
+  let count = 0;
+  for (let s = 0; s &lt; a.length; s++) {
+    let sum = 0;
+    for (let e = s; e &lt; a.length; e++) {
+      sum += a[e];
+      if (sum === k) count++;
+    }
+  }
+  return count;
+}
+
+function prefixMap(a, k) {
+  const seen = new Map([[0, 1]]);
+  let running = 0, count = 0;
+  for (const n of a) {
+    running += n;
+    count += seen.get(running - k) || 0;
+    seen.set(running, (seen.get(running) || 0) + 1);
+  }
+  return count;
+}
+
+let t = performance.now();
+const x = brute(nums, k);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const y = prefixMap(nums, k);
+const fastMs = performance.now() - t;
+
+console.log('every subarray :', x, 'in', bruteMs.toFixed(1) + ' ms');
+console.log('prefix + map   :', y, 'in', fastMs.toFixed(2) + ' ms');
+console.log('same answer    :', x === y);
+console.log('speed-up:', Math.round(bruteMs / Math.max(fastMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; prefix sums</h2>
+
+  <p>Define <code>prefix[i]</code> as the sum of everything from the start up to index <code>i</code>.
+  Then the sum of any middle chunk is a subtraction:</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the key identity</span></div>
+<pre><code>sum of nums[a .. b]  =  prefix[b] - prefix[a-1]
+
+                  |<------- prefix[b] ------->|
+    [ . . . . . . | . . . . . . . . . . . . . ]
+    |<-prefix[a-1]->|<---- the bit we want --->|</code></pre>
+  </div>
+
+  <p>So &ldquo;does the chunk ending at <code>b</code> sum to <code>k</code>?&rdquo; becomes:</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">rearranged</span></div>
+<pre><code>prefix[b] - prefix[a-1] === k
+                prefix[a-1] === prefix[b] - k
+                              \_______________/
+                          a value I might have seen before</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The unlock &mdash; and you have seen it before</span>
+    <p>Standing at index <code>b</code> with running total <code>prefix[b]</code>, the question
+    &ldquo;how many subarrays ending here sum to k?&rdquo; becomes <strong>&ldquo;how many times have I
+    already seen the running total <code>prefix[b] - k</code>?&rdquo;</strong></p>
+    <p>That is <em>exactly</em> Two Sum. Same complement, same hash map. Only the thing being stored
+    has changed: running totals instead of values.</p>
+  </div>
+
+  <p>So keep a map from <em>running total</em> to <em>how many times it has occurred</em>. At each
+  element: add to the running total, look up <code>running - k</code>, add that count to the answer,
+  then record the current running total.</p>
+
+  <h3>Why counts, and not just presence</h3>
+
+  <p>A given running total can occur several times. In <code>[1, -1, 1, -1]</code> the running total
+  returns to 0 repeatedly. Each earlier occurrence is a different valid starting point, so each one
+  contributes a separate subarray. Storing a boolean would count one subarray where there are three.</p>
+
+  <h3>Why the map starts with <code>{0: 1}</code></h3>
+
+  <p>This one line trips up nearly everyone. It represents the <strong>empty prefix</strong> &mdash;
+  the running total before you have added anything.</p>
+
+  <p>Consider <code>[3, 4]</code> with <code>k = 3</code>. After the first element the running total
+  is 3, and we look for <code>3 - 3 = 0</code>. The subarray <code>[3]</code> starts at index 0, so
+  the &ldquo;prefix before it&rdquo; is the empty one, with sum 0. Without the seed, that lookup finds
+  nothing and every subarray that starts at index 0 is missed.</p>
+
+  <p>Put another way: seeding <code>0 &rarr; 1</code> says <em>&ldquo;a running total of 0 has already
+  occurred once, before the array began.&rdquo;</em> It is not a hack; it is the honest starting
+  state.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>nums = [3, 4, 7, 2, -3, 1, 4, 2]</code>, <code>k = 7</code>. The answer is 4.</p>
+
+  <div class="trace">
+<pre>seen = { 0: 1 }     running = 0     count = 0
+
+n=3    running = 3
+       look for 3 - 7 = -4    seen has -4? no          count = 0
+       record 3               seen = {0:1, 3:1}
+
+n=4    running = 7
+       look for 7 - 7 = 0     seen has 0 (x1)  ->  +1  count = 1   <- [3,4]
+       record 7               seen = {0:1, 3:1, 7:1}
+
+n=7    running = 14
+       look for 14 - 7 = 7    seen has 7 (x1)  ->  +1  count = 2   <- [7]
+       record 14              seen = {0:1, 3:1, 7:1, 14:1}
+
+n=2    running = 16
+       look for 16 - 7 = 9    no                       count = 2
+       record 16
+
+n=-3   running = 13
+       look for 13 - 7 = 6    no                       count = 2
+       record 13
+
+n=1    running = 14
+       look for 14 - 7 = 7    seen has 7 (x1)  ->  +1  count = 3   <- [7,2,-3,1]
+       record 14              seen now has 14 TWICE
+
+n=4    running = 18
+       look for 18 - 7 = 11   no                       count = 3
+       record 18
+
+n=2    running = 20
+       look for 20 - 7 = 13   seen has 13 (x1) ->  +1  count = 4   <- [1,4,2]
+       record 20
+
+answer: 4
+</pre>
+  </div>
+
+  <p>Trace the third hit carefully. At <code>n=1</code> the running total is 14, and we found a 7 in
+  the map from way back at index 2. The chunk between those two points is
+  <code>[7, 2, -3, 1]</code>, which sums to 7. The running total dipped and rose again in between
+  &mdash; something a sliding window could never have tracked.</p>
+
+  <p>Now the case that needs the counts, <code>[1, -1, 1, -1]</code> with <code>k = 0</code>:</p>
+
+  <div class="trace">
+<pre>seen = { 0: 1 }   running = 0   count = 0
+
+n=1    running=1   look for 1    no             count=0   seen={0:1, 1:1}
+n=-1   running=0   look for 0    found x1  +1   count=1   seen={0:2, 1:1}
+n=1    running=1   look for 1    found x1  +1   count=2   seen={0:2, 1:2}
+n=-1   running=0   look for 0    found x2  +2   count=4   seen={0:3, 1:2}
+
+answer: 4      -- [1,-1], [-1,1], [1,-1], [1,-1,1,-1]
+
+The last step added TWO at once, because a running total of 0 had
+occurred twice before. Storing booleans would have added one.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function subarraySumExplained(nums, k) {
+  const seen = new Map([[0, 1]]);
+  let running = 0;
+  let count = 0;
+
+  console.log('nums =', nums, '  k =', k);
+  console.log('seed the map with { 0: 1 } -- the empty prefix');
+  console.log('');
+
+  for (const n of nums) {
+    running += n;
+    const need = running - k;
+    const hits = seen.get(need) || 0;
+    count += hits;
+
+    console.log('n=' + String(n).padStart(3) +
+                '   running=' + String(running).padStart(3) +
+                '   look for ' + String(need).padStart(3) +
+                '   found ' + hits + ' time(s)' +
+                '   count=' + count);
+
+    seen.set(running, (seen.get(running) || 0) + 1);
+    console.log('              seen =', seen);
+  }
+
+  console.log('');
+  return count;
+}
+
+console.log('ANSWER:', subarraySumExplained([3, 4, 7, 2, -3, 1, 4, 2], 7));
+console.log('=========================================');
+console.log('ANSWER:', subarraySumExplained([1, -1, 1, -1], 0));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; plain object as the map</span></div>
+<pre><code>function subarraySumManual(nums, k) {
+  // running total -> how many times it has occurred
+  const seen = {};
+  seen[0] = 1;              // the empty prefix, before the array starts
+
+  let running = 0;
+  let count = 0;
+
+  for (let i = 0; i &lt; nums.length; i++) {
+    running += nums[i];
+
+    const need = running - k;
+
+    // every earlier occurrence of `need` is one more valid subarray
+    if (Object.prototype.hasOwnProperty.call(seen, need)) {
+      count += seen[need];
+    }
+
+    if (Object.prototype.hasOwnProperty.call(seen, running)) {
+      seen[running] = seen[running] + 1;
+    } else {
+      seen[running] = 1;
+    }
+  }
+
+  return count;
+}
+
+console.log(subarraySumManual([1, 1, 1], 2));                    // 2
+console.log(subarraySumManual([1, 2, 3], 3));                    // 2
+console.log(subarraySumManual([1, -1, 0], 0));                   // 3
+console.log(subarraySumManual([3, 4, 7, 2, -3, 1, 4, 2], 7));    // 4
+console.log(subarraySumManual([1, -1, 1, -1], 0));               // 4
+console.log(subarraySumManual([1], 0));                          // 0
+console.log(subarraySumManual([-1, -1, 1], 0));                  // 1</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Order matters: look up before you record</span>
+    <p>Record the current running total <strong>after</strong> the lookup, never before. If you record
+    first, then when <code>k === 0</code> the value you just wrote is immediately found by the
+    lookup, and every position counts a phantom empty subarray. This is the exact same
+    &ldquo;check before you insert&rdquo; rule as Two Sum.</p>
+  </div>
+
+  <h3>Returning the subarrays themselves</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">variation &mdash; list them, not just count</span></div>
+<pre><code>function subarraysWithSum(nums, k) {
+  // running total -> the list of indexes where it occurred
+  const seen = new Map([[0, [-1]]]);   // -1 = "before the array"
+  let running = 0;
+  const result = [];
+
+  for (let i = 0; i &lt; nums.length; i++) {
+    running += nums[i];
+    const starts = seen.get(running - k);
+
+    if (starts) {
+      for (const s of starts) {
+        result.push({ from: s + 1, to: i, values: nums.slice(s + 1, i + 1) });
+      }
+    }
+
+    if (!seen.has(running)) seen.set(running, []);
+    seen.get(running).push(i);
+  }
+
+  return result;
+}
+
+console.log(subarraysWithSum([3, 4, 7, 2, -3, 1, 4, 2], 7));
+// four entries: [3,4], [7], [7,2,-3,1], [1,4,2]
+
+console.log(subarraysWithSum([1, 1, 1], 2));
+// [1,1] from 0, and [1,1] from 1
+
+// NOTE: this is no longer O(n) -- listing every subarray can produce
+// O(n^2) of them. Counting is linear; enumerating cannot be.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function subarraySum(nums, k) {
+  const seen = new Map([[0, 1]]);    // seed: the empty prefix
+  let running = 0;
+  let count = 0;
+
+  for (const n of nums) {
+    running += n;
+    count += seen.get(running - k) || 0;          // look up FIRST
+    seen.set(running, (seen.get(running) || 0) + 1);   // then record
+  }
+
+  return count;
+}
+
+console.log(subarraySum([1, 1, 1], 2));                   // 2
+console.log(subarraySum([1, 2, 3], 3));                   // 2
+console.log(subarraySum([1, -1, 0], 0));                  // 3
+console.log(subarraySum([3, 4, 7, 2, -3, 1, 4, 2], 7));   // 4
+console.log(subarraySum([], 0));                          // 0
+console.log(subarraySum([0, 0, 0], 0));                   // 6</code></pre>
+  </div>
+
+  <p>Six lines. Look at the last case: <code>[0, 0, 0]</code> with <code>k = 0</code> gives
+  <strong>6</strong>, because every one of the six possible subarrays sums to zero. If your solution
+  returns 3, it is only counting single elements; if it returns 1, it is stopping at the first match.</p>
+
+  <div class="note">
+    <span class="t"><code>new Map([[0, 1]])</code></span>
+    <p>The Map constructor takes an array of <code>[key, value]</code> pairs, so this creates a map
+    already containing <code>0 &rarr; 1</code>. It is the same as
+    <code>const seen = new Map(); seen.set(0, 1);</code> &mdash; write whichever you find clearer,
+    but do not forget it.</p>
+  </div>
+
+  <h3>The sliding-window version &mdash; and exactly when it is legal</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">only valid for non-negative numbers</span></div>
+<pre><code>// Find A subarray summing to k, using a window.
+// This is the classic "subarray with given sum" question, and it is
+// only correct when every number is >= 0.
+function subarrayWindow(nums, k) {
+  let left = 0, sum = 0;
+
+  for (let right = 0; right &lt; nums.length; right++) {
+    sum += nums[right];
+
+    // with no negatives, shrinking always reduces the sum
+    while (sum &gt; k &amp;&amp; left &lt;= right) {
+      sum -= nums[left];
+      left++;
+    }
+
+    // left &lt;= right keeps the window non-empty; without it, k = 0
+    // "matches" the empty window at every position
+    if (sum === k &amp;&amp; left &lt;= right) {
+      return { from: left, to: right, values: nums.slice(left, right + 1) };
+    }
+  }
+
+  return null;
+}
+
+console.log(subarrayWindow([1, 4, 20, 3, 10, 5], 33));   // {from:2,to:4,...}
+console.log(subarrayWindow([1, 4, 0, 0, 3, 10, 5], 7));  // {from:1,to:4,...}
+console.log(subarrayWindow([1, 4], 0));                  // null
+
+// Now watch it fail the moment a negative appears:
+console.log(subarrayWindow([10, -5, 5], 5));             // null
+// ...but [5] at index 2 sums to exactly 5.
+// The window saw 10, decided it had overshot, threw the 10 away,
+// and never recovered -- because with a negative in the array,
+// "the sum is too big" no longer means "shrink from the left".</code></pre>
+  </div>
+
+  <p>Keep both in your head, and keep the condition attached to each. &ldquo;Sliding window for
+  non-negative values; prefix sums plus a map when negatives are possible&rdquo; is one of the more
+  useful sentences in this whole collection.</p>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>Handles negatives?</th></tr></thead>
+      <tbody>
+        <tr><td>Every subarray</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td><td>yes</td></tr>
+        <tr><td>Sliding window</td><td class="mono">O(n)</td><td class="mono">O(1)</td><td><strong>no</strong></td></tr>
+        <tr><td><strong>Prefix sums + map</strong></td><td class="mono">O(n)</td><td class="mono">O(n)</td><td>yes</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>One pass, and each step does a constant amount of work: one addition, one map lookup, one map
+  write. So O(n) time. The map can hold up to n distinct running totals, so O(n) space &mdash; the
+  same trade as Two Sum, for the same reason: you are buying speed with memory because you need
+  arbitrary access to the past.</p>
+
+  <p>Contrast with Maximum Subarray, which got O(n) at O(1) space. There, the entire past compressed
+  into one number. Here it does not &mdash; any earlier running total might be the one you need
+  &mdash; so you have to keep them all.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Because the array can contain negatives, a sliding window will not work &mdash; extending
+    the window can decrease the sum. Instead I use prefix sums: the sum of <code>nums[a..b]</code> is
+    <code>prefix[b] - prefix[a-1]</code>, so a subarray ending at <code>b</code> sums to
+    <code>k</code> exactly when some earlier prefix equals <code>prefix[b] - k</code>. I keep a map
+    from prefix sum to how many times it has occurred, seeded with <code>0 &rarr; 1</code> for the
+    empty prefix, and add that count at each step. O(n) time, O(n) space.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Forgetting to seed the map with <code>{0: 1}</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; misses every subarray starting at index 0</span></div>
+<pre><code>function broken(nums, k) {
+  const seen = new Map();          // no seed -- bug
+  let running = 0, count = 0;
+  for (const n of nums) {
+    running += n;
+    count += seen.get(running - k) || 0;
+    seen.set(running, (seen.get(running) || 0) + 1);
+  }
+  return count;
+}
+
+console.log(broken([1, 1, 1], 2));                   // 1   WRONG, should be 2
+console.log(broken([1, 2, 3], 3));                   // 1   WRONG, should be 2
+console.log(broken([3, 4, 7, 2, -3, 1, 4, 2], 7));   // 2   WRONG, should be 4
+
+// Every subarray that starts at index 0 needs "the prefix before it",
+// which is the empty prefix with sum 0. Without seeding, those are
+// all invisible.</code></pre>
+  </div>
+
+  <h3>2. Storing presence instead of counts</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; a Set instead of a Map</span></div>
+<pre><code>function broken(nums, k) {
+  const seen = new Set([0]);
+  let running = 0, count = 0;
+  for (const n of nums) {
+    running += n;
+    if (seen.has(running - k)) count++;    // counts 1, however many there were
+    seen.add(running);
+  }
+  return count;
+}
+
+console.log(broken([1, 1, 1], 2));         // 2   right
+console.log(broken([1, -1, 1, -1], 0));    // 3   WRONG, should be 4
+console.log(broken([0, 0, 0], 0));         // 3   WRONG, should be 6
+
+// The same running total can occur many times, and each occurrence
+// is a different valid start. You need how MANY, not whether.</code></pre>
+  </div>
+
+  <h3>3. Recording before looking up</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; wrong order</span></div>
+<pre><code>function broken(nums, k) {
+  const seen = new Map([[0, 1]]);
+  let running = 0, count = 0;
+  for (const n of nums) {
+    running += n;
+    seen.set(running, (seen.get(running) || 0) + 1);   // recorded FIRST -- bug
+    count += seen.get(running - k) || 0;
+  }
+  return count;
+}
+
+console.log(broken([1, 1, 1], 2));      // 2   right
+console.log(broken([1, 2, 3], 0));      // 3   WRONG, should be 0
+console.log(broken([5], 0));            // 1   WRONG, should be 0
+
+// With k = 0 the lookup is for `running` itself -- which you just
+// wrote a line earlier. Every position counts a phantom empty
+// subarray. Look up first, then record.</code></pre>
+  </div>
+
+  <h3>4. Breaking out of the inner loop on the first match</h3>
+
+  <p>In the brute force, <code>if (sum === k) { count++; break; }</code> gives 2 instead of 3 on
+  <code>[1, -1, 0]</code> with <code>k = 0</code>. With negatives present, a start position can
+  produce several matching subarrays. Never break.</p>
+
+  <h3>5. Reaching for a sliding window</h3>
+
+  <p>The single most common failure. If you catch yourself writing
+  <code>while (sum &gt; k) { sum -= nums[left++]; }</code>, stop and check: <em>can the input contain
+  negative numbers?</em> If yes, that loop is wrong &mdash; it will shrink past valid answers, as the
+  demo in Step 7 shows.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the six-line version from memory</strong>, then explain the <code>{0: 1}</code>
+    seed without hesitating. That seed is the single most-asked follow-up on this problem.</li>
+    <li><strong>Longest subarray summing to k.</strong> Same prefix idea, but store the
+    <em>first</em> index each running total occurred at (never overwrite it), and track
+    <code>i - firstIndex</code>. Work out why &ldquo;first&rdquo; is right here when
+    &ldquo;count&rdquo; was right above.</li>
+    <li><strong>Contiguous Array.</strong> Longest subarray with equal 0s and 1s. Treat each 0 as
+    &minus;1 and it becomes &ldquo;longest subarray summing to 0&rdquo;. That re-mapping trick is worth
+    more than the problem.</li>
+    <li><strong>Subarray sums divisible by K.</strong> Instead of storing the running total, store
+    <code>running % k</code>. Two prefixes with the same remainder bracket a chunk divisible by k.
+    Careful: JavaScript&rsquo;s <code>%</code> returns negative results for negative inputs, so use
+    <code>((running % k) + k) % k</code>.</li>
+    <li><strong>Subarray Product Less Than K.</strong> Products of positive numbers only grow as the
+    window extends, so the sliding window <em>is</em> valid there. Do it, and notice which property
+    made the difference.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Prefix sums plus a hash map</strong> is one of the highest-value combinations in
+    interviews. The recipe: turn a question about <em>ranges</em> into a question about
+    <em>pairs of prefix values</em>, then use Two Sum&rsquo;s complement lookup on those. And keep the
+    other half of the lesson too &mdash; <em>the sliding window needs monotonicity</em>. Before you
+    write one, check that growing the window always moves the quantity in one direction.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="13-sort-colors.html">&larr; Sort Colors</a>
+  <a href="15-set-matrix-zeroes.html">Next: Set Matrix Zeroes &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

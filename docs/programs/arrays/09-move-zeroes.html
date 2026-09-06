@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Move Zeroes</title>
+<meta name="description" content="The read pointer and write pointer, taught properly. One of the most reused patterns in array work.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Arrays &middot; Problem 09</p>
+  <h1>Move Zeroes</h1>
+  <p class="standfirst">A small problem that carries a large idea: the
+  <strong>read pointer and write pointer</strong>. One finger reads every element; a second, slower
+  finger writes only the ones you want to keep. You will use this shape constantly.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Move all the zeroes in an array to the end, <strong>in place</strong>, while keeping the
+  non-zero numbers in their original relative order.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Answer</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[0, 1, 0, 3, 12]</td><td class="mono">[1, 3, 12, 0, 0]</td><td>1, 3, 12 stay in that order</td></tr>
+        <tr><td class="mono">[0]</td><td class="mono">[0]</td><td>nothing to do</td></tr>
+        <tr><td class="mono">[1, 2, 3]</td><td class="mono">[1, 2, 3]</td><td>no zeroes at all</td></tr>
+        <tr><td class="mono">[0, 0, 1]</td><td class="mono">[1, 0, 0]</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Two constraints, and each one rules out an easy escape:</p>
+
+  <ul>
+    <li><strong>In place.</strong> No building a new array and returning it. You must modify the one
+    you were given.</li>
+    <li><strong>Keep the order.</strong> <code>[1, 3, 12, 0, 0]</code> is right;
+    <code>[12, 1, 3, 0, 0]</code> is not, even though the zeroes are in the right place.</li>
+  </ul>
+
+  <div class="note">
+    <span class="t">Why this matters beyond the interview</span>
+    <p>&ldquo;Keep the ones that pass a test, in order, without allocating a new array&rdquo; is what
+    every in-place filter, compaction, deduplication and garbage-collection sweep does.
+    Move Zeroes is the smallest possible version of it, which is exactly why it is worth doing
+    properly rather than reaching for <code>filter</code>.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <p>Find a zero, remove it, stick a zero on the end. Repeat.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; splice and push</span></div>
+<pre><code>function moveZeroesBrute(nums) {
+  let zerosMoved = 0;
+
+  for (let i = 0; i &lt; nums.length - zerosMoved; ) {
+    if (nums[i] === 0) {
+      nums.splice(i, 1);   // cut the zero out -- everything after shifts left
+      nums.push(0);        // put a zero on the end
+      zerosMoved++;
+      // do NOT advance i: a new value just slid into this slot
+    } else {
+      i++;
+    }
+  }
+
+  return nums;
+}
+
+console.log(moveZeroesBrute([0, 1, 0, 3, 12]));   // [1, 3, 12, 0, 0]
+console.log(moveZeroesBrute([0, 0, 1]));          // [1, 0, 0]
+console.log(moveZeroesBrute([1, 2, 3]));          // [1, 2, 3]
+console.log(moveZeroesBrute([0]));                // [0]</code></pre>
+  </div>
+
+  <p>Two things here trip people up. First, after a <code>splice</code> you must <strong>not</strong>
+  advance <code>i</code> &mdash; a different value now occupies that index, and skipping it misses
+  consecutive zeroes. Second, the loop bound shrinks by <code>zerosMoved</code>, otherwise you walk
+  back over the zeroes you already parked at the end and move them forever.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p><code>splice</code> looks like one operation. It is not. Removing an element from the middle of
+  an array means <strong>every element after it shifts one place left</strong> &mdash; that is an
+  O(n) operation hiding inside a single method call. Do that once per zero and you have
+  <strong>O(n&sup2;)</strong>.</p>
+
+  <div class="note warn">
+    <span class="t">The methods that secretly cost O(n)</span>
+    <p><code>splice</code>, <code>shift</code>, <code>unshift</code> and <code>indexOf</code> all touch
+    the whole array. <code>push</code> and <code>pop</code> are the cheap ones, because they only work
+    at the end where nothing has to move. Any time you see <code>splice</code> or <code>shift</code>
+    inside a loop, suspect an accidental O(n&sup2;).</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// Mostly zeroes -- the worst case for splice.
+// Kept modest on purpose: the slow version really does block the
+// browser for about a second, which is itself the lesson.
+const N = 25000;
+const base = [];
+for (let i = 0; i &lt; N; i++) base.push(i % 6 === 0 ? (i || 1) : 0);
+
+function spliceVersion(nums) {
+  let moved = 0;
+  for (let i = 0; i &lt; nums.length - moved; ) {
+    if (nums[i] === 0) { nums.splice(i, 1); nums.push(0); moved++; }
+    else i++;
+  }
+  return nums;
+}
+
+function twoPointer(nums) {
+  let write = 0;
+  for (let read = 0; read &lt; nums.length; read++) {
+    if (nums[read] !== 0) { nums[write] = nums[read]; write++; }
+  }
+  while (write &lt; nums.length) { nums[write] = 0; write++; }
+  return nums;
+}
+
+let t = performance.now();
+const a = spliceVersion(base.slice());
+const spliceMs = performance.now() - t;
+
+t = performance.now();
+const b = twoPointer(base.slice());
+const fastMs = performance.now() - t;
+
+console.log('splice loop  :', spliceMs.toFixed(1) + ' ms');
+console.log('two pointers :', fastMs.toFixed(2) + ' ms');
+console.log('same answer  :', a.length === b.length &amp;&amp; a[0] === b[0] &amp;&amp; a[N-1] === b[N-1]);
+console.log('speed-up     :', Math.round(spliceMs / Math.max(fastMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; two pointers, different speeds</h2>
+
+  <p>Stop <em>removing</em> things. Start <strong>overwriting</strong> instead.</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Use two indexes into the same array. <code>read</code> visits every element.
+    <code>write</code> marks the next slot where a keeper belongs. Whenever <code>read</code> finds
+    something worth keeping, copy it to <code>write</code> and advance <code>write</code>.
+    Everything else is simply passed over &mdash; not deleted, just not copied.</p>
+  </div>
+
+  <p>Watch the two indexes drift apart. They start together, and <code>write</code> falls behind by
+  exactly the number of zeroes seen so far:</p>
+
+  <div class="trace">
+<pre>       0   1   0   3   12
+       r
+       w                     read a 0 -> skip. w stays put.
+
+       0   1   0   3   12
+           r
+       w                     read a 1 -> copy to slot w=0, w becomes 1
+
+       1   1   0   3   12
+               r
+           w                 read a 0 -> skip
+
+       1   1   0   3   12
+                   r
+           w                 read a 3 -> copy to slot w=1, w becomes 2
+
+       1   3   0   3   12
+                       r
+               w             read a 12 -> copy to slot w=2, w becomes 3
+
+       1   3   12  3   12
+                            read pointer done. w = 3.
+                            Slots 3 and 4 still hold junk from before.
+
+fill from w to the end with zeroes:
+
+       1   3   12  0   0     done.
+</pre>
+  </div>
+
+  <p>Notice that at the moment <code>read</code> finishes, everything from index 0 to
+  <code>write - 1</code> is exactly the non-zero values in their original order. The tail
+  <code>[write .. end]</code> is stale leftovers, and since we know the array must end with zeroes,
+  we just overwrite that whole tail with zeroes. Two simple loops.</p>
+
+  <p>Is it safe to overwrite while reading the same array? Yes, and the reason is worth stating:
+  <strong><code>write</code> is never ahead of <code>read</code></strong>. It starts equal and only
+  advances when <code>read</code> also advances, so it can never clobber a value that
+  <code>read</code> has not visited yet. When <code>write === read</code>, the copy is an element
+  onto itself &mdash; harmless.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>nums = [0, 1, 0, 3, 12]</code>.</p>
+
+  <div class="trace">
+<pre>write = 0
+
+PASS 1 -- copy the keepers forward
+
+read=0  value 0   zero, skip                     array [0,1,0,3,12]   write=0
+read=1  value 1   keeper -> nums[0] = 1          array [1,1,0,3,12]   write=1
+read=2  value 0   zero, skip                     array [1,1,0,3,12]   write=1
+read=3  value 3   keeper -> nums[1] = 3          array [1,3,0,3,12]   write=2
+read=4  value 12  keeper -> nums[2] = 12         array [1,3,12,3,12]  write=3
+
+PASS 2 -- zero out everything from write to the end
+
+nums[3] = 0                                      array [1,3,12,0,12]
+nums[4] = 0                                      array [1,3,12,0,0]
+
+answer: [1, 3, 12, 0, 0]
+</pre>
+  </div>
+
+  <p>Look at the array after pass 1: <code>[1, 3, 12, 3, 12]</code>. It contains duplicates and looks
+  broken &mdash; and that is fine. The contract at that moment is only &ldquo;indexes 0 to
+  <code>write-1</code> are correct&rdquo;. Pass 2 makes the rest correct. Being comfortable with a
+  half-finished array is part of learning in-place algorithms.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function moveZeroesExplained(nums) {
+  console.log('start:', JSON.stringify(nums));
+  console.log('');
+  console.log('PASS 1 -- copy non-zeros forward');
+
+  let write = 0;
+
+  for (let read = 0; read &lt; nums.length; read++) {
+    if (nums[read] !== 0) {
+      nums[write] = nums[read];
+      console.log('  read=' + read + '  value ' + nums[read] +
+                  '  keeper -> nums[' + write + ']   ' + JSON.stringify(nums) +
+                  '   write becomes ' + (write + 1));
+      write++;
+    } else {
+      console.log('  read=' + read + '  value 0   skip                  ' +
+                  JSON.stringify(nums) + '   write stays ' + write);
+    }
+  }
+
+  console.log('');
+  console.log('PASS 2 -- fill from index ' + write + ' with zeros');
+
+  while (write &lt; nums.length) {
+    nums[write] = 0;
+    console.log('  nums[' + write + '] = 0            ' + JSON.stringify(nums));
+    write++;
+  }
+
+  console.log('');
+  return nums;
+}
+
+console.log('ANSWER:', moveZeroesExplained([0, 1, 0, 3, 12]));
+console.log('=========================================');
+console.log('ANSWER:', moveZeroesExplained([0, 0, 1]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; two passes, copy then fill</span></div>
+<pre><code>function moveZeroesManual(nums) {
+  let write = 0;
+
+  // pass 1: bring every non-zero value forward, in order
+  for (let read = 0; read &lt; nums.length; read++) {
+    if (nums[read] !== 0) {
+      nums[write] = nums[read];
+      write++;
+    }
+  }
+
+  // pass 2: everything left over must be a zero
+  while (write &lt; nums.length) {
+    nums[write] = 0;
+    write++;
+  }
+
+  return nums;
+}
+
+console.log(moveZeroesManual([0, 1, 0, 3, 12]));   // [1, 3, 12, 0, 0]
+console.log(moveZeroesManual([0, 0, 1]));          // [1, 0, 0]
+console.log(moveZeroesManual([1, 2, 3]));          // [1, 2, 3]
+console.log(moveZeroesManual([0, 0, 0]));          // [0, 0, 0]
+console.log(moveZeroesManual([0]));                // [0]
+console.log(moveZeroesManual([]));                 // []</code></pre>
+  </div>
+
+  <h3>The one-pass version, with swapping</h3>
+
+  <p>There is a variant that finishes in a single pass by <em>swapping</em> instead of copying. When
+  <code>read</code> finds a keeper, it trades places with whatever sits at <code>write</code> &mdash;
+  which is guaranteed to be a zero or the same element.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; one pass, swapping</span></div>
+<pre><code>function moveZeroesSwap(nums) {
+  let write = 0;
+
+  for (let read = 0; read &lt; nums.length; read++) {
+    if (nums[read] !== 0) {
+      // swap nums[read] and nums[write]
+      const tmp = nums[write];
+      nums[write] = nums[read];
+      nums[read] = tmp;
+      write++;
+    }
+  }
+
+  return nums;
+}
+
+console.log(moveZeroesSwap([0, 1, 0, 3, 12]));   // [1, 3, 12, 0, 0]
+console.log(moveZeroesSwap([0, 0, 1]));          // [1, 0, 0]
+console.log(moveZeroesSwap([1, 2, 3]));          // [1, 2, 3]
+
+// Why is the swap always safe?
+// nums[write] is either a zero we passed over earlier, or -- when
+// write === read -- the very element we are holding. Swapping a
+// keeper with a zero moves the zero backwards, which is exactly
+// where zeroes should go. Order is preserved because the keepers
+// are copied in the order they were read.</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">Two passes or one?</span>
+    <p>Both are O(n) &mdash; two sequential passes add, they do not multiply. The swap version does
+    one pass but performs three assignments per keeper; the copy version does two passes but one
+    assignment per element. In practice they are the same speed. Prefer the one you can explain
+    without hesitating. The <strong>copy</strong> version generalises better to
+    &ldquo;remove everything that fails this test&rdquo;, which is why it is first here.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 2a &mdash; filter, but read the small print</span></div>
+<pre><code>function moveZeroesFilter(nums) {
+  const keepers = nums.filter(n =&gt; n !== 0);
+  const zeros   = nums.length - keepers.length;
+  return [...keepers, ...new Array(zeros).fill(0)];
+}
+
+console.log(moveZeroesFilter([0, 1, 0, 3, 12]));   // [1, 3, 12, 0, 0]
+console.log(moveZeroesFilter([0, 0, 1]));          // [1, 0, 0]
+
+// Clear and short. But it RETURNS A NEW ARRAY -- it does not modify
+// the one you were given, so it fails the "in place" requirement.
+const arr = [0, 1, 0, 3, 12];
+moveZeroesFilter(arr);
+console.log('original untouched:', arr);   // [0,1,0,3,12]</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2b &mdash; in place, using built-ins honestly</span></div>
+<pre><code>function moveZeroes(nums) {
+  let write = 0;
+
+  for (const value of nums) {
+    if (value !== 0) nums[write++] = value;
+  }
+
+  nums.fill(0, write);      // fill(value, startIndex) -- to the end
+  return nums;
+}
+
+const a = [0, 1, 0, 3, 12];
+moveZeroes(a);
+console.log(a);            // [1, 3, 12, 0, 0]  -- modified in place
+
+const b = [0, 0, 1];
+moveZeroes(b);
+console.log(b);            // [1, 0, 0]
+
+const c = [4, 0, 5];
+moveZeroes(c);
+console.log(c);            // [4, 5, 0]</code></pre>
+  </div>
+
+  <p><code>nums.fill(0, write)</code> is the whole of pass 2 in one call, and it is the right kind of
+  built-in to reach for: it does exactly the loop you would have written, with no hidden cost.
+  Compare that with <code>splice</code>, which hides an O(n) shift behind a friendly name.</p>
+
+  <h3>The general version: in-place filter</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the pattern, generalised</span></div>
+<pre><code>// The same read/write pointer, with the test as an argument.
+// This is the shape you will actually reuse.
+function retainInPlace(arr, keep) {
+  let write = 0;
+  for (let read = 0; read &lt; arr.length; read++) {
+    if (keep(arr[read], read)) {
+      arr[write] = arr[read];
+      write++;
+    }
+  }
+  arr.length = write;        // truncate -- drop the stale tail entirely
+  return arr;
+}
+
+const nums = [3, 0, 7, 0, 0, 9, 2];
+retainInPlace(nums, n =&gt; n !== 0);
+console.log(nums);                          // [3, 7, 9, 2]
+
+const words = ['a', '', 'bb', '', 'ccc'];
+retainInPlace(words, w =&gt; w.length &gt; 0);
+console.log(words);                         // ['a','bb','ccc']
+
+// arr.length = write is a genuinely useful trick: assigning to
+// .length truncates an array in place, with no copy.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>In place?</th></tr></thead>
+      <tbody>
+        <tr><td>splice + push</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td><td>yes</td></tr>
+        <tr><td>filter + concat</td><td class="mono">O(n)</td><td class="mono">O(n)</td><td><strong>no</strong></td></tr>
+        <tr><td><strong>Read/write pointers</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td><td>yes</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Only the last row satisfies both requirements at once, which is why it is the answer.</p>
+
+  <p>&ldquo;O(1) space&rdquo; here means genuinely two integer variables, regardless of input size &mdash;
+  the strongest kind of space claim. The number of <em>writes</em> is also worth mentioning: the copy
+  version writes at most n times, and if the array has no zeroes at all, every write is
+  <code>nums[i] = nums[i]</code>, which some solutions guard against with
+  <code>if (write !== read)</code>. That guard changes nothing about the complexity.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;I avoid <code>splice</code>, because removing from the middle shifts the rest and turns
+    this into O(n&sup2;). Instead I keep a write pointer at the next slot for a non-zero value and a
+    read pointer scanning the array. Every non-zero gets copied to the write slot; at the end,
+    everything from the write pointer onwards is filled with zeroes. O(n) time, O(1) space, in place,
+    and stable because the keepers are copied in read order.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Swapping the zero forward instead of the keeper back</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; destroys the order</span></div>
+<pre><code>function broken(nums) {
+  let last = nums.length - 1;
+  for (let i = 0; i &lt;= last; i++) {
+    if (nums[i] === 0) {
+      // swap this zero with the last element
+      const tmp = nums[i];
+      nums[i] = nums[last];
+      nums[last] = tmp;
+      last--;
+      i--;                    // recheck this slot
+    }
+  }
+  return nums;
+}
+
+console.log(broken([0, 1, 0, 3, 12]));   // [12, 1, 3, 0, 0]
+
+// The zeroes ARE at the end. But 12 has jumped to the front --
+// the relative order of the non-zero values is destroyed.
+// This solution is correct for "move zeroes to the end" only if
+// the problem does NOT ask you to preserve order. Read the question.</code></pre>
+  </div>
+
+  <h3>2. Advancing the read index after a splice</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; skips consecutive zeroes</span></div>
+<pre><code>function broken(nums) {
+  for (let i = 0; i &lt; nums.length; i++) {      // i++ always -- bug
+    if (nums[i] === 0) {
+      nums.splice(i, 1);
+      nums.push(0);
+    }
+  }
+  return nums;
+}
+
+console.log(broken([0, 0, 1]));      // [1, 0, 0]   looks fine
+console.log(broken([1, 0, 0, 2]));   // [1, 0, 2, 0]  WRONG
+
+// After splicing out the zero at index 1, the SECOND zero slides
+// into index 1 -- but i has already moved to 2, so it is never seen.
+// It also loops forever on some inputs, because the pushed zeroes
+// keep the length up while i keeps finding them.</code></pre>
+  </div>
+
+  <h3>3. Counting zeroes but forgetting to overwrite the tail</h3>
+
+  <p>A common half-solution copies the keepers forward and stops. The array then still holds stale
+  values in the tail: <code>[0,1,0,3,12]</code> becomes <code>[1,3,12,3,12]</code>. The second pass is
+  not optional.</p>
+
+  <h3>4. Returning a new array when asked for in place</h3>
+
+  <p><code>filter</code> and <code>map</code> always allocate. If the signature is
+  <code>moveZeroes(nums): void</code>, returning something is a hint you misread the requirement.
+  Assign into <code>nums</code>, or use <code>nums.length = k</code> to truncate.</p>
+
+  <h3>5. Treating other falsy values as zero</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; truthiness instead of equality</span></div>
+<pre><code>function broken(nums) {
+  let write = 0;
+  for (const v of nums) if (v) nums[write++] = v;   // `if (v)` -- bug
+  nums.fill(0, write);
+  return nums;
+}
+
+console.log(broken([0, 1, 0, 3, 12]));        // [1,3,12,0,0]  fine
+console.log(broken([0, '', 5, null, 7]));     // [5,7,0,0,0]
+
+// '' and null are falsy but they are NOT zero. They were silently
+// deleted and replaced with real zeroes.
+// Test the thing you actually mean:  v !== 0</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Move zeroes to the front</strong>, keeping the non-zero order. Hint: run the same
+    algorithm backwards, with <code>write</code> starting at the last index.</li>
+    <li><strong>Remove Duplicates from Sorted Array.</strong> Identical pattern: keep an element only
+    if it differs from the last one you wrote. It is in the two-pointers topic and you can already
+    write it.</li>
+    <li><strong>Remove Element.</strong> Delete every occurrence of a given value in place and return
+    the new length. Literally this problem with <code>0</code> replaced by a parameter.</li>
+    <li><strong>Partition by a predicate.</strong> Move everything satisfying a test to the front and
+    return the split point. That is the core of quicksort&rsquo;s partition step.</li>
+    <li><strong>Count the writes.</strong> Modify the solution so it does not write when
+    <code>read === write</code>, then measure how many writes each version does on an array with no
+    zeroes. It is a good demonstration that two solutions with the same Big-O can still do very
+    different amounts of work.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Read pointer, write pointer.</strong> Whenever a problem says &ldquo;in place&rdquo; and
+    &ldquo;keep the order&rdquo;, this is almost certainly the answer. The mental model:
+    <em>the read pointer inspects; the write pointer commits.</em> Everything before
+    <code>write</code> is finished and correct; everything from <code>read</code> onwards has not been
+    looked at; the region between them is scrap you are allowed to overwrite.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="08-insert-interval.html">&larr; Insert Interval</a>
+  <a href="10-find-duplicate-number.html">Next: Find the Duplicate Number &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

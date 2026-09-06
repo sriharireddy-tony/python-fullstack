@@ -1,0 +1,710 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maximum Sum Subarray of Size K</title>
+<meta name="description" content="The fixed-size sliding window: add one, remove one, and never re-add what you already counted.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Sliding window &middot; Problem 01</p>
+  <h1>Maximum Sum Subarray of Size K</h1>
+  <p class="standfirst">The simplest window there is: it never changes size. Slide it one step and
+  the sum updates with <strong>one addition and one subtraction</strong> &mdash; not a fresh loop.
+  Learn this shape first; the variable-size windows are built on it.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Find the largest sum of any <code>k</code> consecutive elements.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th class="mono">k</th><th>Answer</th><th>The window</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[2, 1, 5, 1, 3, 2]</td><td class="mono">3</td><td class="mono">9</td><td class="mono">[5, 1, 3]</td></tr>
+        <tr><td class="mono">[2, 3, 4, 1, 5]</td><td class="mono">2</td><td class="mono">7</td><td class="mono">[3, 4]</td></tr>
+        <tr><td class="mono">[-1, -2, -3]</td><td class="mono">2</td><td class="mono">-3</td><td class="mono">[-1, -2]</td></tr>
+        <tr><td class="mono">[1, 2]</td><td class="mono">5</td><td class="mono">null</td><td>k is larger than the array</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Two things that separate this from Maximum Subarray (Kadane&rsquo;s):</p>
+
+  <ul>
+    <li><strong>The size is fixed.</strong> Exactly <code>k</code> elements, no more, no fewer. Kadane
+    chooses its own length.</li>
+    <li><strong>Negatives are fine.</strong> Because the window size never changes, there is no
+    &ldquo;should I extend?&rdquo; decision, so no monotonicity is needed. Row three is a normal case,
+    not an edge case.</li>
+  </ul>
+
+  <div class="note key">
+    <span class="t">Why the fixed size makes this easy</span>
+    <p>Every variable-size window has to decide <em>when</em> to shrink, and that decision needs the
+    quantity to behave predictably. A fixed window shrinks on <strong>every</strong> step, by exactly
+    one, unconditionally. There is no decision at all &mdash; which is why this version works with
+    any values.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; sum every window</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; recompute each window</span></div>
+<pre><code>function maxSumBrute(nums, k) {
+  if (k &gt; nums.length || k &lt;= 0) return null;
+
+  let best = -Infinity;
+
+  for (let start = 0; start + k &lt;= nums.length; start++) {
+    let sum = 0;
+
+    for (let i = start; i &lt; start + k; i++) {
+      sum += nums[i];              // re-adds k values every time
+    }
+
+    if (sum &gt; best) best = sum;
+  }
+
+  return best;
+}
+
+console.log(maxSumBrute([2,1,5,1,3,2], 3));   // 9
+console.log(maxSumBrute([2,3,4,1,5], 2));     // 7
+console.log(maxSumBrute([-1,-2,-3], 2));      // -3
+console.log(maxSumBrute([1,2], 5));           // null
+console.log(maxSumBrute([5], 1));             // 5</code></pre>
+  </div>
+
+  <p>Note <code>best = -Infinity</code>, not 0. With all-negative input, 0 is not achievable by any
+  window, and starting there would return 0 &mdash; a sum no window actually has.</p>
+
+  <p>And note the loop bound: <code>start + k &lt;= nums.length</code>. The last valid window starts
+  at <code>nums.length - k</code>. Writing <code>start &lt; nums.length</code> would read past the
+  end.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow &mdash; and what it repeats</h2>
+
+  <p>There are about <code>n</code> windows and each costs <code>k</code> additions:
+  <strong>O(n &times; k)</strong>. But look at what two neighbouring windows share:</p>
+
+  <div class="trace">
+<pre>  nums = [2, 1, 5, 1, 3, 2]     k = 3
+
+  window at 0:  2 + 1 + 5
+  window at 1:      1 + 5 + 1
+                    \___/
+                these two were just added, and are added again
+
+  The windows overlap in k-1 elements. Only ONE element leaves and
+  ONE element joins. Everything else is unchanged.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 200000;
+const K = 1000;
+const nums = [];
+for (let i = 0; i &lt; N; i++) nums.push(Math.floor(Math.random() * 100));
+
+function brute(a, k) {
+  let best = -Infinity;
+  for (let s = 0; s + k &lt;= a.length; s++) {
+    let sum = 0;
+    for (let i = s; i &lt; s + k; i++) sum += a[i];
+    if (sum &gt; best) best = sum;
+  }
+  return best;
+}
+
+function window(a, k) {
+  let sum = 0;
+  for (let i = 0; i &lt; k; i++) sum += a[i];
+  let best = sum;
+  for (let i = k; i &lt; a.length; i++) {
+    sum += a[i] - a[i - k];
+    if (sum &gt; best) best = sum;
+  }
+  return best;
+}
+
+let t = performance.now();
+const p = brute(nums, K);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const q = window(nums, K);
+const winMs = performance.now() - t;
+
+console.log('recompute each window :', p, 'in', bruteMs.toFixed(1) + ' ms');
+console.log('slide the window      :', q, 'in', winMs.toFixed(2) + ' ms');
+console.log('same answer:', p === q);
+console.log('speed-up:', Math.round(bruteMs / Math.max(winMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; add one, remove one</h2>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Compute the first window&rsquo;s sum the slow way, once. Then to move the window one step:
+    <strong>add the element joining on the right and subtract the element leaving on the left</strong>.</p>
+    <p><code>sum += nums[i] - nums[i - k];</code></p>
+  </div>
+
+  <p>Which element leaves? If the window now ends at <code>i</code>, it covers
+  <code>i - k + 1</code> through <code>i</code>. The element that just fell out is the one before that
+  range: <code>i - k</code>.</p>
+
+  <div class="trace">
+<pre>  nums = [2, 1, 5, 1, 3, 2]     k = 3
+
+  i=2   the first window, summed the slow way: 2+1+5 = 8
+        [2 1 5] 1 3 2                          best = 8
+
+  i=3   joining: nums[3] = 1     leaving: nums[3-3] = nums[0] = 2
+        sum = 8 + 1 - 2 = 7
+        2 [1 5 1] 3 2                          best = 8
+
+  i=4   joining: nums[4] = 3     leaving: nums[1] = 1
+        sum = 7 + 3 - 1 = 9
+        2 1 [5 1 3] 2                          best = 9
+
+  i=5   joining: nums[5] = 2     leaving: nums[2] = 5
+        sum = 9 + 2 - 5 = 6
+        2 1 5 [1 3 2]                          best = 9
+
+  answer: 9
+</pre>
+  </div>
+
+  <p>Each step is two array reads and two arithmetic operations, regardless of how big <code>k</code>
+  is. A window of a million elements slides just as cheaply as a window of three.</p>
+
+  <div class="note warn">
+    <span class="t">The index that gets fumbled</span>
+    <p>It is <code>nums[i - k]</code>, not <code>nums[i - k + 1]</code> and not
+    <code>nums[i - k - 1]</code>. Check it on the first slide: with <code>k = 3</code> and
+    <code>i = 3</code>, the window becomes indexes 1, 2, 3, so the element that left is index
+    <strong>0</strong> &mdash; and <code>3 - 3 = 0</code>. Verifying that one case by hand takes ten
+    seconds and saves the bug.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>nums = [2, 3, 4, 1, 5]</code>, <code>k = 2</code>.</p>
+
+  <div class="trace">
+<pre>build the first window: nums[0] + nums[1] = 2 + 3 = 5
+sum = 5   best = 5      window [2 3] 4 1 5
+
+i=2   joining nums[2]=4    leaving nums[2-2]=nums[0]=2
+      sum = 5 + 4 - 2 = 7
+      window 2 [3 4] 1 5                    best = 7
+
+i=3   joining nums[3]=1    leaving nums[1]=3
+      sum = 7 + 1 - 3 = 5
+      window 2 3 [4 1] 5                    best = 7
+
+i=4   joining nums[4]=5    leaving nums[2]=4
+      sum = 5 + 5 - 4 = 6
+      window 2 3 4 [1 5]                    best = 7
+
+answer: 7
+</pre>
+  </div>
+
+  <p>Now all negatives, <code>nums = [-1, -2, -3]</code>, <code>k = 2</code>:</p>
+
+  <div class="trace">
+<pre>first window: -1 + -2 = -3      sum = -3   best = -3
+
+i=2   joining -3   leaving nums[0] = -1
+      sum = -3 + (-3) - (-1) = -5
+      best = max(-3, -5) = -3
+
+answer: -3
+
+Starting `best` at 0 would have returned 0, which no window has.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function maxSumExplained(nums, k) {
+  if (k &gt; nums.length || k &lt;= 0) { console.log('k is invalid -> null'); return null; }
+
+  console.log('nums =', nums, '  k =', k);
+  console.log('');
+
+  let sum = 0;
+  for (let i = 0; i &lt; k; i++) sum += nums[i];
+  let best = sum;
+  let bestStart = 0;
+
+  console.log('first window [' + nums.slice(0, k).join(', ') + ']  sum = ' + sum);
+
+  for (let i = k; i &lt; nums.length; i++) {
+    const joining = nums[i];
+    const leaving = nums[i - k];
+    sum = sum + joining - leaving;
+
+    const start = i - k + 1;
+    const improved = sum &gt; best;
+    if (improved) { best = sum; bestStart = start; }
+
+    console.log('i=' + i + '   +' + joining + ' -' + leaving +
+                '   sum = ' + sum +
+                '   window [' + nums.slice(start, i + 1).join(', ') + ']' +
+                '   best = ' + best + (improved ? '   *new best*' : ''));
+  }
+
+  console.log('');
+  console.log('best window: [' + nums.slice(bestStart, bestStart + k).join(', ') + ']');
+  console.log('');
+  return best;
+}
+
+console.log('ANSWER:', maxSumExplained([2, 1, 5, 1, 3, 2], 3));
+console.log('==========================================');
+console.log('ANSWER:', maxSumExplained([-1, -2, -3], 2));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; fixed window, loops only</span></div>
+<pre><code>function maxSumManual(nums, k) {
+  if (k &lt;= 0 || k &gt; nums.length) return null;
+
+  // sum the first window the slow way -- once
+  let sum = 0;
+  for (let i = 0; i &lt; k; i++) {
+    sum = sum + nums[i];
+  }
+
+  let best = sum;
+
+  // slide: one joins on the right, one leaves on the left
+  for (let i = k; i &lt; nums.length; i++) {
+    sum = sum + nums[i] - nums[i - k];
+
+    if (sum &gt; best) {
+      best = sum;
+    }
+  }
+
+  return best;
+}
+
+console.log(maxSumManual([2,1,5,1,3,2], 3));    // 9
+console.log(maxSumManual([2,3,4,1,5], 2));      // 7
+console.log(maxSumManual([-1,-2,-3], 2));       // -3
+console.log(maxSumManual([1,2], 5));            // null
+console.log(maxSumManual([5], 1));              // 5
+console.log(maxSumManual([1,2,3], 3));          // 6
+console.log(maxSumManual([], 1));               // null
+console.log(maxSumManual([4,-1,2,1], 2));       // 3</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">variation &mdash; report the window, and every window sum</span></div>
+<pre><code>function bestWindow(nums, k) {
+  if (k &lt;= 0 || k &gt; nums.length) return null;
+
+  let sum = 0;
+  for (let i = 0; i &lt; k; i++) sum += nums[i];
+
+  let best = sum, bestStart = 0;
+
+  for (let i = k; i &lt; nums.length; i++) {
+    sum += nums[i] - nums[i - k];
+    if (sum &gt; best) {
+      best = sum;
+      bestStart = i - k + 1;         // freeze only on a new best
+    }
+  }
+
+  return { sum: best, from: bestStart, to: bestStart + k - 1,
+           values: nums.slice(bestStart, bestStart + k) };
+}
+
+console.log(bestWindow([2,1,5,1,3,2], 3));
+// { sum: 9, from: 2, to: 4, values: [5,1,3] }
+
+// Every window's sum, in one pass -- useful for moving averages
+function windowSums(nums, k) {
+  if (k &lt;= 0 || k &gt; nums.length) return [];
+  const out = [];
+  let sum = 0;
+  for (let i = 0; i &lt; k; i++) sum += nums[i];
+  out.push(sum);
+  for (let i = k; i &lt; nums.length; i++) {
+    sum += nums[i] - nums[i - k];
+    out.push(sum);
+  }
+  return out;
+}
+
+console.log(windowSums([2,1,5,1,3,2], 3));      // [8, 7, 9, 6]
+console.log(windowSums([1,2,3,4,5], 2));        // [3, 5, 7, 9]
+
+// Moving average -- the same thing, divided
+const movingAverage = (nums, k) =&gt; windowSums(nums, k).map(s =&gt; s / k);
+console.log(movingAverage([1,2,3,4,5], 3));     // [2, 3, 4]</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function maxSumSubarray(nums, k) {
+  if (k &lt;= 0 || k &gt; nums.length) return null;
+
+  let sum = nums.slice(0, k).reduce((a, b) =&gt; a + b, 0);
+  let best = sum;
+
+  for (let i = k; i &lt; nums.length; i++) {
+    sum += nums[i] - nums[i - k];
+    best = Math.max(best, sum);
+  }
+
+  return best;
+}
+
+console.log(maxSumSubarray([2,1,5,1,3,2], 3));   // 9
+console.log(maxSumSubarray([2,3,4,1,5], 2));     // 7
+console.log(maxSumSubarray([-1,-2,-3], 2));      // -3
+console.log(maxSumSubarray([1,2], 5));           // null</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">the version that looks clean and is O(n&times;k)</span></div>
+<pre><code>function tempting(nums, k) {
+  if (k &gt; nums.length) return null;
+
+  let best = -Infinity;
+  for (let i = 0; i + k &lt;= nums.length; i++) {
+    // slice allocates, reduce re-adds all k values
+    const sum = nums.slice(i, i + k).reduce((a, b) =&gt; a + b, 0);
+    best = Math.max(best, sum);
+  }
+  return best;
+}
+
+console.log(tempting([2,1,5,1,3,2], 3));   // 9   correct
+
+// Correct, three lines, and quietly O(n*k) plus n array allocations.
+// Compare:
+const N = 100000, K = 500;
+const nums = [];
+for (let i = 0; i &lt; N; i++) nums.push(i % 7);
+
+function sliding(a, k) {
+  let s = 0;
+  for (let i = 0; i &lt; k; i++) s += a[i];
+  let best = s;
+  for (let i = k; i &lt; a.length; i++) { s += a[i] - a[i - k]; if (s &gt; best) best = s; }
+  return best;
+}
+
+let t = performance.now();
+const x = tempting(nums, K);
+const sliceMs = performance.now() - t;
+
+t = performance.now();
+const y = sliding(nums, K);
+const slideMs = performance.now() - t;
+
+console.log('');
+console.log('slice + reduce :', x, 'in', sliceMs.toFixed(1) + ' ms');
+console.log('sliding window :', y, 'in', slideMs.toFixed(2) + ' ms');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the same window shape, other questions</span></div>
+<pre><code>// Once you have the fixed window, the aggregate is interchangeable.
+
+// Maximum average
+function maxAverage(nums, k) {
+  let sum = 0;
+  for (let i = 0; i &lt; k; i++) sum += nums[i];
+  let best = sum;
+  for (let i = k; i &lt; nums.length; i++) {
+    sum += nums[i] - nums[i - k];
+    best = Math.max(best, sum);
+  }
+  return best / k;
+}
+console.log('max average:', maxAverage([1,12,-5,-6,50,3], 4));   // 12.75
+
+// Count how many windows of size k contain no duplicates
+function windowsWithAllDistinct(nums, k) {
+  const counts = new Map();
+  let distinct = 0, found = 0;
+
+  const add = v =&gt; {
+    const n = (counts.get(v) || 0) + 1;
+    counts.set(v, n);
+    if (n === 1) distinct++;
+  };
+  const remove = v =&gt; {
+    const n = counts.get(v) - 1;
+    counts.set(v, n);
+    if (n === 0) distinct--;
+  };
+
+  for (let i = 0; i &lt; k; i++) add(nums[i]);
+  if (distinct === k) found++;
+
+  for (let i = k; i &lt; nums.length; i++) {
+    add(nums[i]);
+    remove(nums[i - k]);
+    if (distinct === k) found++;
+  }
+
+  return found;
+}
+
+console.log('all-distinct windows:', windowsWithAllDistinct([1,2,3,1,2], 3));   // 3
+console.log('all-distinct windows:', windowsWithAllDistinct([1,1,1,1], 2));     // 0
+
+// Note the add/remove pair keeping `distinct` in sync -- the same
+// incremental-invariant trick as `formed` in Minimum Window Substring.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Recompute each window</td><td class="mono">O(n &middot; k)</td><td class="mono">O(1)</td></tr>
+        <tr><td>slice + reduce per window</td><td class="mono">O(n &middot; k)</td><td class="mono">O(k)</td></tr>
+        <tr><td><strong>Slide the window</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The first window costs <code>k</code> additions; every slide after that costs exactly two
+  operations, and there are <code>n - k</code> slides. Total <code>k + 2(n - k)</code>, which is
+  O(n). Notice that <strong><code>k</code> disappears from the complexity entirely</strong> &mdash;
+  the window size stops mattering, which is the whole point.</p>
+
+  <p>O(1) space: one running sum and one best. No matter how large the window is, you never store its
+  contents.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Recomputing each window is O(n&middot;k), and neighbouring windows share k&minus;1
+    elements. So I sum the first window once, then slide: each step adds the entering element and
+    subtracts the leaving one, <code>sum += nums[i] - nums[i - k]</code>. O(n) time, O(1) space, and
+    the running time is independent of k. It works with negative numbers because the window size is
+    fixed &mdash; there is no shrink decision to justify.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Subtracting the wrong element</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; off by one on the leaving index</span></div>
+<pre><code>function broken(nums, k) {
+  let sum = 0;
+  for (let i = 0; i &lt; k; i++) sum += nums[i];
+  let best = sum;
+  for (let i = k; i &lt; nums.length; i++) {
+    sum += nums[i] - nums[i - k + 1];      // should be nums[i - k]
+    best = Math.max(best, sum);
+  }
+  return best;
+}
+
+console.log(broken([2,1,5,1,3,2], 3));   // 10  WRONG, should be 9
+console.log(broken([2,3,4,1,5], 2));     // 8   WRONG, should be 7
+
+// It subtracts an element that is still INSIDE the window, and
+// leaves the one that should have left. Check it on the first slide
+// by hand: with k=3 and i=3 the window is indexes 1..3, so index 0
+// is what left.</code></pre>
+  </div>
+
+  <h3>2. Starting <code>best</code> at 0</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; all-negative input</span></div>
+<pre><code>function broken(nums, k) {
+  let sum = 0;
+  for (let i = 0; i &lt; k; i++) sum += nums[i];
+  let best = 0;                            // should be sum
+  for (let i = k; i &lt; nums.length; i++) {
+    sum += nums[i] - nums[i - k];
+    best = Math.max(best, sum);
+  }
+  return best;
+}
+
+console.log(broken([2,1,5,1,3,2], 3));   // 9    fine
+console.log(broken([-1,-2,-3], 2));      // 0    WRONG, should be -3
+console.log(broken([-5,-1,-8], 1));      // 0    WRONG, should be -1
+
+// Zero is not achievable by any window here. Seed `best` with the
+// FIRST window's actual sum -- that is guaranteed to be a real
+// answer. Same lesson as Kadane's nums[0] initialisation.</code></pre>
+  </div>
+
+  <h3>3. Forgetting to record the first window</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the first window never counts</span></div>
+<pre><code>function broken(nums, k) {
+  let sum = 0;
+  for (let i = 0; i &lt; k; i++) sum += nums[i];
+  let best = -Infinity;                    // never seeded with sum
+  for (let i = k; i &lt; nums.length; i++) {
+    sum += nums[i] - nums[i - k];
+    best = Math.max(best, sum);            // only slid windows are checked
+  }
+  return best;
+}
+
+console.log(broken([5,1,1,1], 2));   // 2    WRONG, should be 6
+console.log(broken([1,2,3], 3));     // -Infinity   WRONG, should be 6
+
+// The best window can be the very first one. Either seed
+// best = sum before the loop, or check inside the loop starting
+// at i = k - 1 rather than i = k.</code></pre>
+  </div>
+
+  <h3>4. Not validating <code>k</code></h3>
+
+  <p><code>k &gt; nums.length</code> means no window exists. Without a guard, the first loop reads
+  <code>undefined</code> and the sum becomes <code>NaN</code> &mdash; which then compares false
+  against everything and silently returns <code>-Infinity</code> or <code>NaN</code>. Decide what an
+  impossible <code>k</code> should return (<code>null</code>, 0, or a thrown error) and say so.</p>
+
+  <h3>5. Confusing it with Kadane&rsquo;s</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">two different questions</span></div>
+<pre><code>const nums = [2, 1, 5, 1, 3, 2];
+
+// Fixed size: exactly 3 elements
+function fixedK(a, k) {
+  let s = 0;
+  for (let i = 0; i &lt; k; i++) s += a[i];
+  let best = s;
+  for (let i = k; i &lt; a.length; i++) { s += a[i] - a[i - k]; best = Math.max(best, s); }
+  return best;
+}
+
+// Any size: Kadane chooses the length itself
+function kadane(a) {
+  let cur = a[0], best = a[0];
+  for (let i = 1; i &lt; a.length; i++) {
+    cur = Math.max(a[i], cur + a[i]);
+    best = Math.max(best, cur);
+  }
+  return best;
+}
+
+console.log('best window of exactly 3 :', fixedK(nums, 3));   // 9
+console.log('best window of any size  :', kadane(nums));      // 14 (the whole array)
+
+// "Subarray of size k" versus "maximum subarray" are different
+// problems. The word "size k" is the whole difference, and it is
+// easy to skim past.</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the six-line version from memory</strong>, then verify the
+    <code>nums[i - k]</code> index by hand on the first slide.</li>
+    <li><strong>Return the window, not just the sum.</strong> In Step 6 &mdash; and remember to freeze
+    the start only when a new best is confirmed.</li>
+    <li><strong>Minimum sum window of size k.</strong> One comparison flips. Then find both in a
+    single pass.</li>
+    <li><strong>Moving average of a stream.</strong> Values arrive one at a time and you report the
+    average of the last <code>k</code>. You need a queue to know what is leaving &mdash; and that is
+    the real-world version of this problem.</li>
+    <li><strong>Maximum in every window of size k.</strong> Much harder: the maximum cannot be updated
+    with an add and a subtract, because removing the maximum leaves you not knowing the next one.
+    The answer is a monotonic deque. Try it, fail, then look it up &mdash; the failure is the
+    lesson.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Update the aggregate incrementally instead of recomputing it.</strong> Sums, counts and
+    products all support &ldquo;add the newcomer, remove the leaver&rdquo;, which makes the window size
+    irrelevant to the running time. Aggregates that do <em>not</em> support it &mdash; maximum,
+    minimum, median &mdash; need a different structure, and recognising which kind you have is what
+    tells you whether a simple sliding window will work at all.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="../two-pointers/05-trapping-rain-water.html">&larr; Trapping Rain Water</a>
+  <a href="02-longest-repeating-character-replacement.html">Next: Longest Repeating Character Replacement &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

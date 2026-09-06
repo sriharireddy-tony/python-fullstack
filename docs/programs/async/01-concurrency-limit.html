@@ -1,0 +1,1050 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concurrency Limit</title>
+<meta name="description" content="Run N promises with at most k in flight — the worker-pool shape, and why results must stay in order.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Async patterns &middot; Problem 01</p>
+  <h1>Run N Promises With a Concurrency Limit</h1>
+  <p class="standfirst">The most-asked async interview question, and the one where
+  <code>Promise.all</code> is the wrong answer. You need at most <code>k</code> requests in flight, and
+  the results still in input order &mdash; which is the worker-pool pattern in about fifteen
+  lines.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>You have 200 URLs to fetch. Two obvious approaches, both wrong.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Approach</th><th>In flight</th><th>Time for 200 &times; 100&nbsp;ms</th><th>Problem</th></tr></thead>
+      <tbody>
+        <tr><td><code>for...of</code> with <code>await</code></td><td class="mono">1</td><td class="mono">~20 s</td><td>needlessly slow</td></tr>
+        <tr><td><code>Promise.all(map)</code></td><td class="mono">200</td><td class="mono">~100 ms</td><td>rate limits, socket exhaustion, memory</td></tr>
+        <tr><td><strong>a pool of k</strong></td><td class="mono">k</td><td class="mono">~200/k &times; 100 ms</td><td>&mdash;</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why the middle row is a real problem, not a theoretical one</span>
+    <p>Browsers cap concurrent connections per host (roughly six). Node's default agent has its own
+    pool. An API returns 429 and starts rejecting. A database runs out of connections. And every
+    in-flight response body sits in memory at once.</p>
+    <p>&ldquo;All at once&rdquo; is not concurrency, it is a denial-of-service attack on your own
+    dependencies.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">all three, measured</span></div>
+<pre><code>let inFlight = 0;
+let peak = 0;
+
+function task(id) {
+  inFlight++;
+  peak = Math.max(peak, inFlight);
+  return new Promise((r) =&gt; setTimeout(() =&gt; { inFlight--; r('r' + id); }, 30));
+}
+
+const ids = Array.from({ length: 12 }, (_, i) =&gt; i);
+
+// 1. one at a time
+peak = 0;
+let t = Date.now();
+const sequential = [];
+for (const id of ids) sequential.push(await task(id));
+console.log('sequential : ~' + (Date.now() - t) + ' ms, peak concurrency ' + peak);
+
+// 2. all at once
+peak = 0;
+t = Date.now();
+const all = await Promise.all(ids.map(task));
+console.log('Promise.all: ~' + (Date.now() - t) + ' ms, peak concurrency ' + peak);
+
+// 3. a pool of 3
+async function pool(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next &lt; items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+peak = 0;
+t = Date.now();
+const pooled = await pool(ids, 3, task);
+console.log('pool of 3  : ~' + (Date.now() - t) + ' ms, peak concurrency ' + peak);
+
+console.log('');
+console.log('all three produced identical, in-order results:',
+            JSON.stringify(sequential) === JSON.stringify(all) &amp;&amp;
+            JSON.stringify(all) === JSON.stringify(pooled));
+console.log(JSON.stringify(pooled));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; batching, and why it is not good enough</h2>
+
+  <p>The intuitive fix: chop the list into chunks of <code>k</code> and <code>Promise.all</code> each
+  chunk. It works, and it wastes time.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; fixed batches</span></div>
+<pre><code>async function inBatches(items, size, fn) {
+  const out = [];
+  for (let i = 0; i &lt; items.length; i += size) {
+    const batch = items.slice(i, i + size);
+    out.push(...await Promise.all(batch.map(fn)));
+  }
+  return out;
+}
+
+// tasks with WILDLY different durations, which is the realistic case
+const durations = [100, 10, 10, 100, 10, 10, 100, 10, 10];
+const timeline = [];
+const t0 = Date.now();
+
+const task = (ms, i) =&gt; new Promise((r) =&gt; setTimeout(() =&gt; {
+  timeline.push({ i, ms, done: Date.now() - t0 });
+  r(i);
+}, ms));
+
+let t = Date.now();
+await inBatches(durations, 3, task);
+const batchMs = Date.now() - t;
+
+console.log('batches of 3, durations ' + JSON.stringify(durations));
+console.log('  total: ~' + batchMs + ' ms');
+console.log('');
+console.log('Each batch waits for its SLOWEST member before the next');
+console.log('one starts. Three batches, each gated by a 100 ms task,');
+console.log('so it costs ~300 ms even though there are only three');
+console.log('slow tasks and six fast ones.');
+
+// a pool starts the next task the instant a slot frees up
+async function pool(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next &lt; items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: limit }, worker));
+  return results;
+}
+
+t = Date.now();
+await pool(durations, 3, task);
+const poolMs = Date.now() - t;
+
+console.log('');
+console.log('pool of 3:');
+console.log('  total: ~' + poolMs + ' ms');
+console.log('');
+console.log('Same limit, same tasks, less waiting -- because a worker');
+console.log('that finishes a 10 ms task immediately picks up the next');
+console.log('item instead of idling until its batch-mates finish.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why the gap grows with variance</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; batches versus a pool, as variance rises</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+async function inBatches(items, size, fn) {
+  const out = [];
+  for (let i = 0; i &lt; items.length; i += size) {
+    out.push(...await Promise.all(items.slice(i, i + size).map(fn)));
+  }
+  return out;
+}
+
+async function pool(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next &lt; items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: limit }, worker));
+  return results;
+}
+
+// deterministic pseudo-random, so the two runs face the same workload
+function makeDurations(n, min, max, seed) {
+  const out = [];
+  let s = seed;
+  for (let i = 0; i &lt; n; i++) {
+    s = (s * 1103515245 + 12345) &amp; 0x7fffffff;
+    out.push(min + (s % (max - min + 1)));
+  }
+  return out;
+}
+
+const LIMIT = 4;
+const run = (ms) =&gt; sleep(ms);
+
+console.log('24 tasks, concurrency ' + LIMIT);
+console.log('');
+console.log('spread        batches    pool     saved');
+
+for (const [label, min, max] of [
+  ['all equal   ', 20, 20],
+  ['small spread', 10, 30],
+  ['wide spread ', 5, 60],
+  ['very wide   ', 2, 100],
+]) {
+  const durations = makeDurations(24, min, max, 7);
+
+  let t = Date.now();
+  await inBatches(durations, LIMIT, run);
+  const b = Date.now() - t;
+
+  t = Date.now();
+  await pool(durations, LIMIT, run);
+  const p = Date.now() - t;
+
+  console.log(label + '  ' + String(b + ' ms').padStart(7) +
+              '  ' + String(p + ' ms').padStart(7) +
+              '   ' + String(b - p).padStart(4) + ' ms  (' +
+              Math.round(100 * (b - p) / b) + '%)');
+}
+
+console.log('');
+console.log('With identical durations the two are the same. The wider');
+console.log('the spread, the more a batch wastes waiting for its');
+console.log('slowest member -- and real network calls have a very wide');
+console.log('spread.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; k workers sharing a cursor</h2>
+
+  <div class="trace">
+<pre>  Do not think "run k at a time". Think:
+
+      k WORKERS, all pulling from one shared queue,
+      each taking the next item as soon as it is free.
+
+  items   [ 0  1  2  3  4  5  6  7  8 ]
+            ^
+          next = 0        one shared cursor
+
+  start 3 workers. Each loops:
+
+      while next &lt; items.length:
+          i = next++              <-- claim an index
+          results[i] = await fn(items[i])
+
+  worker A takes 0, B takes 1, C takes 2      next = 3
+  B finishes first -> takes 3                 next = 4
+  C finishes       -> takes 4                 next = 5
+  A finishes       -> takes 5                 next = 6
+  ...
+  when next reaches the end, each worker's loop exits and its
+  promise resolves. Promise.all over the k worker promises means
+  "everything is done".
+
+  Concurrency is EXACTLY k, because there are exactly k loops and
+  each is inside at most one await at a time.
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why <code>i = next++</code> is safe</span>
+    <p>JavaScript is single-threaded, so <code>next++</code> cannot be interleaved &mdash; there is no
+    race. Each worker claims a unique index. In a language with real threads this would need a lock;
+    here the event loop is the lock.</p>
+    <p>Write the index into <code>results[i]</code>, never <code>results.push()</code>. Push gives you
+    <em>completion</em> order; the caller almost always wants <em>input</em> order.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; watch the workers</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the pool, narrating itself</span></div>
+<pre><code>const t0 = Date.now();
+const at = () =&gt; String(Date.now() - t0).padStart(4);
+
+async function poolLoud(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  let running = 0;
+
+  async function worker(name) {
+    console.log(at() + ' ms  worker ' + name + ' starts');
+    while (next &lt; items.length) {
+      const i = next++;
+      running++;
+      console.log(at() + ' ms  worker ' + name + ' claims index ' + i +
+                  ' (' + items[i] + ' ms)   in flight: ' + running);
+      results[i] = await fn(items[i], i);
+      running--;
+      console.log(at() + ' ms  worker ' + name + ' finished index ' + i +
+                  '                in flight: ' + running);
+    }
+    console.log(at() + ' ms  worker ' + name + ' has nothing left, exits');
+  }
+
+  const names = ['A', 'B', 'C', 'D', 'E'].slice(0, limit);
+  await Promise.all(names.map(worker));
+  return results;
+}
+
+const durations = [60, 20, 20, 20, 60, 20];
+const task = (ms, i) =&gt; new Promise((r) =&gt; setTimeout(() =&gt; r('res' + i), ms));
+
+const out = await poolLoud(durations, 2, task);
+console.log('');
+console.log('RESULT (input order):', JSON.stringify(out));
+console.log('total: ~' + (Date.now() - t0) + ' ms');
+console.log('');
+console.log('Worker B did four of the six, because it kept drawing the');
+console.log('short tasks. That self-balancing is the point -- no');
+console.log('scheduler decided it, the shared cursor did.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; the three implementations worth knowing</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">1a &mdash; the worker pool (the one to write)</span></div>
+<pre><code>async function pooledMap(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+
+  async function worker() {
+    while (next &lt; items.length) {
+      const index = next++;
+      results[index] = await fn(items[index], index);
+    }
+  }
+
+  const workerCount = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: workerCount }, worker));
+
+  return results;
+}
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+let inFlight = 0, peak = 0;
+const task = async (n) =&gt; {
+  inFlight++; peak = Math.max(peak, inFlight);
+  await sleep(20);
+  inFlight--;
+  return n * 2;
+};
+
+const items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const out = await pooledMap(items, 3, task);
+console.log('results   :', JSON.stringify(out));
+console.log('in order  :', JSON.stringify(out) === JSON.stringify(items.map((n) =&gt; n * 2)));
+console.log('peak      :', peak);
+
+// edge cases
+console.log('');
+console.log('empty input   :', JSON.stringify(await pooledMap([], 3, task)));
+console.log('limit &gt; length:', JSON.stringify(await pooledMap([1, 2], 99, task)));
+console.log('limit of 1    :', JSON.stringify(await pooledMap([1, 2, 3], 1, task)));
+peak = 0;
+await pooledMap([1, 2, 3], 1, task);
+console.log('  peak with limit 1:', peak);</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">1b &mdash; the "executing set" version</span></div>
+<pre><code>// Start each task in turn; when the set of in-flight promises hits
+// the limit, race them and wait for one to finish.
+async function limitedRace(items, limit, fn) {
+  const results = new Array(items.length);
+  const executing = new Set();
+
+  for (let i = 0; i &lt; items.length; i++) {
+    const p = Promise.resolve()
+      .then(() =&gt; fn(items[i], i))
+      .then((value) =&gt; { results[i] = value; });
+
+    // remove itself from the set when it settles
+    const tracked = p.then(() =&gt; executing.delete(tracked));
+    executing.add(tracked);
+
+    if (executing.size &gt;= limit) await Promise.race(executing);
+  }
+
+  await Promise.all(executing);
+  return results;
+}
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+let inFlight = 0, peak = 0;
+const task = async (n) =&gt; {
+  inFlight++; peak = Math.max(peak, inFlight);
+  await sleep(20);
+  inFlight--;
+  return n * 2;
+};
+
+const items = [1, 2, 3, 4, 5, 6, 7, 8];
+const out = await limitedRace(items, 3, task);
+console.log('results:', JSON.stringify(out));
+console.log('peak   :', peak);
+console.log('');
+console.log('Shorter, and closer to how p-limit is written. Two things');
+console.log('to be careful of:');
+console.log('  - the tracked promise must delete ITSELF from the set,');
+console.log('    or the set only grows;');
+console.log('  - Promise.race REJECTS on the first rejection, so an');
+console.log('    error surfaces immediately here -- see Step 7.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">1c &mdash; a reusable limiter, like p-limit</span></div>
+<pre><code>// Instead of a function over a list, a limiter you wrap each call
+// in. This is the shape a real library exposes, because the calls
+// may come from anywhere, at any time.
+function createLimiter(concurrency) {
+  let active = 0;
+  const queue = [];
+
+  function next() {
+    if (active &gt;= concurrency || queue.length === 0) return;
+    active++;
+    const { fn, resolve, reject } = queue.shift();
+    Promise.resolve()
+      .then(fn)
+      .then(resolve, reject)
+      .finally(() =&gt; { active--; next(); });
+  }
+
+  function limit(fn) {
+    return new Promise((resolve, reject) =&gt; {
+      queue.push({ fn, resolve, reject });
+      next();
+    });
+  }
+
+  limit.activeCount = () =&gt; active;
+  limit.pendingCount = () =&gt; queue.length;
+  return limit;
+}
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+let inFlight = 0, peak = 0;
+
+const limit = createLimiter(2);
+
+const job = (name, ms) =&gt; limit(async () =&gt; {
+  inFlight++; peak = Math.max(peak, inFlight);
+  await sleep(ms);
+  inFlight--;
+  return name;
+});
+
+// calls made from three unrelated places -- still capped at 2
+const a = job('a', 40);
+const b = job('b', 20);
+const c = job('c', 20);
+const d = job('d', 20);
+
+console.log('right after queueing: active =', limit.activeCount(),
+            ' pending =', limit.pendingCount());
+
+console.log('results:', await Promise.all([a, b, c, d]));
+console.log('peak   :', peak);
+console.log('after  : active =', limit.activeCount(),
+            ' pending =', limit.pendingCount());
+
+console.log('');
+console.log('This is the version to reach for in real code: one shared');
+console.log('limiter per resource (an API, a database, a disk), and');
+console.log('every call site wraps itself in it.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; errors, results, and cancellation</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">fail-fast versus settle-all</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// A: fail fast -- the first rejection rejects the whole thing
+async function poolAll(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next &lt; items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);     // a throw escapes the worker
+    }
+  }
+  await Promise.all(Array.from({ length: limit }, worker));
+  return results;
+}
+
+// B: settle all -- never rejects, reports per item
+async function poolAllSettled(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next &lt; items.length) {
+      const i = next++;
+      try {
+        results[i] = { status: 'fulfilled', value: await fn(items[i], i) };
+      } catch (reason) {
+        results[i] = { status: 'rejected', reason };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: limit }, worker));
+  return results;
+}
+
+let started = 0;
+const flaky = async (n) =&gt; {
+  started++;
+  await sleep(20);
+  if (n === 3) throw new Error('item 3 failed');
+  return n * 10;
+};
+
+started = 0;
+try {
+  await poolAll([1, 2, 3, 4, 5, 6, 7, 8], 2, flaky);
+} catch (e) {
+  console.log('A. fail fast   ->', e.message);
+  console.log('   items started before it gave up:', started);
+}
+
+await sleep(60);   // let the stragglers finish
+
+started = 0;
+const settled = await poolAllSettled([1, 2, 3, 4, 5, 6, 7, 8], 2, flaky);
+console.log('');
+console.log('B. settle all  -> every item reported, started', started);
+settled.forEach((r, i) =&gt; console.log('   ' + (i + 1) + ': ' + r.status + ' ' +
+  (r.status === 'fulfilled' ? r.value : r.reason.message)));
+
+console.log('');
+console.log('Note what fail-fast does NOT do: it does not stop the');
+console.log('other workers. The remaining tasks keep running in the');
+console.log('background, unobserved, because a promise cannot be');
+console.log('cancelled. Only the RESULT was abandoned.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">stopping early, properly</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// Two things are needed: stop CLAIMING new work, and tell the
+// in-flight work to abandon itself.
+async function poolCancellable(items, limit, fn, signal) {
+  const results = new Array(items.length);
+  let next = 0;
+  let claimed = 0;
+
+  async function worker() {
+    while (next &lt; items.length) {
+      if (signal.aborted) return;          // stop claiming
+      const i = next++;
+      claimed++;
+      results[i] = await fn(items[i], i, signal);
+    }
+  }
+
+  await Promise.all(Array.from({ length: limit }, worker));
+  return { results, claimed };
+}
+
+// a tiny AbortController stand-in, so this runs anywhere
+function makeController() {
+  const listeners = [];
+  const signal = {
+    aborted: false,
+    addEventListener: (_, fn) =&gt; listeners.push(fn),
+  };
+  return {
+    signal,
+    abort() { signal.aborted = true; listeners.forEach((f) =&gt; f()); },
+  };
+}
+
+const controller = makeController();
+
+let finished = 0;
+const task = (n, i, signal) =&gt; new Promise((resolve, reject) =&gt; {
+  const timer = setTimeout(() =&gt; { finished++; resolve(n * 10); }, 30);
+  signal.addEventListener('abort', () =&gt; {
+    clearTimeout(timer);                    // actually stop the work
+    reject(new Error('aborted'));
+  });
+});
+
+const items = Array.from({ length: 20 }, (_, i) =&gt; i + 1);
+
+setTimeout(() =&gt; controller.abort(), 70);
+
+try {
+  const { claimed } = await poolCancellable(items, 3, task, controller.signal);
+  console.log('completed all 20, claimed', claimed);
+} catch (e) {
+  console.log('stopped early:', e.message);
+}
+
+await sleep(80);
+console.log('  of 20 items, tasks that actually completed:', finished);
+console.log('  the rest were never started, or were aborted mid-flight');
+
+console.log('');
+console.log('The signal has to reach BOTH places:');
+console.log('  the worker loop, so it stops claiming new items;');
+console.log('  the task itself, so in-flight work is torn down.');
+console.log('');
+console.log('Check only the loop and the k in-flight tasks run to');
+console.log('completion anyway. Real fetch() takes an AbortSignal for');
+console.log('exactly this reason.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the mistake in how the tasks are supplied</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+let started = 0;
+const makeTask = (n) =&gt; {
+  started++;                                  // counts when CREATED
+  return sleep(20).then(() =&gt; n);
+};
+
+// WRONG: an array of PROMISES. They all started the moment the
+// array was built -- before the limiter ever saw them.
+async function limitPromises(promises, limit) {
+  const out = [];
+  for (let i = 0; i &lt; promises.length; i += limit) {
+    out.push(...await Promise.all(promises.slice(i, i + limit)));
+  }
+  return out;
+}
+
+started = 0;
+const alreadyRunning = [1, 2, 3, 4, 5, 6].map(makeTask);
+console.log('array of promises  -- tasks started immediately:', started);
+await limitPromises(alreadyRunning, 2);
+console.log('  the "limit" limited nothing at all.');
+
+// RIGHT: an array of FUNCTIONS that return promises. Nothing runs
+// until the pool calls one.
+async function limitThunks(thunks, limit) {
+  const results = new Array(thunks.length);
+  let next = 0;
+  async function worker() {
+    while (next &lt; thunks.length) {
+      const i = next++;
+      results[i] = await thunks[i]();
+    }
+  }
+  await Promise.all(Array.from({ length: limit }, worker));
+  return results;
+}
+
+started = 0;
+const thunks = [1, 2, 3, 4, 5, 6].map((n) =&gt; () =&gt; makeTask(n));
+console.log('');
+console.log('array of thunks    -- tasks started immediately:', started);
+await limitThunks(thunks, 2);
+console.log('  after running the pool, started:', started);
+
+console.log('');
+console.log('A promise is ALREADY RUNNING. You cannot rate-limit a');
+console.log('promise, only its creation. So the pool must take either');
+console.log('  (a) a list of INPUTS plus a function, or');
+console.log('  (b) a list of thunks -- functions returning promises.');
+console.log('Never a list of promises. This is the single most common');
+console.log('mistake in this question.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th></th><th>Wall clock</th><th>Peak memory</th></tr></thead>
+      <tbody>
+        <tr><td>Sequential</td><td class="mono">sum of all durations</td><td class="mono">1 response</td></tr>
+        <tr><td><code>Promise.all</code></td><td class="mono">the single longest</td><td class="mono">n responses</td></tr>
+        <tr><td><strong>Pool of k</strong></td><td class="mono">about total / k</td><td class="mono">k responses</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The pool is O(n) in bookkeeping: one array of results, k worker promises, one cursor. Peak memory
+  is <code>k</code> in-flight responses rather than <code>n</code>, and that is usually the reason the
+  limit exists at all.</p>
+
+  <p><strong>Choosing k</strong> is not a code question. For network calls it is bounded by the remote
+  service's rate limit and by connection pooling &mdash; six to ten is a normal browser default. For
+  CPU work in Node it is the core count. For a database it is the connection-pool size. Pick a number
+  you can defend, and make it configurable.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;I run k worker loops sharing one cursor. Each worker claims the next index with
+    <code>i = next++</code>, awaits the task, writes into <code>results[i]</code>, and loops until the
+    cursor passes the end; <code>Promise.all</code> over the k workers tells me everything is done.
+    Writing by index keeps the results in input order even though they complete out of order. The
+    important precondition is that the pool takes inputs and a function &mdash; not an array of
+    promises, because those have already started. Batching with <code>Promise.all</code> per chunk also
+    works but wastes time waiting for each batch's slowest member.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Passing an array of promises</h3>
+
+  <p>Step 7's last block. It is the mistake that makes the whole exercise pointless, and it is easy to
+  make because <code>items.map(fetchThing)</code> looks so natural.</p>
+
+  <h3>2. Pushing results instead of writing by index</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; results in completion order</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+async function withPush(items, limit, fn) {
+  const results = [];
+  let next = 0;
+  async function worker() {
+    while (next &lt; items.length) {
+      const i = next++;
+      results.push(await fn(items[i], i));       // push -- bug
+    }
+  }
+  await Promise.all(Array.from({ length: limit }, worker));
+  return results;
+}
+
+async function withIndex(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next &lt; items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: limit }, worker));
+  return results;
+}
+
+// durations chosen so completion order differs from input order
+const durations = [50, 10, 10, 10, 40, 10];
+const task = (ms, i) =&gt; sleep(ms).then(() =&gt; 'item' + i);
+
+console.log('input order would be: item0..item5');
+console.log('push  :', JSON.stringify(await withPush(durations, 3, task)));
+console.log('index :', JSON.stringify(await withIndex(durations, 3, task)));
+console.log('');
+console.log('The push version returns whatever finished first. If the');
+console.log('caller does results[3] expecting the fourth input, they');
+console.log('get whatever happened to be fourth-fastest.');
+console.log('');
+console.log('This bug is invisible in testing with equal-duration');
+console.log('mocks, and appears in production the first time one');
+console.log('request is slow.');</code></pre>
+  </div>
+
+  <h3>3. Reaching for recursion instead of a loop</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">correct, for a reason worth knowing</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// a recursive worker
+async function poolRecursive(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+
+  async function run() {
+    if (next &gt;= items.length) return;
+    const i = next++;
+    results[i] = await fn(items[i], i);
+    return run();                             // recurse for the next item
+  }
+
+  await Promise.all(Array.from({ length: limit }, run));
+  return results;
+}
+
+async function poolLoop(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function run() {
+    while (next &lt; items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: limit }, run));
+  return results;
+}
+
+const items = Array.from({ length: 50000 }, (_, i) =&gt; i);
+const instant = (n) =&gt; Promise.resolve(n);
+
+let t = performance.now();
+const a = await poolRecursive(items, 4, instant);
+const recMs = performance.now() - t;
+
+t = performance.now();
+const b = await poolLoop(items, 4, instant);
+const loopMs = performance.now() - t;
+
+console.log('50,000 instant tasks');
+console.log('  recursive: ' + recMs.toFixed(0) + ' ms, ' + a.length + ' results');
+console.log('  loop     : ' + loopMs.toFixed(0) + ' ms, ' + b.length + ' results');
+console.log('  identical:', JSON.stringify(a) === JSON.stringify(b));
+
+console.log('');
+console.log('The recursive version survives here because `return run()`');
+console.log('inside an async function does NOT keep the frame alive the');
+console.log('way a synchronous recursion would -- each await unwinds');
+console.log('the stack. So it is correct.');
+console.log('');
+console.log('Prefer the loop anyway: it is easier to read, easier to');
+console.log('add a cancellation check to, and it does not depend on');
+console.log('that subtlety being true.');</code></pre>
+  </div>
+
+  <h3>4. Forgetting that a rejection abandons the results, not the work</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the pool "stopped" and kept going</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+let sideEffects = 0;
+
+async function pool(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next &lt; items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: limit }, worker));
+  return results;
+}
+
+const writeToDatabase = async (n) =&gt; {
+  await sleep(15);
+  if (n === 2) throw new Error('item 2 failed validation');
+  sideEffects++;                              // a real, irreversible write
+  return n;
+};
+
+try {
+  await pool([1, 2, 3, 4, 5, 6, 7, 8], 3, writeToDatabase);
+} catch (e) {
+  console.log('caught at:', e.message);
+  console.log('  writes committed so far:', sideEffects);
+}
+
+await sleep(120);
+console.log('');
+console.log('writes committed after waiting:', sideEffects);
+console.log('');
+console.log('The await threw, so the caller moved on -- but the other');
+console.log('two workers were mid-loop and carried on to the end.');
+console.log('Every remaining item was written.');
+console.log('');
+console.log('If a failure must stop the work, you need an explicit');
+console.log('flag the workers check, or an AbortSignal. Step 7 has');
+console.log('both. Promise.all rejecting is not a stop signal.');
+
+// with a stop flag
+sideEffects = 0;
+async function poolStopping(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  let failed = null;
+  async function worker() {
+    while (next &lt; items.length &amp;&amp; !failed) {
+      const i = next++;
+      try { results[i] = await fn(items[i], i); }
+      catch (e) { failed = failed || e; return; }
+    }
+  }
+  await Promise.all(Array.from({ length: limit }, worker));
+  if (failed) throw failed;
+  return results;
+}
+
+try { await poolStopping([1, 2, 3, 4, 5, 6, 7, 8], 3, writeToDatabase); }
+catch (e) { console.log(''); console.log('with a stop flag ->', e.message); }
+await sleep(120);
+console.log('  writes committed:', sideEffects, '-- the workers stopped claiming');</code></pre>
+  </div>
+
+  <h3>5. Setting the limit from the wrong thing</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">a limit that does not limit what you think</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+async function pool(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next &lt; items.length) { const i = next++; results[i] = await fn(items[i], i); }
+  }
+  await Promise.all(Array.from({ length: limit }, worker));
+  return results;
+}
+
+let apiCalls = 0, peakApi = 0;
+const callApi = async () =&gt; {
+  apiCalls++; peakApi = Math.max(peakApi, apiCalls);
+  await sleep(20);
+  apiCalls--;
+};
+
+// each "item" makes THREE API calls
+const processUser = async (id) =&gt; {
+  await Promise.all([callApi(), callApi(), callApi()]);
+  return id;
+};
+
+peakApi = 0;
+await pool([1, 2, 3, 4, 5, 6], 2, processUser);
+console.log('pool limit 2, but each item makes 3 calls');
+console.log('  peak concurrent API calls:', peakApi);
+console.log('');
+console.log('The limit caps ITEMS, not requests. Two items in flight,');
+console.log('three calls each, is six concurrent requests -- three');
+console.log('times what you thought you configured.');
+
+// the fix: limit the resource, not the loop
+function createLimiter(n) {
+  let active = 0; const queue = [];
+  function next() {
+    if (active &gt;= n || !queue.length) return;
+    active++;
+    const { fn, res, rej } = queue.shift();
+    Promise.resolve().then(fn).then(res, rej)
+      .finally(() =&gt; { active--; next(); });
+  }
+  return (fn) =&gt; new Promise((res, rej) =&gt; { queue.push({ fn, res, rej }); next(); });
+}
+
+const apiLimit = createLimiter(2);
+const limitedCall = () =&gt; apiLimit(callApi);
+const processUser2 = async (id) =&gt; {
+  await Promise.all([limitedCall(), limitedCall(), limitedCall()]);
+  return id;
+};
+
+peakApi = 0;
+await pool([1, 2, 3, 4, 5, 6], 4, processUser2);
+console.log('');
+console.log('with a limiter around the API call itself:');
+console.log('  pool limit 4, API limit 2');
+console.log('  peak concurrent API calls:', peakApi);
+console.log('');
+console.log('Put the limiter next to the thing you are protecting.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the worker pool from memory.</strong> Fifteen lines. Then say why it takes inputs
+    and a function rather than an array of promises.</li>
+    <li><strong>Write the executing-set version.</strong> Step 6b &mdash; shorter, and the one real
+    libraries use.</li>
+    <li><strong>Add <code>allSettled</code> semantics.</strong> Step 7. Decide which default you would
+    ship and be able to justify it.</li>
+    <li><strong>Write the reusable limiter.</strong> Step 6c. Then explain why it belongs around the
+    resource rather than around the loop.</li>
+    <li><strong>Add cancellation with an <code>AbortSignal</code></strong> and demonstrate that
+    checking only the loop is not enough.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>A promise is already running.</strong> Everything about rate limiting, retrying,
+    debouncing async work and cancelling it follows from that one fact: you can only control
+    <em>when a promise is created</em>, never what it does once it exists. That is why every one of
+    these APIs takes a function, not a promise.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="../index.html">&larr; All problems</a>
+  <a href="02-retry-backoff.html">Next: Retry With Exponential Backoff &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

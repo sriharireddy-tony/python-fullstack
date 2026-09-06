@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Majority Element</title>
+<meta name="description" content="Boyer-Moore voting: find the value that appears more than half the time using one counter and no memory.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Arrays &middot; Problem 11</p>
+  <h1>Majority Element</h1>
+  <p class="standfirst">Find the value that appears more than half the time &mdash; using
+  <strong>one variable and one counter</strong>. The Boyer&ndash;Moore voting algorithm is four lines
+  long and, once you see the idea behind it, genuinely obvious.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>An array contains a <strong>majority element</strong>: a value that appears
+  <em>more than <code>n / 2</code> times</em>. Find it. You may assume it always exists.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Length</th><th>Answer</th><th>Count needed</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[3, 2, 3]</td><td class="num">3</td><td class="mono">3</td><td>more than 1.5, so at least 2</td></tr>
+        <tr><td class="mono">[2, 2, 1, 1, 1, 2, 2]</td><td class="num">7</td><td class="mono">2</td><td>more than 3.5, so at least 4</td></tr>
+        <tr><td class="mono">[1]</td><td class="num">1</td><td class="mono">1</td><td>trivially</td></tr>
+        <tr><td class="mono">[6, 5, 5]</td><td class="num">3</td><td class="mono">5</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn">
+    <span class="t">&ldquo;More than half&rdquo; is much stronger than &ldquo;most common&rdquo;</span>
+    <p>In <code>[1, 1, 2, 2, 3]</code> the most common values are 1 and 2 with two each &mdash; but
+    neither exceeds 2.5, so there is <strong>no majority element</strong>. That distinction is what
+    makes the clever algorithm possible. &ldquo;Most frequent&rdquo; needs counting; &ldquo;more than
+    half&rdquo; does not, because a value with more than half the slots has a property nothing else
+    can have: <strong>it outnumbers everything else put together</strong>.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answers</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0a &mdash; count each value the hard way</span></div>
+<pre><code>function majorityBrute(nums) {
+  const half = nums.length / 2;
+
+  for (let i = 0; i &lt; nums.length; i++) {
+    let count = 0;
+    for (let j = 0; j &lt; nums.length; j++) {
+      if (nums[j] === nums[i]) count++;
+    }
+    if (count &gt; half) return nums[i];
+  }
+
+  return -1;
+}
+
+console.log(majorityBrute([3, 2, 3]));                  // 3
+console.log(majorityBrute([2, 2, 1, 1, 1, 2, 2]));      // 2
+console.log(majorityBrute([1]));                        // 1</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0b &mdash; a frequency map</span></div>
+<pre><code>function majorityMap(nums) {
+  const counts = new Map();
+  const half = nums.length / 2;
+
+  for (const n of nums) {
+    const c = (counts.get(n) || 0) + 1;
+    if (c &gt; half) return n;      // return as soon as one crosses the line
+    counts.set(n, c);
+  }
+
+  return -1;
+}
+
+console.log(majorityMap([3, 2, 3]));               // 3
+console.log(majorityMap([2, 2, 1, 1, 1, 2, 2]));   // 2
+
+// O(n) time, O(n) space. This is a perfectly good answer, and the
+// one you would write at work. The rest of this page is about
+// getting the space down to O(1).</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0c &mdash; sort and take the middle</span></div>
+<pre><code>function majoritySort(nums) {
+  const s = [...nums].sort((a, b) =&gt; a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
+console.log(majoritySort([3, 2, 3]));                // 3
+console.log(majoritySort([2, 2, 1, 1, 1, 2, 2]));    // 2
+console.log(majoritySort([6, 5, 5]));                // 5
+
+// Why does taking the middle work?
+// If a value occupies MORE THAN HALF the slots, then after sorting
+// it forms one solid block longer than half the array. A block that
+// long must cover the centre, whatever else is around it.
+//
+//   [1, 1, 2, 2, 2, 2, 2]     middle index 3 -> 2   correct
+//   [2, 2, 2, 2, 2, 1, 1]     middle index 3 -> 2   correct
+//
+// O(n log n) time. A very good answer to give in ten seconds.</code></pre>
+  </div>
+
+  <p>That sorting argument is worth having ready. It is short, provably correct, and requires no
+  cleverness &mdash; the sort of answer that buys you time to think about the O(1)-space version.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why they are not good enough</h2>
+
+  <p>The nested loop is O(n&sup2;) &mdash; unusable at scale. The map is O(n) time but O(n) memory,
+  which matters when the array is a stream of a hundred million events and you cannot hold a counter
+  per distinct value. The sort is O(n log n) and either allocates a copy or destroys the input.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// The majority value is parked at the END, so the brute force has to
+// count thousands of unique values -- a full pass each -- before it
+// ever reaches one that wins.
+const HALF = 7500;
+const nums = [];
+for (let i = 1; i &lt;= HALF; i++) nums.push(-i);      // 7,500 unique values
+for (let i = 0; i &lt;= HALF; i++) nums.push(999);     // 7,501 copies -- the majority
+
+function brute(a) {
+  const half = a.length / 2;
+  for (let i = 0; i &lt; a.length; i++) {
+    let c = 0;
+    for (let j = 0; j &lt; a.length; j++) if (a[j] === a[i]) c++;
+    if (c &gt; half) return a[i];
+  }
+  return -1;
+}
+
+function voting(a) {
+  let candidate = null, count = 0;
+  for (const n of a) {
+    if (count === 0) candidate = n;
+    count += (n === candidate) ? 1 : -1;
+  }
+  return candidate;
+}
+
+let t = performance.now();
+const x = brute(nums);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const y = voting(nums);
+const fastMs = performance.now() - t;
+
+console.log('array length   :', nums.length);
+console.log('counting each  :', x, 'in', bruteMs.toFixed(1) + ' ms');
+console.log('voting         :', y, 'in', fastMs.toFixed(2) + ' ms');
+console.log('same answer    :', x === y);
+console.log('speed-up:', Math.round(bruteMs / Math.max(fastMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; cancel votes in pairs</h2>
+
+  <p>Forget arrays for a moment. Imagine an election in a room. Everybody holds up a card with their
+  candidate&rsquo;s name. Now play this game:</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Repeatedly find <strong>two people supporting different candidates</strong> and send them both
+    out of the room. Their votes cancel.</p>
+    <p>If one candidate had more than half the votes, they <strong>cannot</strong> be eliminated.
+    Every cancellation removes at most one of their votes and one of somebody else&rsquo;s, and they
+    have more votes than everybody else combined &mdash; so when the room finally runs out of
+    disagreements, whoever is left standing must be them.</p>
+  </div>
+
+  <p>Work the numbers. Say the majority value has <code>m</code> votes and the rest have
+  <code>r</code> votes, with <code>m &gt; r</code>. Each cancellation subtracts one from each side, so
+  the difference <code>m - r</code> never shrinks. Since it started positive, it stays positive, and
+  something of the majority always survives.</p>
+
+  <h3>Doing it in one pass</h3>
+
+  <p>You do not need to actually pair people up. Track two things:</p>
+
+  <ul>
+    <li><code>candidate</code> &mdash; who is currently &ldquo;holding the room&rdquo;.</li>
+    <li><code>count</code> &mdash; by how many votes, after all cancellations so far.</li>
+  </ul>
+
+  <p>And for each new element:</p>
+
+  <ol>
+    <li>If <code>count</code> is 0, nobody is holding the room. The new element takes over as
+    candidate.</li>
+    <li>If it matches the candidate, <code>count++</code> &mdash; one more supporter.</li>
+    <li>If it does not, <code>count--</code> &mdash; a cancellation, one supporter used up.</li>
+  </ol>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the whole algorithm</span></div>
+<pre><code>if (count === 0) candidate = n;
+count += (n === candidate) ? 1 : -1;</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">What the algorithm does <em>not</em> promise</span>
+    <p>It does not find the most frequent element. It finds &ldquo;the only value that <em>could</em>
+    be a majority&rdquo;. If no majority exists it still returns something &mdash; whatever happened to
+    survive &mdash; and that answer is meaningless. When the problem does not guarantee a majority,
+    you must <strong>add a second pass to verify</strong>. That verification pass is the most commonly
+    forgotten part of this problem.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>nums = [2, 2, 1, 1, 1, 2, 2]</code>. The answer is 2, which appears four times out of
+  seven.</p>
+
+  <div class="trace">
+<pre>candidate = none   count = 0
+
+n=2   count is 0 -> candidate = 2
+      2 === 2  ->  count = 1            candidate 2   count 1
+n=2   2 === 2  ->  count = 2            candidate 2   count 2
+n=1   1 !== 2  ->  count = 1            candidate 2   count 1
+n=1   1 !== 2  ->  count = 0            candidate 2   count 0
+n=1   count is 0 -> candidate = 1
+      1 === 1  ->  count = 1            candidate 1   count 1
+n=2   2 !== 1  ->  count = 0            candidate 1   count 0
+n=2   count is 0 -> candidate = 2
+      2 === 2  ->  count = 1            candidate 2   count 1
+
+answer: 2
+</pre>
+  </div>
+
+  <p>Follow what happened in the middle. The run of three 1s knocked the count down to zero and
+  <em>took over</em> as candidate. For a moment the algorithm believed the answer was 1. Then the
+  trailing 2s cancelled that and reclaimed the room. This is normal &mdash; the candidate can change
+  several times, and only the final one matters.</p>
+
+  <p>Now a case with no majority, to see the algorithm return nonsense:</p>
+
+  <div class="trace">
+<pre>nums = [1, 2, 3, 4]      -- no value appears more than twice
+
+n=1   count 0 -> candidate = 1, count = 1
+n=2   2 !== 1 -> count = 0
+n=3   count 0 -> candidate = 3, count = 1
+n=4   4 !== 3 -> count = 0
+
+candidate ends as 3, count 0.
+The algorithm "answers" 3. There is no majority at all.
+This is why you verify.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function majorityExplained(nums) {
+  let candidate = null;
+  let count = 0;
+
+  console.log('nums =', nums);
+  console.log('');
+
+  for (const n of nums) {
+    if (count === 0) {
+      candidate = n;
+      console.log('n=' + n + '   count was 0 -> new candidate ' + n);
+    }
+
+    if (n === candidate) {
+      count++;
+      console.log('n=' + n + '   supports ' + candidate + '   count = ' + count);
+    } else {
+      count--;
+      console.log('n=' + n + '   cancels  ' + candidate + '   count = ' + count);
+    }
+  }
+
+  console.log('');
+  console.log('surviving candidate: ' + candidate);
+
+  // verify -- never skip this unless a majority is guaranteed
+  let real = 0;
+  for (const n of nums) if (n === candidate) real++;
+  console.log('actual count: ' + real + ' out of ' + nums.length +
+              '  (needs more than ' + (nums.length / 2) + ')');
+  console.log(real &gt; nums.length / 2 ? 'VERIFIED' : 'NOT a majority -- no answer exists');
+  console.log('');
+
+  return real &gt; nums.length / 2 ? candidate : null;
+}
+
+console.log('ANSWER:', majorityExplained([2, 2, 1, 1, 1, 2, 2]));
+console.log('=========================================');
+console.log('ANSWER:', majorityExplained([1, 2, 3, 4]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; Boyer&ndash;Moore voting</span></div>
+<pre><code>function majorityManual(nums) {
+  let candidate = nums[0];
+  let count = 0;
+
+  // PASS 1: find the only value that could possibly be a majority
+  for (let i = 0; i &lt; nums.length; i++) {
+    if (count === 0) {
+      candidate = nums[i];      // nobody is holding the room -- take it
+    }
+
+    if (nums[i] === candidate) {
+      count++;                  // a supporter
+    } else {
+      count--;                  // a cancellation
+    }
+  }
+
+  // PASS 2: verify. Skip only if the problem GUARANTEES a majority.
+  let occurrences = 0;
+  for (let i = 0; i &lt; nums.length; i++) {
+    if (nums[i] === candidate) occurrences++;
+  }
+
+  if (occurrences * 2 &gt; nums.length) {   // "more than half", no division
+    return candidate;
+  }
+  return -1;                             // no majority exists
+}
+
+console.log(majorityManual([3, 2, 3]));               // 3
+console.log(majorityManual([2, 2, 1, 1, 1, 2, 2]));   // 2
+console.log(majorityManual([1]));                     // 1
+console.log(majorityManual([6, 5, 5]));               // 5
+console.log(majorityManual([1, 2, 3, 4]));            // -1  no majority
+console.log(majorityManual([1, 1, 2, 2, 3]));         // -1  no majority</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">Why <code>occurrences * 2 &gt; length</code> and not <code>occurrences &gt; length / 2</code></span>
+    <p>They agree for these inputs, but multiplying keeps everything in whole numbers.
+    <code>length / 2</code> produces 3.5 for a 7-element array, and once you are comparing against a
+    fraction it is easy to reach for <code>Math.floor</code> and accidentally accept a value that
+    ties rather than exceeds. Multiplying both sides by 2 removes the question entirely. It is a
+    small habit that prevents a whole family of off-by-one bugs.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>function majorityElement(nums) {
+  let candidate = null;
+  let count = 0;
+
+  for (const n of nums) {
+    if (count === 0) candidate = n;
+    count += (n === candidate) ? 1 : -1;
+  }
+
+  return candidate;   // safe only because a majority is guaranteed
+}
+
+console.log(majorityElement([3, 2, 3]));               // 3
+console.log(majorityElement([2, 2, 1, 1, 1, 2, 2]));   // 2
+console.log(majorityElement([1]));                     // 1
+
+// With verification, when no majority is promised:
+function majorityElementSafe(nums) {
+  const candidate = majorityElement(nums);
+  const hits = nums.filter(n =&gt; n === candidate).length;
+  return hits * 2 &gt; nums.length ? candidate : null;
+}
+
+console.log(majorityElementSafe([2, 2, 1, 1, 1, 2, 2]));   // 2
+console.log(majorityElementSafe([1, 2, 3, 4]));            // null</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the frequency-map versions you will actually write</span></div>
+<pre><code>// Most frequent element (NOT necessarily a majority)
+function mostFrequent(nums) {
+  const counts = new Map();
+  for (const n of nums) counts.set(n, (counts.get(n) || 0) + 1);
+
+  let best = null, bestCount = 0;
+  for (const [value, c] of counts) {
+    if (c &gt; bestCount) { best = value; bestCount = c; }
+  }
+  return { value: best, count: bestCount };
+}
+
+console.log(mostFrequent([1, 1, 2, 2, 2, 3]));   // { value: 2, count: 3 }
+console.log(mostFrequent([1, 1, 2, 2]));         // { value: 1, count: 2 }
+
+// Every element appearing more than n/3 times -- there can be at
+// most two of them. Same voting idea with TWO candidates.
+function majorityThird(nums) {
+  let c1 = null, c2 = null, n1 = 0, n2 = 0;
+
+  for (const n of nums) {
+    if (n === c1) n1++;
+    else if (n === c2) n2++;
+    else if (n1 === 0) { c1 = n; n1 = 1; }
+    else if (n2 === 0) { c2 = n; n2 = 1; }
+    else { n1--; n2--; }              // cancel THREE different values
+  }
+
+  return [c1, c2].filter(c =&gt;
+    c !== null &amp;&amp; nums.filter(x =&gt; x === c).length * 3 &gt; nums.length
+  );
+}
+
+console.log(majorityThird([3, 2, 3]));            // [3]
+console.log(majorityThird([1, 1, 1, 3, 3, 2, 2, 2]));   // [1, 2]
+console.log(majorityThird([1, 2, 3, 4, 5, 6]));   // []</code></pre>
+  </div>
+
+  <p>The n/3 version is the standard follow-up, and it shows the pattern generalises: to find
+  everything appearing more than <code>n/k</code> times, keep <code>k - 1</code> candidates and
+  cancel <code>k</code> distinct values at a time. Note that the order of the <code>else if</code>
+  branches matters &mdash; you must check &ldquo;matches an existing candidate&rdquo; before
+  &ldquo;there is an empty slot&rdquo;, or a repeated value can occupy both slots.</p>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Count each value</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td></tr>
+        <tr><td>Frequency map</td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+        <tr><td>Sort, take the middle</td><td class="mono">O(n log n)</td><td class="mono">O(n) or O(1)</td></tr>
+        <tr><td><strong>Boyer&ndash;Moore voting</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Voting is optimal on both axes: you cannot beat O(n) time, because you must look at every
+  element &mdash; miss one and it could have been the majority &mdash; and you cannot beat O(1)
+  space. Two variables, whatever the input size.</p>
+
+  <p>There is another property worth naming: voting works on a <strong>stream</strong>. It never looks
+  backwards, so you can run it over data arriving one element at a time and never stored. The map
+  version cannot do that at scale, and the sort version cannot do it at all. That is the real-world
+  reason this algorithm exists.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;A majority element outnumbers everything else combined, so if I repeatedly cancel one
+    of its votes against one of any other value, it can never be fully cancelled. Boyer&ndash;Moore
+    does that in one pass: keep a candidate and a counter; when the counter hits zero, adopt the
+    current element as the candidate; increment on a match, decrement otherwise. The survivor is the
+    only possible majority. O(n) time, O(1) space, single pass, streamable. If a majority is not
+    guaranteed, I add a second pass to verify the count.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Skipping the verification pass</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; when no majority exists</span></div>
+<pre><code>function broken(nums) {
+  let candidate = null, count = 0;
+  for (const n of nums) {
+    if (count === 0) candidate = n;
+    count += (n === candidate) ? 1 : -1;
+  }
+  return candidate;      // no verification
+}
+
+console.log(broken([1, 2, 3, 4]));        // 3   -- confident nonsense
+console.log(broken([1, 1, 2, 2, 3]));     // 3   -- also nonsense
+console.log(broken([5, 5, 1, 2, 3, 4]));  // 3   -- also nonsense
+
+// It never says "I do not know". If the problem guarantees a
+// majority this is correct and fine. If it does not, this is a
+// silent wrong answer, which is the worst kind.</code></pre>
+  </div>
+
+  <h3>2. Updating the candidate <em>after</em> the count check</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; wrong order</span></div>
+<pre><code>function broken(nums) {
+  let candidate = nums[0], count = 0;
+  for (const n of nums) {
+    count += (n === candidate) ? 1 : -1;   // counted first
+    if (count === 0) candidate = n;        // adopted after -- bug
+  }
+  return candidate;
+}
+
+console.log(broken([2, 2, 1, 1, 1, 2, 2]));   // 2   right, by luck
+console.log(broken([1, 1, 1, 2, 2]));         // 1   right, by luck
+console.log(broken([1, 2, 1]));               // 2   WRONG, should be 1
+
+// Walk the last one through. candidate starts as 1, count 0.
+//   n=1  matches   -> count 1
+//   n=2  differs   -> count 0, and THEN adopts 2 as candidate
+//   n=1  differs from 2 -> count -1
+// The new candidate was adopted without being given its own vote,
+// so it sits on a count of 0 instead of 1 and the array ends with
+// the wrong survivor. Check for zero FIRST, then count.</code></pre>
+  </div>
+
+  <h3>3. Comparing with <code>&gt;=</code> instead of <code>&gt;</code></h3>
+
+  <p>&ldquo;More than half&rdquo; means strictly more. In <code>[1, 1, 2, 2]</code> the value 1 appears
+  exactly half the time and is <em>not</em> a majority. Verifying with
+  <code>occurrences * 2 &gt;= nums.length</code> would wrongly accept it.</p>
+
+  <h3>4. Assuming the candidate never changes</h3>
+
+  <p>The trace in Step 5 shows the candidate switching from 2 to 1 and back to 2. People sometimes
+  add a &ldquo;once we have a candidate, keep it&rdquo; guard, which breaks the algorithm on exactly
+  the inputs where the majority is clustered at the end.</p>
+
+  <h3>5. Reaching for the middle element without sorting</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the middle of an unsorted array</span></div>
+<pre><code>function broken(nums) {
+  return nums[Math.floor(nums.length / 2)];   // no sort -- bug
+}
+
+console.log(broken([2, 2, 1, 1, 1, 2, 2]));   // 1   WRONG, should be 2
+console.log(broken([6, 5, 5]));               // 5   right, by luck
+
+// "Take the middle" is only valid AFTER sorting, because sorting is
+// what turns the majority into one solid block covering the centre.</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the two-line core from memory</strong>, then say out loud why the count can
+    never reach zero permanently when a majority exists.</li>
+    <li><strong>Majority Element II.</strong> Everything appearing more than n/3 times. It is in
+    Step 7 &mdash; cover it and rewrite it, paying attention to the order of the branches.</li>
+    <li><strong>Generalise to n/k.</strong> Write a version taking <code>k</code> as a parameter,
+    keeping <code>k - 1</code> candidates in a Map. Then work out why there can be at most
+    <code>k - 1</code> answers.</li>
+    <li><strong>Return the count as well as the value.</strong> Note that <code>count</code> at the
+    end of pass 1 is <em>not</em> the number of occurrences &mdash; it is what survived cancellation.
+    You need the verification pass for the real number.</li>
+    <li><strong>Streaming version.</strong> Write it as an object with a <code>push(value)</code>
+    method and a <code>current()</code> getter, so it can consume an endless feed. This is how the
+    algorithm is actually used in practice, in heavy-hitter detection.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Cancellation.</strong> When one thing is guaranteed to outnumber everything else
+    combined, you can pair items off and destroy them without ever counting anything &mdash; the
+    winner survives by arithmetic. The same shape appears in
+    &ldquo;find the number that appears once when all others appear twice&rdquo; (XOR cancels pairs)
+    and in heavy-hitter detection on data streams. Look for it whenever a problem promises a
+    <em>strict</em> majority.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="10-find-duplicate-number.html">&larr; Find the Duplicate Number</a>
+  <a href="12-container-with-most-water.html">Next: Container With Most Water &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

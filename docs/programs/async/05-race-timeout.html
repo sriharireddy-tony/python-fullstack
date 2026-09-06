@@ -1,0 +1,1063 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Race With Timeout</title>
+<meta name="description" content="Promise.race against a timer, the timer you forgot to clear, and why a timeout is not a cancellation.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Async patterns &middot; Problem 05</p>
+  <h1>Race With Timeout</h1>
+  <p class="standfirst">Four lines with <code>Promise.race</code>, and three things almost everyone gets
+  wrong: the timer that keeps the process alive, the fact that a timeout does not
+  <strong>stop</strong> anything, and what happens to the loser.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>A request might hang. Give it 500&nbsp;ms; if it has not answered by then, fail instead of waiting
+  forever.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0 &mdash; the four-line answer</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+function withTimeout(promise, ms) {
+  const timeout = new Promise((_, reject) =&gt;
+    setTimeout(() =&gt; reject(new Error('timed out after ' + ms + ' ms')), ms)
+  );
+  return Promise.race([promise, timeout]);
+}
+
+const fast = async () =&gt; { await sleep(20); return 'fast answer'; };
+const slow = async () =&gt; { await sleep(200); return 'slow answer'; };
+
+console.log('fast, 100 ms budget:', await withTimeout(fast(), 100));
+
+try {
+  await withTimeout(slow(), 100);
+} catch (e) {
+  console.log('slow, 100 ms budget:', e.message);
+}
+
+console.log('');
+console.log('Promise.race settles as soon as ANY input settles, in');
+console.log('either direction. So racing your work against a rejecting');
+console.log('timer gives you "whichever happens first" -- exactly the');
+console.log('shape of a timeout.');</code></pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">Why <code>race</code> and not <code>any</code></span>
+    <p><code>Promise.race</code> settles on the first promise to settle <em>either way</em> &mdash; so
+    a rejecting timer wins the race and rejects the whole thing. That is what you want.</p>
+    <p><code>Promise.any</code> ignores rejections and waits for the first <em>fulfilment</em>. A
+    rejecting timer would never win, so the timeout would never fire.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">race versus any, on the same inputs</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const work = async () =&gt; { await sleep(120); return 'the real answer'; };
+const timer = (ms) =&gt; new Promise((_, rej) =&gt;
+  setTimeout(() =&gt; rej(new Error('timeout')), ms));
+
+// race: the timer wins and rejects
+try {
+  console.log('race :', await Promise.race([work(), timer(40)]));
+} catch (e) {
+  console.log('race :', e.message, ' <- the timeout fired, as intended');
+}
+
+// any: the rejection is ignored, so the slow work still wins
+try {
+  console.log('any  :', await Promise.any([work(), timer(40)]));
+} catch (e) {
+  console.log('any  :', e.message);
+}
+console.log('  -- any waited the full 120 ms. The timeout did nothing.');
+
+// and what any is actually for: the first SUCCESS out of several
+const mirrorA = async () =&gt; { await sleep(80); throw new Error('mirror A down'); };
+const mirrorB = async () =&gt; { await sleep(30); return 'from mirror B'; };
+const mirrorC = async () =&gt; { await sleep(60); return 'from mirror C'; };
+
+console.log('');
+console.log('any over three mirrors:', await Promise.any([mirrorA(), mirrorB(), mirrorC()]));
+console.log('  -- the fastest SUCCESS, ignoring the one that failed.');
+
+try {
+  await Promise.any([mirrorA(), mirrorA()]);
+} catch (e) {
+  console.log('all mirrors down      :', e.constructor.name,
+              'with', e.errors.length, 'errors');
+}</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the timer nobody clears</h2>
+
+  <p>Version 0 works, and it leaks. The <code>setTimeout</code> is still pending after the fast promise
+  wins &mdash; and a pending timer keeps a Node process alive.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0 &mdash; the timer outlives the race</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+let firedAfterWinning = 0;
+
+function leakyTimeout(promise, ms) {
+  const timeout = new Promise((_, reject) =&gt;
+    setTimeout(() =&gt; {
+      firedAfterWinning++;                  // still runs, uselessly
+      reject(new Error('timed out'));
+    }, ms)
+  );
+  return Promise.race([promise, timeout]);
+}
+
+const fast = async () =&gt; { await sleep(10); return 'ok'; };
+
+console.log('running 5 fast calls with a 200 ms timeout each');
+for (let i = 0; i &lt; 5; i++) await leakyTimeout(fast(), 200);
+console.log('  all five returned in ~50 ms total');
+console.log('  timers that had fired by then:', firedAfterWinning);
+
+await sleep(300);
+console.log('');
+console.log('300 ms later, timers that fired anyway:', firedAfterWinning);
+console.log('');
+console.log('Five useless timer callbacks, five rejected promises that');
+console.log('nobody is listening to, and -- the part that actually');
+console.log('bites -- for 200 ms after each call finished, Node had a');
+console.log('reason not to exit.');
+console.log('');
+console.log('In a CLI that means the process hangs after doing its job.');
+console.log('In a test runner it means "Jest did not exit one second');
+console.log('after the test run completed".');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 0b &mdash; clear it in a finally</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+let fired = 0;
+
+function withTimeout(promise, ms) {
+  let timer;
+
+  const timeout = new Promise((_, reject) =&gt; {
+    timer = setTimeout(() =&gt; {
+      fired++;
+      reject(new Error('timed out after ' + ms + ' ms'));
+    }, ms);
+  });
+
+  // finally runs whichever way the race settles
+  return Promise.race([promise, timeout]).finally(() =&gt; clearTimeout(timer));
+}
+
+const fast = async () =&gt; { await sleep(10); return 'ok'; };
+const slow = async () =&gt; { await sleep(300); return 'never seen'; };
+
+fired = 0;
+for (let i = 0; i &lt; 5; i++) await withTimeout(fast(), 200);
+await sleep(300);
+console.log('5 fast calls, 200 ms timeout');
+console.log('  timer callbacks that ran:', fired, '-- all cleared');
+
+fired = 0;
+try { await withTimeout(slow(), 50); }
+catch (e) { console.log(''); console.log('a genuine timeout:', e.message); }
+await sleep(100);
+console.log('  timer callbacks that ran:', fired, '-- exactly the one that fired');
+
+console.log('');
+console.log('`.finally` is the right hook: it fires on fulfilment, on');
+console.log('rejection, and it passes the value or reason straight');
+console.log('through, so it cannot change the result.');
+console.log('');
+console.log('Proof it does not interfere:');
+console.log('  value passes through:', await withTimeout(fast(), 100));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why a timeout is not a cancellation</h2>
+
+  <p>The timeout rejects <em>your promise</em>. The work carries on. This is the single most
+  misunderstood thing about the pattern.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Demo &mdash; the work keeps running</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+function withTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((_, reject) =&gt; {
+    timer = setTimeout(() =&gt; reject(new Error('timed out')), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() =&gt; clearTimeout(timer));
+}
+
+let sideEffects = [];
+
+const slowWrite = async (label) =&gt; {
+  await sleep(120);
+  sideEffects.push(label);            // this STILL happens
+  return label;
+};
+
+sideEffects = [];
+const t0 = Date.now();
+try {
+  await withTimeout(slowWrite('write A'), 40);
+} catch (e) {
+  console.log('at ~' + (Date.now() - t0) + ' ms: ' + e.message);
+  console.log('  side effects so far:', JSON.stringify(sideEffects));
+}
+
+await sleep(150);
+console.log('');
+console.log('at ~' + (Date.now() - t0) + ' ms, side effects:',
+            JSON.stringify(sideEffects));
+console.log('');
+console.log('The write happened. Your code gave up waiting; the work');
+console.log('did not give up working.');
+console.log('');
+console.log('Why that matters:');
+console.log('  a timed-out POST may still have been applied;');
+console.log('  the socket is still open, still counting against your');
+console.log('    connection limit;');
+console.log('  a retry after a timeout can duplicate the operation;');
+console.log('  and the memory the request holds is not released.');
+
+// with 20 timed-out requests, the pileup is the problem
+sideEffects = [];
+const t1 = Date.now();
+const attempts = [];
+for (let i = 0; i &lt; 20; i++) {
+  attempts.push(withTimeout(slowWrite('w' + i), 30).catch(() =&gt; 'timed out'));
+}
+const results = await Promise.all(attempts);
+console.log('');
+console.log('20 requests, all timed out at ~' + (Date.now() - t1) + ' ms');
+console.log('  results seen by the caller:', results.filter((r) =&gt; r === 'timed out').length,
+            'timeouts');
+console.log('  writes committed at that moment:', sideEffects.length);
+await sleep(200);
+console.log('  writes committed 200 ms later  :', sideEffects.length);
+console.log('  -- every single one landed, after you gave up on it.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; abort the work, do not just stop waiting</h2>
+
+  <div class="trace">
+<pre>  TIMEOUT ONLY -- you stop waiting
+
+      caller  --race--> [ work ...................... still going ]
+                        [ timer -X ]
+                             |
+                        you reject here, and walk away
+
+
+  TIMEOUT + ABORT -- the work stops too
+
+      caller  --race--> [ work --- abort! ---X ]
+                        [ timer -X ]
+                             |
+                        reject AND signal the work to tear down
+
+
+  The signal has to be understood by whatever is doing the work:
+
+      fetch(url, { signal })          native support
+      a database driver               usually has a query timeout
+      a setTimeout-based mock         clearTimeout in the abort handler
+      pure CPU work                   cannot be aborted at all
+</pre>
+  </div>
+
+  <div class="note key">
+    <span class="t">The three-part answer</span>
+    <p><strong>1.</strong> Race against a timer so the caller gets an answer within the budget.</p>
+    <p><strong>2.</strong> Clear the timer in a <code>finally</code> so nothing is left pending.</p>
+    <p><strong>3.</strong> Pass an <code>AbortSignal</code> into the work so the timeout actually stops
+    it.</p>
+    <p>Modern platforms give you all three in one call: <code>AbortSignal.timeout(ms)</code>.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">all three parts together</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// an abortable operation: it listens to the signal and tears down
+function abortableWork(label, ms, signal) {
+  return new Promise((resolve, reject) =&gt; {
+    if (signal?.aborted) return reject(new Error('aborted before starting'));
+
+    const timer = setTimeout(() =&gt; {
+      committed.push(label);
+      resolve(label);
+    }, ms);
+
+    signal?.addEventListener('abort', () =&gt; {
+      clearTimeout(timer);                     // the work actually stops
+      reject(new Error('aborted'));
+    });
+  });
+}
+
+let committed = [];
+
+async function withTimeoutAndAbort(makeWork, ms) {
+  const controller = new AbortController();
+  const timer = setTimeout(() =&gt; controller.abort(), ms);
+  try {
+    return await makeWork(controller.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+committed = [];
+console.log('fast work, 100 ms budget:',
+            await withTimeoutAndAbort((s) =&gt; abortableWork('fast', 20, s), 100));
+
+committed = [];
+try {
+  await withTimeoutAndAbort((s) =&gt; abortableWork('slow', 200, s), 40);
+} catch (e) {
+  console.log('slow work, 40 ms budget :', e.message);
+}
+await sleep(250);
+console.log('  side effects committed  :', JSON.stringify(committed),
+            '<- nothing. The work was torn down.');
+
+console.log('');
+console.log('Compare the race-only version from Step 3, which left the');
+console.log('write to land 160 ms after the caller gave up.');
+
+// and the modern one-liner, where available
+console.log('');
+console.log('AbortSignal.timeout available?', typeof AbortSignal !== 'undefined' &amp;&amp;
+            typeof AbortSignal.timeout === 'function');
+if (typeof AbortSignal !== 'undefined' &amp;&amp; typeof AbortSignal.timeout === 'function') {
+  committed = [];
+  try {
+    await abortableWork('slow', 200, AbortSignal.timeout(40));
+  } catch (e) {
+    console.log('  AbortSignal.timeout(40) ->', e.message);
+  }
+  await sleep(250);
+  console.log('  side effects:', JSON.stringify(committed));
+  console.log('  One call: it creates the signal, fires the abort, and');
+  console.log('  cleans up its own timer. This is what fetch expects:');
+  console.log('    fetch(url, { signal: AbortSignal.timeout(5000) })');
+}</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; who wins, and what happens to the loser</h2>
+
+  <div class="trace">
+<pre>  Promise.race([work, timer])
+
+  work settles first (at 20 ms, timer set for 100):
+
+      20 ms   work resolves 'ok'
+              race resolves 'ok'
+              finally -> clearTimeout    timer never fires
+      caller gets 'ok'
+
+
+  timer settles first (work takes 300, timer set for 100):
+
+      100 ms  timer rejects
+              race rejects
+              finally -> clearTimeout    (already fired; harmless)
+      caller gets the timeout error
+
+      300 ms  work resolves 'ok'
+              ... into nothing. The promise is settled; race
+              already ignored it. No error, no warning, no leak
+              -- race DID attach a handler to it.
+
+
+  Both losers are harmless: a cleared timer never runs, and a
+  late-resolving winner is simply discarded. The only case that
+  is NOT harmless is a late-REJECTING loser in a race you built
+  by hand without passing every promise to race.
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the race, narrating itself</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const t0 = Date.now();
+const at = () =&gt; String(Date.now() - t0).padStart(4) + ' ms  ';
+
+function withTimeoutLoud(makePromise, ms, label) {
+  console.log(at() + 'starting "' + label + '" with a ' + ms + ' ms budget');
+
+  let timer;
+  const timeout = new Promise((_, reject) =&gt; {
+    timer = setTimeout(() =&gt; {
+      console.log(at() + '  TIMER fires -> rejecting');
+      reject(new Error('timed out after ' + ms + ' ms'));
+    }, ms);
+  });
+
+  const work = makePromise().then(
+    (v) =&gt; { console.log(at() + '  WORK resolves with ' + JSON.stringify(v)); return v; },
+    (e) =&gt; { console.log(at() + '  WORK rejects with ' + e.message); throw e; }
+  );
+
+  return Promise.race([work, timeout]).finally(() =&gt; {
+    console.log(at() + '  finally -> clearTimeout');
+    clearTimeout(timer);
+  });
+}
+
+console.log('=== work wins ===');
+console.log('RESULT:', await withTimeoutLoud(
+  async () =&gt; { await sleep(20); return 'ok'; }, 100, 'fast'));
+
+console.log('');
+console.log('=== the timer wins ===');
+try {
+  await withTimeoutLoud(async () =&gt; { await sleep(150); return 'late'; }, 40, 'slow');
+} catch (e) {
+  console.log('RESULT: threw "' + e.message + '"');
+}
+
+await sleep(200);
+console.log('');
+console.log('Look at the last few lines: the work resolved AFTER the');
+console.log('caller already had its error. That resolution went');
+console.log('nowhere -- which is fine, but it is not cancellation.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; the variations</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">1. a default value instead of an error</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// Sometimes the right answer to "too slow" is a fallback, not a
+// failure -- a cached value, an empty list, a placeholder.
+function withTimeoutDefault(promise, ms, fallback) {
+  let timer;
+  const timeout = new Promise((resolve) =&gt; {
+    timer = setTimeout(() =&gt; resolve(fallback), ms);      // RESOLVES
+  });
+  return Promise.race([promise, timeout]).finally(() =&gt; clearTimeout(timer));
+}
+
+const slowRecommendations = async () =&gt; { await sleep(200); return ['a', 'b', 'c']; };
+const fastRecommendations = async () =&gt; { await sleep(20); return ['x', 'y']; };
+
+console.log('slow, fallback []  :',
+            JSON.stringify(await withTimeoutDefault(slowRecommendations(), 50, [])));
+console.log('fast, fallback []  :',
+            JSON.stringify(await withTimeoutDefault(fastRecommendations(), 50, [])));
+
+console.log('');
+console.log('The only change is resolve instead of reject. Whether a');
+console.log('timeout is an error is a product decision:');
+console.log('  a payment      -> an error, loudly');
+console.log('  a search       -> an error, so the user can retry');
+console.log('  recommendations-> a fallback; the page should still render');
+console.log('  an analytics ping -> silence; nobody cares');
+
+// distinguishable: fell back, or genuinely returned nothing?
+const TIMED_OUT = Symbol('timed out');
+async function withTimeoutFlag(promise, ms) {
+  let timer;
+  const timeout = new Promise((resolve) =&gt; {
+    timer = setTimeout(() =&gt; resolve(TIMED_OUT), ms);
+  });
+  const result = await Promise.race([promise, timeout]).finally(() =&gt; clearTimeout(timer));
+  return result === TIMED_OUT
+    ? { ok: false, timedOut: true }
+    : { ok: true, value: result };
+}
+
+console.log('');
+console.log('with an explicit flag:');
+console.log('  slow:', JSON.stringify(await withTimeoutFlag(slowRecommendations(), 50)));
+console.log('  fast:', JSON.stringify(await withTimeoutFlag(fastRecommendations(), 50)));
+console.log('  -- now the caller can log the timeout and still render.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">2. a deadline across several calls</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// A per-call timeout does not bound the whole operation. Three
+// calls with a 100 ms timeout each can take 300 ms.
+function withTimeout(promise, ms) {
+  let timer;
+  const t = new Promise((_, rej) =&gt; { timer = setTimeout(() =&gt; rej(new Error('timeout')), ms); });
+  return Promise.race([promise, t]).finally(() =&gt; clearTimeout(timer));
+}
+
+const step = (ms) =&gt; async () =&gt; { await sleep(ms); return ms; };
+
+let t0 = Date.now();
+await withTimeout(step(60)(), 100);
+await withTimeout(step(60)(), 100);
+await withTimeout(step(60)(), 100);
+console.log('three 60 ms steps, 100 ms each: ~' + (Date.now() - t0) + ' ms total');
+console.log('  every call was "within budget" and the whole thing was not.');
+
+// a deadline: one budget for the entire operation
+function makeDeadline(totalMs) {
+  const end = Date.now() + totalMs;
+  return {
+    remaining: () =&gt; Math.max(0, end - Date.now()),
+    expired: () =&gt; Date.now() &gt;= end,
+    guard(promise) {
+      const left = this.remaining();
+      if (left === 0) return Promise.reject(new Error('deadline already passed'));
+      return withTimeout(promise, left);
+    },
+  };
+}
+
+console.log('');
+t0 = Date.now();
+const deadline = makeDeadline(100);
+try {
+  console.log('  step 1 ->', await deadline.guard(step(60)()),
+              ' remaining ' + deadline.remaining() + ' ms');
+  console.log('  step 2 ->', await deadline.guard(step(60)()));
+} catch (e) {
+  console.log('  step 2 ->', e.message, 'at ~' + (Date.now() - t0) + ' ms');
+}
+console.log('total: ~' + (Date.now() - t0) + ' ms -- bounded as promised');
+
+console.log('');
+console.log('This is what a request-scoped deadline is, and it is how');
+console.log('gRPC and most RPC frameworks work: the caller passes a');
+console.log('deadline, every hop subtracts what it used, and nobody');
+console.log('spends time on work whose answer is already too late.');</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">3. timeout plus retry, in the right order</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+function withTimeout(promise, ms) {
+  let timer;
+  const t = new Promise((_, rej) =&gt; {
+    timer = setTimeout(() =&gt; rej(Object.assign(new Error('timeout'), { timeout: true })), ms);
+  });
+  return Promise.race([promise, t]).finally(() =&gt; clearTimeout(timer));
+}
+
+async function retry(makePromise, { attempts = 3, delay = 20, perAttemptMs } = {}) {
+  let last;
+  for (let i = 0; i &lt; attempts; i++) {
+    try {
+      // the timeout goes INSIDE the retry, so each attempt is bounded
+      return perAttemptMs
+        ? await withTimeout(makePromise(i), perAttemptMs)
+        : await makePromise(i);
+    } catch (e) {
+      last = e;
+      if (i &lt; attempts - 1) await sleep(delay);
+    }
+  }
+  throw last;
+}
+
+let attempt = 0;
+const flaky = () =&gt; {
+  attempt++;
+  const ms = attempt &lt; 3 ? 300 : 20;      // hangs twice, then responds
+  return sleep(ms).then(() =&gt; 'ok on attempt ' + attempt);
+};
+
+// timeout inside retry: each hang costs 50 ms, not 300
+attempt = 0;
+let t0 = Date.now();
+console.log('timeout INSIDE retry :', await retry(flaky, {
+  attempts: 5, delay: 10, perAttemptMs: 50,
+}), ' ~' + (Date.now() - t0) + ' ms');
+
+// timeout outside retry: the first hang eats the whole budget
+attempt = 0;
+t0 = Date.now();
+try {
+  await withTimeout(retry(flaky, { attempts: 5, delay: 10 }), 200);
+} catch (e) {
+  console.log('timeout OUTSIDE retry:', e.message, ' ~' + (Date.now() - t0) + ' ms');
+  console.log('  the first 300 ms hang used the entire 200 ms budget,');
+  console.log('  so the retries never got a chance.');
+}
+
+console.log('');
+console.log('Both are useful, and they answer different questions:');
+console.log('  per-attempt timeout -> "no single try may hang"');
+console.log('  overall deadline    -> "the whole thing must finish by X"');
+console.log('');
+console.log('Production code usually wants both: a per-attempt timeout');
+console.log('inside the retry, and a deadline around the outside.');
+
+attempt = 0;
+t0 = Date.now();
+try {
+  console.log('');
+  console.log('both:', await withTimeout(
+    retry(flaky, { attempts: 5, delay: 10, perAttemptMs: 50 }), 400
+  ), ' ~' + (Date.now() - t0) + ' ms');
+} catch (e) {
+  console.log('both:', e.message);
+}</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; the one to write</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the interview answer</span></div>
+<pre><code>class TimeoutError extends Error {
+  constructor(ms) {
+    super('operation timed out after ' + ms + ' ms');
+    this.name = 'TimeoutError';
+    this.timeout = true;
+    this.ms = ms;
+  }
+}
+
+function withTimeout(promise, ms, options = {}) {
+  if (!(ms &gt; 0)) return Promise.resolve(promise);        // no budget = no timeout
+
+  // `'fallback' in options`, not `options.fallback !== undefined` --
+  // { fallback: undefined } is a deliberate "resolve with undefined"
+  const hasFallback = 'fallback' in options;
+  const { fallback, signal } = options;
+
+  let timer;
+  const race = new Promise((resolve, reject) =&gt; {
+    timer = setTimeout(() =&gt; {
+      if (hasFallback) resolve(fallback);
+      else reject(new TimeoutError(ms));
+    }, ms);
+
+    signal?.addEventListener('abort', () =&gt; reject(new Error('aborted')));
+  });
+
+  return Promise.race([Promise.resolve(promise), race])
+    .finally(() =&gt; clearTimeout(timer));
+}
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const fast = () =&gt; sleep(20).then(() =&gt; 'fast');
+const slow = () =&gt; sleep(200).then(() =&gt; 'slow');
+
+console.log('fast within budget :', await withTimeout(fast(), 100));
+
+try { await withTimeout(slow(), 40); }
+catch (e) {
+  console.log('slow past budget   :', e.name + ':', e.message);
+  console.log('  is it a timeout?  ', e.timeout === true);
+  console.log('  instanceof        :', e instanceof TimeoutError, e instanceof Error);
+}
+
+console.log('with a fallback    :',
+            await withTimeout(slow(), 40, { fallback: 'the fallback' }));
+
+console.log('ms of 0 (disabled) :', await withTimeout(slow(), 0));
+
+// a plain value works too, since Promise.resolve normalises it
+console.log('a non-promise input:', await withTimeout('already a value', 100));
+console.log('fallback: undefined:',
+            await withTimeout(slow(), 40, { fallback: undefined }),
+            '-- resolved, not rejected');
+
+console.log('');
+console.log('A named error class matters more than it looks. The caller');
+console.log('needs to distinguish "too slow" from "the server said no"');
+console.log('-- one is retryable, the other usually is not.');
+
+// and it composes with an external abort
+const controller = new AbortController();
+setTimeout(() =&gt; controller.abort(), 20);
+try {
+  await withTimeout(slow(), 500, { signal: controller.signal });
+} catch (e) {
+  console.log('');
+  console.log('aborted externally :', e.message,
+              '-- before the 500 ms timeout would have fired');
+}</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">the other useful races</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// 1. hedged requests: after a short delay, send a SECOND copy and
+//    take whichever answers first. Trades load for tail latency.
+async function hedged(makeRequest, hedgeAfterMs) {
+  let sent = 0;
+  const first = makeRequest(++sent);
+  const second = sleep(hedgeAfterMs).then(() =&gt; makeRequest(++sent));
+  const winner = await Promise.race([first, second]);
+  return { winner, requestsSent: sent };
+}
+
+let call = 0;
+const variableLatency = () =&gt; {
+  call++;
+  const ms = call === 1 ? 200 : 20;        // the first one is unlucky
+  return sleep(ms).then(() =&gt; 'answer from request ' + call);
+};
+
+call = 0;
+let t0 = Date.now();
+console.log('1. hedged:', JSON.stringify(await hedged(variableLatency, 30)),
+            ' ~' + (Date.now() - t0) + ' ms');
+console.log('   without hedging the caller would have waited ~200 ms.');
+console.log('   The cost is an extra request whenever the first is slow.');
+
+// 2. first responder among mirrors
+const mirror = (name, ms, fail) =&gt; () =&gt;
+  sleep(ms).then(() =&gt; { if (fail) throw new Error(name + ' failed'); return name; });
+
+console.log('');
+console.log('2. race over mirrors (first to SETTLE, even a failure):');
+try {
+  console.log('   ', await Promise.race([
+    mirror('eu-west', 20, true)(), mirror('us-east', 50, false)(),
+  ]));
+} catch (e) { console.log('    threw:', e.message, '<- the fast FAILURE won'); }
+
+console.log('   any over the same mirrors (first to SUCCEED):');
+console.log('   ', await Promise.any([
+  mirror('eu-west', 20, true)(), mirror('us-east', 50, false)(),
+]));
+console.log('    -- this is why `any` exists. For failover, use any.');
+
+// 3. a heartbeat: fail if there is no progress for N ms, rather
+//    than after a fixed total
+async function withIdleTimeout(steps, idleMs) {
+  const seen = [];
+  for (const step of steps) {
+    let timer;
+    const t = new Promise((_, rej) =&gt; {
+      timer = setTimeout(() =&gt; rej(new Error('no progress for ' + idleMs + ' ms')), idleMs);
+    });
+    seen.push(await Promise.race([step(), t]).finally(() =&gt; clearTimeout(timer)));
+  }
+  return seen;
+}
+
+console.log('');
+console.log('3. idle timeout -- 40 ms between steps, not overall:');
+const steps = [() =&gt; sleep(30).then(() =&gt; 'a'), () =&gt; sleep(30).then(() =&gt; 'b'),
+               () =&gt; sleep(30).then(() =&gt; 'c')];
+t0 = Date.now();
+console.log('   ', JSON.stringify(await withIdleTimeout(steps, 40)),
+            ' ~' + (Date.now() - t0) + ' ms -- 90 ms total, never idle');
+
+const stalling = [() =&gt; sleep(30).then(() =&gt; 'a'), () =&gt; sleep(200).then(() =&gt; 'b')];
+try { await withIdleTimeout(stalling, 40); }
+catch (e) { console.log('    stalled ->', e.message); }
+console.log('    -- right for a download or a stream, where "how long');
+console.log('       in total" is unknowable but "still moving" is not.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th></th><th>Cost</th><th>Bounds</th></tr></thead>
+      <tbody>
+        <tr><td>Per <code>withTimeout</code> call</td><td class="mono">1 promise, 1 timer</td><td>how long you WAIT</td></tr>
+        <tr><td>Per-attempt timeout in a retry</td><td class="mono">n timers over the retry</td><td>each attempt</td></tr>
+        <tr><td>A deadline</td><td class="mono">1 timestamp</td><td>the whole operation</td></tr>
+        <tr><td><code>AbortSignal</code></td><td class="mono">1 controller, 1 listener</td><td>how long the WORK runs</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Nothing costs anything measurable. The column that matters is the last one: only the abort row
+  bounds the work. Everything else bounds your patience.</p>
+
+  <p>The resource question is the practical one. A hung request that you timed out at 500&nbsp;ms is
+  still holding a socket, a request context, and whatever the handler captured &mdash; potentially for
+  minutes. Under load, a service that times out without aborting accumulates abandoned work until it
+  runs out of connections, which is exactly the failure mode the timeout was meant to prevent.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;<code>Promise.race</code> between the work and a timer that rejects, and I clear the timer
+    in a <code>finally</code> &mdash; otherwise a pending timer keeps the process alive and fires
+    uselessly. <code>race</code> rather than <code>any</code>, because <code>any</code> ignores
+    rejections so the timer could never win. The important caveat is that this bounds how long I wait,
+    not how long the work runs: the request is still in flight, still holding a socket, and may still
+    complete its side effects. To actually stop it I need to pass an <code>AbortSignal</code> into the
+    operation &mdash; <code>AbortSignal.timeout(ms)</code> does the timer, the abort and the cleanup in
+    one call, which is what <code>fetch</code> expects.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Not clearing the timer</h3>
+
+  <p>Step 2. It is the mistake in the version everyone writes first, and its symptom &mdash; a process
+  or test run that will not exit &mdash; looks nothing like its cause.</p>
+
+  <h3>2. Using <code>Promise.any</code> for a timeout</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the timeout can never fire</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const timer = (ms) =&gt; new Promise((_, rej) =&gt;
+  setTimeout(() =&gt; rej(new Error('timeout')), ms));
+
+const slow = () =&gt; sleep(150).then(() =&gt; 'the slow answer');
+
+let t0 = Date.now();
+console.log('with any :', await Promise.any([slow(), timer(20)]),
+            ' after ~' + (Date.now() - t0) + ' ms');
+console.log('  the 20 ms "timeout" was ignored entirely.');
+
+t0 = Date.now();
+try { await Promise.race([slow(), timer(20)]); }
+catch (e) {
+  console.log('with race:', e.message, ' after ~' + (Date.now() - t0) + ' ms');
+}
+
+console.log('');
+console.log('And the mirror-image mistake -- using race for failover:');
+const mirrorA = () =&gt; sleep(20).then(() =&gt; { throw new Error('A is down'); });
+const mirrorB = () =&gt; sleep(60).then(() =&gt; 'B answered');
+
+try { console.log('  race:', await Promise.race([mirrorA(), mirrorB()])); }
+catch (e) { console.log('  race:', e.message, '<- gave up on the healthy mirror'); }
+console.log('  any :', await Promise.any([mirrorA(), mirrorB()]));
+
+console.log('');
+console.log('  race = first to SETTLE   -> timeouts, cancellation');
+console.log('  any  = first to SUCCEED  -> failover, mirrors, fallbacks');
+console.log('  all  = every success     -> fan-out where you need all');
+console.log('  allSettled = every outcome -> reporting');</code></pre>
+  </div>
+
+  <h3>3. Believing the timeout cancelled the work</h3>
+
+  <p>Step 3. A timed-out write still writes. This is the bug that causes duplicate charges when
+  combined with a retry.</p>
+
+  <h3>4. Creating the timer before the work</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the budget is spent before the work starts</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+function withTimeout(promise, ms) {
+  let timer;
+  const t = new Promise((_, rej) =&gt; { timer = setTimeout(() =&gt; rej(new Error('timeout')), ms); });
+  return Promise.race([promise, t]).finally(() =&gt; clearTimeout(timer));
+}
+
+// expensive synchronous setup happening between the timer and the work
+function slowSetup(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() &lt; end) { /* blocking */ }
+}
+
+const work = () =&gt; sleep(20).then(() =&gt; 'done');
+
+// WRONG: the timeout promise is created, THEN 60 ms is burned, THEN
+// the work is started -- with only 40 of its 100 ms left
+let t0 = Date.now();
+let timer;
+const timeoutFirst = new Promise((_, rej) =&gt; {
+  timer = setTimeout(() =&gt; rej(new Error('timeout')), 100);
+});
+slowSetup(60);
+try {
+  const v = await Promise.race([work(), timeoutFirst]);
+  console.log('timer created first :', v, ' ~' + (Date.now() - t0) + ' ms');
+} catch (e) {
+  console.log('timer created first :', e.message, ' ~' + (Date.now() - t0) + ' ms');
+} finally { clearTimeout(timer); }
+
+// RIGHT: do the setup, then start the timer and the work together
+t0 = Date.now();
+slowSetup(60);
+try {
+  const v = await withTimeout(work(), 100);
+  console.log('timer created last  :', v, ' ~' + (Date.now() - t0) + ' ms');
+} catch (e) {
+  console.log('timer created last  :', e.message, ' ~' + (Date.now() - t0) + ' ms');
+}
+
+console.log('');
+console.log('Both finished here, because 20 ms fits in 40. Push the');
+console.log('setup to 90 ms and the first version times out on work');
+console.log('that takes 20 ms.');
+
+t0 = Date.now();
+let timer2;
+const early = new Promise((_, rej) =&gt; {
+  timer2 = setTimeout(() =&gt; rej(new Error('timeout')), 100);
+});
+slowSetup(90);
+try {
+  console.log('');
+  console.log('with 90 ms of setup:', await Promise.race([work(), early]));
+} catch (e) {
+  console.log('');
+  console.log('with 90 ms of setup:', e.message,
+              '-- the 20 ms call "timed out" at 100 ms');
+} finally { clearTimeout(timer2); }
+console.log('');
+console.log('A timeout should measure the OPERATION, not the operation');
+console.log('plus whatever happened to run before it.');</code></pre>
+  </div>
+
+  <h3>5. A timeout that is not distinguishable from a real error</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the caller cannot tell what happened</span></div>
+<pre><code>const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// a plain Error with a message the caller has to parse
+function vagueTimeout(promise, ms) {
+  let timer;
+  const t = new Promise((_, rej) =&gt; { timer = setTimeout(() =&gt; rej(new Error('Error')), ms); });
+  return Promise.race([promise, t]).finally(() =&gt; clearTimeout(timer));
+}
+
+class TimeoutError extends Error {
+  constructor(ms) { super('timed out after ' + ms + ' ms'); this.name = 'TimeoutError'; }
+}
+function typedTimeout(promise, ms) {
+  let timer;
+  const t = new Promise((_, rej) =&gt; { timer = setTimeout(() =&gt; rej(new TimeoutError(ms)), ms); });
+  return Promise.race([promise, t]).finally(() =&gt; clearTimeout(timer));
+}
+
+const slow = () =&gt; sleep(150).then(() =&gt; 'ok');
+const rejects = () =&gt; sleep(20).then(() =&gt; { throw new Error('Error'); });
+
+// the caller wants to retry a timeout but NOT a validation failure
+const classify = (e) =&gt; (e instanceof TimeoutError ? 'RETRY' : 'DO NOT RETRY');
+
+for (const [label, fn] of [['vague, timed out ', () =&gt; vagueTimeout(slow(), 40)],
+                           ['vague, real error', () =&gt; vagueTimeout(rejects(), 200)]]) {
+  try { await fn(); } catch (e) {
+    console.log(label + ' -> message "' + e.message + '", ' +
+                'name ' + e.name + ', decision: ' + classify(e));
+  }
+}
+console.log('  -- indistinguishable. The caller has to guess, or parse');
+console.log('     the message string, which breaks the moment anyone');
+console.log('     rewords it.');
+
+console.log('');
+for (const [label, fn] of [['typed, timed out ', () =&gt; typedTimeout(slow(), 40)],
+                           ['typed, real error', () =&gt; typedTimeout(rejects(), 200)]]) {
+  try { await fn(); } catch (e) {
+    console.log(label + ' -> name ' + e.name.padEnd(13) + ' decision: ' + classify(e));
+  }
+}
+
+console.log('');
+console.log('Give the timeout its own error type, or at least a flag');
+console.log('on the error object. Every caller that has to decide');
+console.log('whether to retry needs to be able to ask.');
+console.log('');
+console.log('Note also that AbortError and TimeoutError are different');
+console.log('things: "someone cancelled this" and "this took too long"');
+console.log('usually deserve different handling.');</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write <code>withTimeout</code> from memory</strong>, including the
+    <code>clearTimeout</code> in a <code>finally</code>. Then say why <code>race</code> and not
+    <code>any</code>.</li>
+    <li><strong>Say the caveat before you are asked</strong>: this bounds the wait, not the work.</li>
+    <li><strong>Add an <code>AbortSignal</code>.</strong> Step 4. Then mention
+    <code>AbortSignal.timeout(ms)</code>.</li>
+    <li><strong>Write the deadline helper.</strong> Step 6 &mdash; and explain why three calls each
+    &ldquo;within budget&rdquo; can still blow the overall budget.</li>
+    <li><strong>Combine a per-attempt timeout with a retry and an outer deadline.</strong> Step 6's
+    last block. Getting the nesting order right is the whole exercise.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>A timeout is a promise about your patience, not about the work.</strong> That single
+    distinction explains the leaked timer, the duplicate write, the exhausted connection pool and the
+    difference between <code>race</code> and an <code>AbortSignal</code>. If you need the work to
+    actually stop, the work has to be told &mdash; and it has to be built to listen.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="04-async-pipeline.html">&larr; Async Pipeline / Compose</a>
+  <a href="../index.html">All problems &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Valid Parentheses</title>
+<meta name="description" content="The stack, derived from the problem rather than assumed — plus the two checks people forget.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Strings &middot; Problem 05</p>
+  <h1>Valid Parentheses</h1>
+  <p class="standfirst">The classic stack problem &mdash; except this page does not start by telling
+  you to use a stack. It starts with the rule &ldquo;most recently opened, first closed&rdquo;,
+  and lets the stack fall out of that. An array with <code>push</code> and <code>pop</code> is all
+  you need.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>A string contains only the characters <code>( ) [ ] { }</code>. Decide whether the brackets are
+  correctly matched and correctly nested.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Valid?</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">"()"</td><td class="mono">true</td><td>matched pair</td></tr>
+        <tr><td class="mono">"()[]{}"</td><td class="mono">true</td><td>three pairs side by side</td></tr>
+        <tr><td class="mono">"{[()]}"</td><td class="mono">true</td><td>properly nested</td></tr>
+        <tr><td class="mono">"(]"</td><td class="mono">false</td><td>wrong closer</td></tr>
+        <tr><td class="mono">"([)]"</td><td class="mono">false</td><td>crossed, not nested</td></tr>
+        <tr><td class="mono">"("</td><td class="mono">false</td><td>never closed</td></tr>
+        <tr><td class="mono">")("</td><td class="mono">false</td><td>closer before any opener</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The row that defines the problem</span>
+    <p><code>"([)]"</code> has one <code>(</code> and one <code>)</code>, one <code>[</code> and one
+    <code>]</code>. The <em>counts</em> are perfect. It is still invalid, because the brackets cross
+    rather than nest.</p>
+    <p>That single example kills every counting-based solution. You cannot just tally openers and
+    closers &mdash; you have to know <strong>which</strong> bracket is still waiting to be closed.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; two ideas that almost work</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Version 0a &mdash; counting</span></div>
+<pre><code>function byCounting(s) {
+  let round = 0, square = 0, curly = 0;
+  for (const ch of s) {
+    if (ch === '(') round++;
+    else if (ch === ')') { round--; if (round &lt; 0) return false; }
+    else if (ch === '[') square++;
+    else if (ch === ']') { square--; if (square &lt; 0) return false; }
+    else if (ch === '{') curly++;
+    else if (ch === '}') { curly--; if (curly &lt; 0) return false; }
+  }
+  return round === 0 &amp;&amp; square === 0 &amp;&amp; curly === 0;
+}
+
+console.log(byCounting('()'));       // true
+console.log(byCounting('()[]{}'));   // true
+console.log(byCounting('{[()]}'));   // true
+console.log(byCounting('(]'));       // false
+console.log(byCounting('('));        // false
+console.log(byCounting('([)]'));     // TRUE -- WRONG, should be false
+
+// Counting tracks HOW MANY are open, never WHICH ONE is innermost.
+// It cannot tell nesting from crossing.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0b &mdash; repeatedly delete matched pairs</span></div>
+<pre><code>function byDeleting(s) {
+  let previous;
+  do {
+    previous = s;
+    s = s.replace('()', '').replace('[]', '').replace('{}', '');
+  } while (s !== previous);
+
+  return s.length === 0;
+}
+
+console.log(byDeleting('()'));       // true
+console.log(byDeleting('()[]{}'));   // true
+console.log(byDeleting('{[()]}'));   // true
+console.log(byDeleting('(]'));       // false
+console.log(byDeleting('([)]'));     // false   correct!
+console.log(byDeleting(')('));       // false
+
+// This one is actually CORRECT. An innermost pair is always adjacent,
+// so peeling adjacent pairs eventually empties a valid string.
+// But every pass rebuilds the whole string: O(n^2) at best.</code></pre>
+  </div>
+
+  <p>Version 0b is worth pausing on because the idea behind it is exactly right: the pair you can
+  resolve is always the <strong>innermost</strong> one. That observation is what leads to the real
+  solution &mdash; without repeatedly rewriting the string.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why deleting is slow</h2>
+
+  <p>Each pass creates a brand-new string, and you need up to <code>n/2</code> passes.
+  <strong>O(n&sup2;)</strong> time and O(n) garbage per pass. On deeply nested input like
+  <code>"((((((...))))))"</code> it removes exactly one pair per pass &mdash; the worst case.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// deeply nested: 4,000 open brackets then 4,000 closers
+const N = 4000;
+const s = '('.repeat(N) + ')'.repeat(N);
+
+function byDeleting(str) {
+  let prev;
+  do {
+    prev = str;
+    str = str.replace('()', '').replace('[]', '').replace('{}', '');
+  } while (str !== prev);
+  return str.length === 0;
+}
+
+function byStack(str) {
+  const pairs = { ')': '(', ']': '[', '}': '{' };
+  const stack = [];
+  for (const ch of str) {
+    if (ch === '(' || ch === '[' || ch === '{') stack.push(ch);
+    else {
+      if (stack.pop() !== pairs[ch]) return false;
+    }
+  }
+  return stack.length === 0;
+}
+
+let t = performance.now();
+const a = byDeleting(s);
+const delMs = performance.now() - t;
+
+t = performance.now();
+const b = byStack(s);
+const stackMs = performance.now() - t;
+
+console.log('delete pairs :', a, 'in', delMs.toFixed(1) + ' ms');
+console.log('stack        :', b, 'in', stackMs.toFixed(2) + ' ms');
+console.log('speed-up:', Math.round(delMs / Math.max(stackMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; remember what is still open</h2>
+
+  <p>Read the string left to right and ask what you actually need to know at each closing bracket.
+  Only one thing: <em>which bracket did I open most recently and not yet close?</em></p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p><strong>Brackets close in the reverse order they opened.</strong> The most recently opened one
+    must be the first to close. So keep a pile of open brackets: push each opener on top, and when a
+    closer arrives, it must match whatever is on top.</p>
+    <p>&ldquo;Add to the top, remove from the top&rdquo; is a <strong>stack</strong>. In JavaScript, an
+    array with <code>push</code> and <code>pop</code> is one.</p>
+  </div>
+
+  <p>The rules, in full:</p>
+
+  <ol>
+    <li><strong>Opener</strong> &mdash; push it. It is now waiting.</li>
+    <li><strong>Closer</strong> &mdash; look at the top of the stack.
+      <ul>
+        <li>Stack empty? There is nothing to close. <strong>Invalid.</strong></li>
+        <li>Top does not match this closer? Wrong bracket. <strong>Invalid.</strong></li>
+        <li>Otherwise pop it &mdash; that pair is resolved.</li>
+      </ul>
+    </li>
+    <li><strong>End of string</strong> &mdash; the stack must be <strong>empty</strong>. Anything left
+    is an opener that was never closed. <strong>Invalid.</strong></li>
+  </ol>
+
+  <div class="note warn">
+    <span class="t">The two checks people forget</span>
+    <p><strong>Closer with an empty stack</strong> &mdash; without it, <code>")("</code> passes.<br>
+    <strong>Non-empty stack at the end</strong> &mdash; without it, <code>"("</code> passes.</p>
+    <p>Both failures are asymmetric: the middle of the string looks fine, and the bug lives at an
+    edge. Test <code>"("</code> and <code>")"</code> on every solution you write.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>s = "{[()]}"</code> &mdash; valid.</p>
+
+  <div class="trace">
+<pre>stack = []
+
+'{'   opener  ->  push            stack = ['{']
+'['   opener  ->  push            stack = ['{','[']
+'('   opener  ->  push            stack = ['{','[','(']
+')'   closer  ->  top is '('  matches  ->  pop    stack = ['{','[']
+']'   closer  ->  top is '['  matches  ->  pop    stack = ['{']
+'}'   closer  ->  top is '{'  matches  ->  pop    stack = []
+
+end of string, stack is empty  ->  VALID
+</pre>
+  </div>
+
+  <p>Watch the stack grow to three and unwind in exactly the reverse order. That mirroring
+  <em>is</em> correct nesting.</p>
+
+  <p>Now the crossing case, <code>s = "([)]"</code>:</p>
+
+  <div class="trace">
+<pre>stack = []
+
+'('   opener  ->  push            stack = ['(']
+'['   opener  ->  push            stack = ['(','[']
+')'   closer  ->  top is '['      ')' needs '('    MISMATCH  ->  INVALID
+
+We never even reach the ']'. The stack knew immediately that the
+innermost open bracket was a square one, so a round closer is wrong.
+Counting could never have caught this.
+</pre>
+  </div>
+
+  <p>And the two edge cases:</p>
+
+  <div class="trace">
+<pre>s = ")("
+')'   closer  ->  stack is EMPTY  ->  nothing to close  ->  INVALID
+
+s = "("
+'('   opener  ->  push            stack = ['(']
+end of string, stack is NOT empty ->  INVALID
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function validExplained(s) {
+  const needs = { ')': '(', ']': '[', '}': '{' };
+  const stack = [];
+
+  console.log('s = "' + s + '"');
+
+  for (const ch of s) {
+    if (ch === '(' || ch === '[' || ch === '{') {
+      stack.push(ch);
+      console.log("  '" + ch + "'  opener -> push          stack = [" + stack.join(',') + "]");
+    } else {
+      if (stack.length === 0) {
+        console.log("  '" + ch + "'  closer -> stack EMPTY, nothing to close  -> INVALID");
+        console.log('');
+        return false;
+      }
+
+      const top = stack.pop();
+      if (top !== needs[ch]) {
+        console.log("  '" + ch + "'  closer -> top is '" + top + "', needed '" +
+                    needs[ch] + "'  MISMATCH -> INVALID");
+        console.log('');
+        return false;
+      }
+
+      console.log("  '" + ch + "'  closer -> top '" + top + "' matches -> pop   stack = [" +
+                  stack.join(',') + "]");
+    }
+  }
+
+  const ok = stack.length === 0;
+  console.log('  end of string, stack = [' + stack.join(',') + ']  ->  ' +
+              (ok ? 'VALID' : 'INVALID, unclosed openers'));
+  console.log('');
+  return ok;
+}
+
+console.log('ANSWER:', validExplained('{[()]}'));
+console.log('==========================================');
+console.log('ANSWER:', validExplained('([)]'));
+console.log('==========================================');
+console.log('ANSWER:', validExplained('(('));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <p>No <code>push</code>, no <code>pop</code>, no object lookup. An array plus a <code>top</code>
+  index &mdash; which is exactly how a stack is implemented underneath.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; a stack built by hand</span></div>
+<pre><code>function isValidManual(s) {
+  const stack = [];
+  let top = 0;              // the number of items currently on the stack
+
+  for (let i = 0; i &lt; s.length; i++) {
+    const ch = s[i];
+
+    if (ch === '(' || ch === '[' || ch === '{') {
+      stack[top] = ch;      // push
+      top = top + 1;
+
+    } else if (ch === ')' || ch === ']' || ch === '}') {
+
+      // nothing open? then this closer has no partner
+      if (top === 0) return false;
+
+      top = top - 1;              // pop
+      const opener = stack[top];
+
+      // does the opener we popped match this closer?
+      let matches = false;
+      if (ch === ')' &amp;&amp; opener === '(') matches = true;
+      if (ch === ']' &amp;&amp; opener === '[') matches = true;
+      if (ch === '}' &amp;&amp; opener === '{') matches = true;
+
+      if (!matches) return false;
+    }
+    // any other character is ignored
+  }
+
+  // everything that opened must have closed
+  return top === 0;
+}
+
+console.log(isValidManual('()'));         // true
+console.log(isValidManual('()[]{}'));     // true
+console.log(isValidManual('{[()]}'));     // true
+console.log(isValidManual('(]'));         // false
+console.log(isValidManual('([)]'));       // false
+console.log(isValidManual('('));          // false
+console.log(isValidManual(')('));         // false
+console.log(isValidManual(''));           // true   nothing to mismatch
+console.log(isValidManual('{[]}()'));     // true
+console.log(isValidManual('((()))'));     // true
+console.log(isValidManual('(()'));        // false</code></pre>
+  </div>
+
+  <p>Notice that <code>top</code> does double duty: it is the push position, the pop position minus
+  one, and the &ldquo;how many are open&rdquo; count. That is not a coincidence &mdash; it is what a
+  stack pointer is.</p>
+
+  <div class="note">
+    <span class="t">Why the empty string is valid</span>
+    <p>Nothing opened, so nothing is unclosed. It sounds like a trick answer but it is the
+    mathematically consistent one, and <code>top === 0</code> returns it without a special case.
+    Confirm the expected behaviour with your interviewer rather than assuming.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2a &mdash; the interview answer</span></div>
+<pre><code>function isValid(s) {
+  const needs = { ')': '(', ']': '[', '}': '{' };
+  const stack = [];
+
+  for (const ch of s) {
+    if (needs[ch]) {
+      // it is a closer: the top must be its partner
+      if (stack.pop() !== needs[ch]) return false;
+    } else {
+      stack.push(ch);
+    }
+  }
+
+  return stack.length === 0;
+}
+
+console.log(isValid('()'));         // true
+console.log(isValid('()[]{}'));     // true
+console.log(isValid('{[()]}'));     // true
+console.log(isValid('(]'));         // false
+console.log(isValid('([)]'));       // false
+console.log(isValid(')('));         // false
+console.log(isValid('('));          // false
+console.log(isValid(''));           // true</code></pre>
+  </div>
+
+  <p>Six lines, and it handles the empty-stack case for free: <code>[].pop()</code> returns
+  <code>undefined</code>, which never equals <code>'('</code>, so the comparison fails and it returns
+  false. That is elegant &mdash; but only because <code>undefined</code> can never be a legitimate
+  opener. Know <em>why</em> it works before relying on it.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 2b &mdash; push the expected closer instead</span></div>
+<pre><code>// A different framing some people find clearer: when you see an
+// opener, push the closer you will need later.
+function isValidExpect(s) {
+  const closerFor = { '(': ')', '[': ']', '{': '}' };
+  const expected = [];
+
+  for (const ch of s) {
+    if (closerFor[ch]) {
+      expected.push(closerFor[ch]);     // remember what must come
+    } else if (expected.pop() !== ch) {
+      return false;                     // wrong thing came
+    }
+  }
+
+  return expected.length === 0;
+}
+
+console.log(isValidExpect('{[()]}'));   // true
+console.log(isValidExpect('([)]'));     // false
+console.log(isValidExpect('('));        // false
+
+// Same algorithm, and the stack now reads like a to-do list:
+// "{[(" pushes "}", "]", ")" -- literally the ending you owe.</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the realistic version &mdash; other characters allowed</span></div>
+<pre><code>// Real input has content between the brackets.
+function bracketsBalanced(text) {
+  const needs = { ')': '(', ']': '[', '}': '{' };
+  const openers = new Set(['(', '[', '{']);
+  const stack = [];
+
+  for (const ch of text) {
+    if (openers.has(ch)) stack.push(ch);
+    else if (needs[ch] &amp;&amp; stack.pop() !== needs[ch]) return false;
+    // everything else is ignored
+  }
+
+  return stack.length === 0;
+}
+
+console.log(bracketsBalanced('function f(a, b) { return [a, b]; }'));   // true
+console.log(bracketsBalanced('if (x) { y[0 }'));                        // false
+console.log(bracketsBalanced('no brackets here at all'));               // true
+
+// Report WHERE it went wrong -- far more useful in a real tool.
+function checkBrackets(text) {
+  const needs = { ')': '(', ']': '[', '}': '{' };
+  const openers = new Set(['(', '[', '{']);
+  const stack = [];
+
+  for (let i = 0; i &lt; text.length; i++) {
+    const ch = text[i];
+    if (openers.has(ch)) stack.push({ ch, i });
+    else if (needs[ch]) {
+      const last = stack.pop();
+      if (!last) return { ok: false, at: i, message: 'unexpected "' + ch + '"' };
+      if (last.ch !== needs[ch]) {
+        return { ok: false, at: i,
+                 message: '"' + ch + '" closes "' + last.ch + '" opened at ' + last.i };
+      }
+    }
+  }
+
+  if (stack.length) {
+    return { ok: false, at: stack[stack.length - 1].i, message: 'never closed' };
+  }
+  return { ok: true };
+}
+
+console.log(checkBrackets('a(b[c]d)e'));    // { ok: true }
+console.log(checkBrackets('a(b[c)d]'));     // mismatch, with positions
+console.log(checkBrackets('a(b'));          // never closed
+console.log(checkBrackets('a)b'));          // unexpected ")"</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>Correct?</th></tr></thead>
+      <tbody>
+        <tr><td>Counting</td><td class="mono">O(n)</td><td class="mono">O(1)</td><td><strong>no</strong></td></tr>
+        <tr><td>Delete pairs repeatedly</td><td class="mono">O(n&sup2;)</td><td class="mono">O(n)</td><td>yes</td></tr>
+        <tr><td><strong>Stack</strong></td><td class="mono">O(n)</td><td class="mono">O(n)</td><td>yes</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>One pass, and every character does a constant amount of work &mdash; one comparison and at most
+  one push or pop. So O(n) time.</p>
+
+  <p><strong>Space O(n)</strong>, and the worst case is real: <code>"((((((..."</code> puts every
+  character on the stack. You cannot do better, and that is worth stating &mdash; the O(1)-space
+  counting approach is the one that does not work. Sometimes the memory is the price of correctness,
+  not an optimisation you failed to make.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Counting openers and closers fails on <code>([)]</code>, because it tracks how many are
+    open but not which one is innermost. Brackets must close in reverse order of opening, which is a
+    stack. I push openers; on a closer I pop and check it matches, returning false if the stack is
+    empty or the top is the wrong type; at the end the stack must be empty. O(n) time, O(n) space in
+    the worst case of all openers.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Forgetting the final emptiness check</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; unclosed openers pass</span></div>
+<pre><code>function broken(s) {
+  const needs = { ')': '(', ']': '[', '}': '{' };
+  const stack = [];
+  for (const ch of s) {
+    if (needs[ch]) { if (stack.pop() !== needs[ch]) return false; }
+    else stack.push(ch);
+  }
+  return true;          // no stack.length check -- bug
+}
+
+console.log(broken('()'));      // true   fine
+console.log(broken('([)]'));    // false  fine
+console.log(broken('('));       // TRUE   WRONG
+console.log(broken('((('));     // TRUE   WRONG
+console.log(broken('{[('));     // TRUE   WRONG
+
+// Nothing ever mismatched, because nothing ever closed. The check
+// that everything was resolved happens at the END, not during.</code></pre>
+  </div>
+
+  <h3>2. Forgetting the empty-stack check on a closer</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; a closer with nothing open</span></div>
+<pre><code>function broken(s) {
+  const needs = { ')': '(', ']': '[', '}': '{' };
+  const stack = [];
+  for (const ch of s) {
+    if (needs[ch]) {
+      const top = stack[stack.length - 1];
+      if (top === needs[ch]) stack.pop();      // silently ignores a mismatch
+    } else {
+      stack.push(ch);
+    }
+  }
+  return stack.length === 0;
+}
+
+console.log(broken('()'));      // true   fine
+console.log(broken(')('));      // false  fine, by luck -- '(' is left over
+console.log(broken('()]'));     // TRUE   WRONG -- the stray ']' was ignored
+console.log(broken('(]'));      // false  fine
+
+// Skipping a closer instead of REJECTING it lets stray closers pass
+// whenever the stack happens to end up empty anyway.</code></pre>
+  </div>
+
+  <h3>3. Trying to solve it by counting</h3>
+
+  <p>Step 2 shows this. It is the single most common wrong answer, and <code>"([)]"</code> is the
+  input that exposes it. If a solution never stores <em>which</em> bracket is open, it cannot be
+  right.</p>
+
+  <h3>4. Using <code>shift</code> instead of <code>pop</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; that is a queue, not a stack</span></div>
+<pre><code>function broken(s) {
+  const needs = { ')': '(', ']': '[', '}': '{' };
+  const stack = [];
+  for (const ch of s) {
+    if (needs[ch]) { if (stack.shift() !== needs[ch]) return false; }   // shift -- bug
+    else stack.push(ch);
+  }
+  return stack.length === 0;
+}
+
+console.log(broken('()'));        // true   fine
+console.log(broken('()[]{}'));    // true   fine
+console.log(broken('{[()]}'));    // false  WRONG, should be true
+
+// shift() takes from the FRONT -- the OLDEST opener. Nesting requires
+// the NEWEST. Front-out is a queue; back-out is a stack. This problem
+// needs a stack, and shift() is also O(n) per call.</code></pre>
+  </div>
+
+  <h3>5. Assuming only round brackets</h3>
+
+  <p>A solution written for <code>()</code> alone often uses a counter, which then cannot be extended
+  when <code>[]</code> and <code>{}</code> appear. Write the stack version even for the single-bracket
+  case &mdash; it is barely longer and it generalises.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the six-line version from memory</strong>, then test it on <code>"("</code>,
+    <code>")"</code> and <code>""</code>. Those three catch every common bug.</li>
+    <li><strong>Longest valid parentheses substring.</strong> Push <em>indexes</em> rather than
+    characters, and the distance between them gives you the length. A real step up.</li>
+    <li><strong>Minimum removals to make it valid.</strong> Count the unmatched closers as you go and
+    the leftover openers at the end. Two counters, no stack needed &mdash; work out why the counting
+    approach <em>is</em> valid for this variant when it was not for the original.</li>
+    <li><strong>Score of parentheses.</strong> <code>"()"</code> is 1, <code>"(A)"</code> is twice A,
+    <code>"AB"</code> is A + B. Same stack, holding running scores instead of characters.</li>
+    <li><strong>Basic calculator.</strong> Evaluate <code>"(1+(4+5+2)-3)+(6+8)"</code>. Push the
+    running total and sign when a bracket opens, restore them when it closes. This is what stacks are
+    genuinely for.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Whenever the rule is &ldquo;most recent first&rdquo;, you want a stack.</strong>
+    Matching brackets, undo history, function call frames, backtracking, evaluating expressions,
+    parsing nested structures &mdash; all the same shape. And the reverse tell: if you find yourself
+    needing to know <em>which</em> of several open things is innermost, a counter will never be
+    enough.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="04-longest-palindromic-substring.html">&larr; Longest Palindromic Substring</a>
+  <a href="06-string-compression.html">Next: String Compression &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>
