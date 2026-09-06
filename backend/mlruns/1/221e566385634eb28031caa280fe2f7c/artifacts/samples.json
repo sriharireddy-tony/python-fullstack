@@ -1,0 +1,163 @@
+{
+  "samples": [
+    {
+      "question": "How many tickets does the Payroll team have?",
+      "answer": "The Payroll team has 2 tickets. No ticket references are available for this count.",
+      "contexts": [
+        "[count_tickets] {\"dimension\": \"team\", \"filters_applied\": {\"created_within_days\": 365, \"team\": \"Payroll\"}, \"total_tickets\": 2, \"buckets\": [{\"value\": \"Payroll\", \"tickets\": 2}], \"ticket_references\": [], \"note\": \"Counts only. This result contains no ticket references, so do not cite any. Use search_tickets if the answer needs specific tickets.\"}"
+      ],
+      "model": "qwen3:8b",
+      "trace": [
+        "guard:ok",
+        "decide:use_tool:count_tickets",
+        "act:count_tickets",
+        "decide:answer:count_tickets",
+        "respond:qwen3:8b"
+      ],
+      "missing_terms": []
+    },
+    {
+      "question": "What is ticket OS-4 about?",
+      "answer": "Ticket OS-4 is about SCIM provisioning creating duplicate employees when the identity provider retries. The issue results in duplicate records with the same work email and different employee IDs. (OS-4)",
+      "contexts": [
+        "[get_ticket] {\"reference\": \"OS-4\", \"title\": \"SCIM provisioning creates duplicate employees when the identity provider retries\", \"status\": \"closed\", \"priority\": \"p1\", \"created_at\": \"2026-08-14T13:53:57.153705+00:00\", \"closed_at\": \"2026-09-03T08:53:57.153705+00:00\", \"team\": \"Platform\", \"client\": \"Wayne Logistics\", \"assignee\": \"Nisha Verma\", \"description\": \"The customer provisions employees from Azure AD over SCIM. When the provisioning endpoint takes longer than the identity provider's 30-second timeout, Azure retries the create. The retry is treated as a new employee rather than matched to the one already created, so a duplicate record appears with the same work email and a different employee ID.\\n\\nThere are currently 23 duplicates in their tenant. \", \"steps_to_reproduce\": \"1. Configure SCIM provisioning from Azure AD\\n2. Provision a batch large enough that some requests exceed 30 seconds\\n3. Allow the identity provider to retry the timed-out creates\\n4. Search the employee directory for the affected work email addresses\", \"expected_result\": \"A retried create with a previously seen externalId updates the existing employee rather than creating a second one.\", \"actual_result\": \"A second employee record is created with the same work email and a new employee ID, consuming a licence.\", \"resolution_notes\": \"The API contract changed upstream. Updated the client and added a version check.\", \"rejection_reason\": null, \"reopen_count\": 0, \"environment\": \"production\", \"severity\": \"s1_critical\", \"impact\": \"whole_org\", \"workaround\": \"none\"}"
+      ],
+      "model": "qwen3:8b",
+      "trace": [
+        "guard:ok",
+        "decide:use_tool:get_ticket",
+        "act:get_ticket",
+        "decide:answer:get_ticket",
+        "respond:qwen3:8b"
+      ],
+      "missing_terms": []
+    },
+    {
+      "question": "Which tickets are still open?",
+      "answer": "The following tickets are still open:  \n- OS-19: SCIM user sync occasionally creates duplicate employee accounts  \n- OS-18: SCIM retry causes multiple employee profiles for the same Azure AD user  \n- OS-9: Expense claim attachments lose their orientation when previewed on the approval screen",
+      "contexts": [
+        "[search_tickets] {\"total_matching\": 3, \"returned\": 3, \"truncated\": false, \"tickets\": [{\"reference\": \"OS-19\", \"title\": \"SCIM user sync occasionally creates duplicate employee accounts\", \"status\": \"open\", \"priority\": \"p1\", \"created_at\": \"2026-09-05T08:52:23.499630+00:00\", \"closed_at\": null, \"team\": \"Performance\", \"client\": \"Northwind Trading\", \"assignee\": null}, {\"reference\": \"OS-18\", \"title\": \"SCIM retry causes multiple employee profiles for the same Azure AD user\", \"status\": \"open\", \"priority\": \"p1\", \"created_at\": \"2026-09-05T08:45:21.999111+00:00\", \"closed_at\": null, \"team\": \"UI\", \"client\": \"Tyrell Consulting\", \"assignee\": null}, {\"reference\": \"OS-9\", \"title\": \"Expense claim attachments lose their orientation when previewed on the approval screen\", \"status\": \"open\", \"priority\": \"p3\", \"created_at\": \"2026-07-01T13:53:57.153705+00:00\", \"closed_at\": null, \"team\": \"UI\", \"client\": \"Tyrell Consulting\", \"assignee\": null}]}"
+      ],
+      "model": "qwen3:8b",
+      "trace": [
+        "guard:ok",
+        "decide:use_tool:search_tickets",
+        "act:search_tickets",
+        "decide:answer:-",
+        "respond:qwen3:8b"
+      ],
+      "missing_terms": []
+    },
+    {
+      "question": "Are there any duplicate reports of the SCIM provisioning problem?",
+      "answer": "Yes, there are duplicate reports of the SCIM provisioning problem. Tickets OS-4, OS-19, and OS-18 all describe issues related to duplicate employee accounts caused by SCIM provisioning retries or syncs.",
+      "contexts": [
+        "[find_similar_tickets] {\"returned\": 5, \"tickets\": [{\"reference\": \"OS-4\", \"title\": \"SCIM provisioning creates duplicate employees when the identity provider retries\", \"status\": \"closed\", \"closed_at\": \"2026-09-03T08:53:57.153705+00:00\", \"resolution\": \"The API contract changed upstream. Updated the client and added a version check.\", \"found_by\": [\"lexical\", \"semantic\"]}, {\"reference\": \"OS-19\", \"title\": \"SCIM user sync occasionally creates duplicate employee accounts\", \"status\": \"open\", \"closed_at\": null, \"resolution\": null, \"found_by\": [\"lexical\", \"semantic\"]}, {\"reference\": \"OS-18\", \"title\": \"SCIM retry causes multiple employee profiles for the same Azure AD user\", \"status\": \"open\", \"closed_at\": null, \"resolution\": null, \"found_by\": [\"lexical\", \"semantic\"]}, {\"reference\": \"OS-10\", \"title\": \"Scheduled report emails stop after a recipient's address bounces once\", \"status\": \"on_hold\", \"closed_at\": null, \"resolution\": null, \"found_by\": [\"semantic\"]}, {\"reference\": \"OS-2\", \"title\": \"Shift roster publish silently drops employees added after the draft was created\", \"status\": \"closed\", \"closed_at\": \"2026-07-26T23:53:57.153705+00:00\", \"resolution\": \"Root cause was a missing null check in the calculation service. Covered by a test.\", \"found_by\": [\"semantic\"]}]}"
+      ],
+      "model": "qwen3:8b",
+      "trace": [
+        "guard:ok",
+        "decide:use_tool:find_similar_tickets",
+        "act:find_similar_tickets",
+        "decide:answer:find_similar_tickets",
+        "respond:qwen3:8b"
+      ],
+      "missing_terms": []
+    },
+    {
+      "question": "What was the resolution for OS-1?",
+      "answer": "The resolution for OS-1 is not provided, as the ticket is currently on hold and no closure details are available. Reference: OS-1.",
+      "contexts": [
+        "[get_ticket] {\"reference\": \"OS-1\", \"title\": \"Full and final settlement omits the notice-period recovery for early exits\", \"status\": \"on_hold\", \"priority\": \"p1\", \"created_at\": \"2026-06-25T23:53:57.153705+00:00\", \"closed_at\": null, \"team\": \"Payroll\", \"client\": \"Northwind Trading\", \"assignee\": \"Kavya Nair\", \"description\": \"When an employee resigns and serves less than their contractual notice period, the full and final settlement is supposed to recover the shortfall at the rate defined in the notice-recovery policy. For the eleven exits processed in the March cycle the recovery line is missing entirely from the settlement statement, and the net payable is therefore higher than it should be. Finance caught it on the \", \"steps_to_reproduce\": \"1. Open an employee with a 60-day notice period and a resignation dated 20 days before their last working day\\n2. Initiate the full and final settlement from the exit workflow\\n3. Review the settlement statement's deduction section\\n4. Compare against the notice-recovery policy configured under Payroll Settings > Exit Policies\", \"expected_result\": \"The settlement includes a notice-period recovery line for the 40-day shortfall, computed on basic plus dearness allowance as configured.\", \"actual_result\": \"No recovery line appears at all, and the net payable is overstated by the full shortfall amount.\", \"resolution_notes\": \"\", \"rejection_reason\": null, \"reopen_count\": 0, \"environment\": \"production\", \"severity\": \"s1_critical\", \"impact\": \"department\", \"workaround\": \"painful\"}"
+      ],
+      "model": "qwen3:8b",
+      "trace": [
+        "guard:ok",
+        "decide:use_tool:get_ticket",
+        "act:get_ticket",
+        "decide:answer:-",
+        "respond:qwen3:8b"
+      ],
+      "missing_terms": []
+    },
+    {
+      "question": "Show me the highest priority tickets.",
+      "answer": "The highest priority tickets (p1) are:  \n- OS-19: SCIM user sync occasionally creates duplicate employee accounts  \n- OS-18: SCIM retry causes multiple employee profiles for the same Azure AD user  \n- OS-4: SCIM provisioning creates duplicate employees when the identity provider retries  \n- OS-3: Employee custom fields revert to their previous values after a bulk department transfer",
+      "contexts": [
+        "[search_tickets] {\"total_matching\": 7, \"returned\": 7, \"truncated\": false, \"tickets\": [{\"reference\": \"OS-19\", \"title\": \"SCIM user sync occasionally creates duplicate employee accounts\", \"status\": \"open\", \"priority\": \"p1\", \"created_at\": \"2026-09-05T08:52:23.499630+00:00\", \"closed_at\": null, \"team\": \"Performance\", \"client\": \"Northwind Trading\", \"assignee\": null}, {\"reference\": \"OS-18\", \"title\": \"SCIM retry causes multiple employee profiles for the same Azure AD user\", \"status\": \"open\", \"priority\": \"p1\", \"created_at\": \"2026-09-05T08:45:21.999111+00:00\", \"closed_at\": null, \"team\": \"UI\", \"client\": \"Tyrell Consulting\", \"assignee\": null}, {\"reference\": \"OS-4\", \"title\": \"SCIM provisioning creates duplicate employees when the identity provider retries\", \"status\": \"closed\", \"priority\": \"p1\", \"created_at\": \"2026-08-14T13:53:57.153705+00:00\", \"closed_at\": \"2026-09-03T08:53:57.153705+00:00\", \"team\": \"Platform\", \"client\": \"Wayne Logistics\", \"assignee\": \"Nisha Verma\"}, {\"reference\": \"OS-3\", \"title\": \"Employee custom fields revert to their previous values after a bulk department transfer\", \"status\": \"on_hold\", \"priority\": \"p1\", \"created_at\": \"2026-07-25T08:53:57.153705+00:00\", \"closed_at\": null, \"team\": \"CoreHR\", \"client\": \"Umbrella Retail\", \"assignee\": \"Sneha Pillai\"}, {\"reference\": \"OS-2\", \"title\": \"Shift roster publish silently drops employees added after the draft was created\", \"status\": \"closed\", \"priority\": \"p1\", \"created_at\": \"2026-07-10T23:53:57.153705+00:00\", \"closed_at\": \"2026-07-26T23:53:57.153705+00:00\", \"team\": \"Workforce\", \"client\": \"Acme Industries\", \"assignee\": \"Santosh Patil\"}, {\"reference\": \"OS-1\", \"title\": \"Full and final settlement omits the notice-period recovery for early exits\", \"status\": \"on_hold\", \"priority\": \"p1\", \"created_at\": \"2026-06-25T23:53:57.153705+00:00\", \"closed_at\": null, \"team\": \"Payroll\", \"client\": \"Northwind Trading\", \"assignee\": \"Kavya Nair\"}, {\"reference\": \"OS-7\", \"title\": \"Overtime hours computed against the wrong week when a shift crosses the weekly boundary\", \"status\": \"closed\", \"priority\": \"p1\", \"created_at\": \"2026-05-10T02:53:57.153705+00:00\", \"closed_at\": \"2026-05-16T05:53:57.153705+00:00\", \"team\": \"Workforce\", \"client\": \"Wayne Logistics\", \"assignee\": \"Deepa Bhat\"}]}"
+      ],
+      "model": "qwen3:8b",
+      "trace": [
+        "guard:ok",
+        "decide:use_tool:search_tickets",
+        "act:search_tickets",
+        "decide:answer:search_tickets",
+        "respond:qwen3:8b"
+      ],
+      "missing_terms": []
+    },
+    {
+      "question": "Who is assigned to the Workforce team tickets?",
+      "answer": "The Workforce team tickets OS-2 and OS-7 are assigned to Santosh Patil and Deepa Bhat, respectively.",
+      "contexts": [
+        "[search_tickets] {\"total_matching\": 2, \"returned\": 2, \"truncated\": false, \"tickets\": [{\"reference\": \"OS-2\", \"title\": \"Shift roster publish silently drops employees added after the draft was created\", \"status\": \"closed\", \"priority\": \"p1\", \"created_at\": \"2026-07-10T23:53:57.153705+00:00\", \"closed_at\": \"2026-07-26T23:53:57.153705+00:00\", \"team\": \"Workforce\", \"client\": \"Acme Industries\", \"assignee\": \"Santosh Patil\"}, {\"reference\": \"OS-7\", \"title\": \"Overtime hours computed against the wrong week when a shift crosses the weekly boundary\", \"status\": \"closed\", \"priority\": \"p1\", \"created_at\": \"2026-05-10T02:53:57.153705+00:00\", \"closed_at\": \"2026-05-16T05:53:57.153705+00:00\", \"team\": \"Workforce\", \"client\": \"Wayne Logistics\", \"assignee\": \"Deepa Bhat\"}]}"
+      ],
+      "model": "qwen3:8b",
+      "trace": [
+        "guard:ok",
+        "decide:use_tool:search_tickets",
+        "act:search_tickets",
+        "decide:answer:-",
+        "respond:qwen3:8b"
+      ],
+      "missing_terms": []
+    },
+    {
+      "question": "What is the average salary of employees at Keka?",
+      "answer": "The OS Tracker workspace does not contain data about employee salaries. I cannot provide this information.",
+      "contexts": [],
+      "model": "qwen3:8b",
+      "trace": [
+        "guard:ok",
+        "decide:answer:-",
+        "respond:qwen3:8b"
+      ],
+      "missing_terms": []
+    },
+    {
+      "question": "How many tickets were raised last Tuesday?",
+      "answer": "The data does not specify the number of tickets raised last Tuesday. The provided count includes tickets from the past 7 days, but it does not filter by a specific date.",
+      "contexts": [
+        "[count_tickets] {\"dimension\": \"client\", \"filters_applied\": {\"created_within_days\": 7, \"status\": [\"open\", \"assigned\", \"in_progress\"]}, \"total_tickets\": 2, \"buckets\": [{\"value\": \"Northwind Trading\", \"tickets\": 1}, {\"value\": \"Tyrell Consulting\", \"tickets\": 1}], \"ticket_references\": [], \"note\": \"Counts only. This result contains no ticket references, so do not cite any. Use search_tickets if the answer needs specific tickets.\"}",
+        "[count_tickets] {\"error\": \"Unknown dimension 'created_from'.\", \"allowed_dimensions\": [\"assignee\", \"client\", \"environment\", \"priority\", \"severity\", \"status\", \"team\"]}"
+      ],
+      "model": "qwen3:8b",
+      "trace": [
+        "guard:ok",
+        "decide:use_tool:count_tickets",
+        "act:count_tickets",
+        "decide:use_tool:count_tickets",
+        "act:count_tickets",
+        "decide:answer:-",
+        "respond:qwen3:8b"
+      ],
+      "missing_terms": []
+    },
+    {
+      "question": "Which team has the most open bugs?",
+      "answer": "The UI team has the most open bugs with 2 tickets. The Performance team has 1 open bug. No specific ticket references are available for this count.",
+      "contexts": [
+        "[count_tickets] {\"dimension\": \"team\", \"filters_applied\": {\"created_within_days\": 365, \"status\": [\"open\"]}, \"total_tickets\": 3, \"buckets\": [{\"value\": \"UI\", \"tickets\": 2}, {\"value\": \"Performance\", \"tickets\": 1}], \"ticket_references\": [], \"note\": \"Counts only. This result contains no ticket references, so do not cite any. Use search_tickets if the answer needs specific tickets.\"}"
+      ],
+      "model": "qwen3:8b",
+      "trace": [
+        "guard:ok",
+        "decide:use_tool:count_tickets",
+        "act:count_tickets",
+        "decide:answer:count_tickets",
+        "respond:qwen3:8b"
+      ],
+      "missing_terms": []
+    }
+  ]
+}

@@ -105,6 +105,42 @@ class RoleConfig:
     timeout_seconds: int = 30
 
 
+def _local_first(
+    primary: str, fallbacks: tuple[str, ...], local: str
+) -> tuple[str, tuple[str, ...]]:
+    """Reorder one role's chain when ``AI_PREFER_LOCAL`` is set.
+
+    The local model becomes the primary and the hosted models it displaced
+    become the fallbacks, in their original preference order. So the chain
+    inverts rather than being replaced -- turning this on does not give up
+    hosted models, it demotes them.
+
+    A role with **no** fallbacks keeps none. That is the evaluator, and its
+    "fail rather than downgrade" property is about comparability of results,
+    which holds whichever model is primary: a judge that quietly changes
+    mid-run produces numbers that cannot be compared either way.
+    """
+    if not settings.AI_PREFER_LOCAL:
+        return primary, fallbacks
+    if not fallbacks:
+        return local, ()
+    displaced = tuple(model for model in (primary, *fallbacks) if model != local)
+    return local, displaced
+
+
+def _timeout_for(primary: str, configured: int) -> int:
+    """Widen a role's deadline when the local model is serving it.
+
+    The per-role timeouts are sized for a hosted model. Measured locally,
+    reranking on an 8B model takes ~24.7s against a 25s deadline -- so the
+    default would kill roughly half the calls and record them as failures of
+    the *role* rather than of the deadline.
+    """
+    if not _is_hosted(primary):
+        return max(configured, settings.OLLAMA_TIMEOUT_SECONDS)
+    return configured
+
+
 def _roles() -> dict[ModelRole, RoleConfig]:
     """Build the role table from settings.
 
@@ -121,6 +157,16 @@ def _roles() -> dict[ModelRole, RoleConfig]:
     chain: tuple[str, ...] = (hosted_cheap,)
     if settings.AI_LOCAL_FALLBACK:
         chain = (*chain, local)
+
+    rerank_primary, rerank_chain = _local_first(
+        hosted_cheap, (local,) if settings.AI_LOCAL_FALLBACK else (), local
+    )
+    rewrite_primary, rewrite_chain = _local_first(
+        hosted_cheap, (local,) if settings.AI_LOCAL_FALLBACK else (), local
+    )
+    chat_primary, chat_chain = _local_first(hosted_strong, chain, local)
+    agent_primary, agent_chain = _local_first(hosted_strong, chain, local)
+    eval_primary, eval_chain = _local_first(hosted_strong, (), local)
 
     return {
         # 500 hosted requests a day is the free-tier budget, and the reranker is
@@ -144,45 +190,54 @@ def _roles() -> dict[ModelRole, RoleConfig]:
         # entire argument for the registry existing.
         ModelRole.RERANK: RoleConfig(
             ModelRole.RERANK,
-            hosted_cheap,
-            # Already the cheap model, so the chain is just the local fallback.
-            (local,) if settings.AI_LOCAL_FALLBACK else (),
+            rerank_primary,
+            rerank_chain,
             daily_limit=250,
             cost_per_1k=0.0001,
             # Someone is watching a page. Past this the fused order is the
             # better answer, and the trace records that it was cut off.
-            timeout_seconds=settings.RERANK_TIMEOUT_SECONDS,
+            timeout_seconds=_timeout_for(rerank_primary, settings.RERANK_TIMEOUT_SECONDS),
         ),
         # Rewriting is a one-sentence transformation. Paying strong-model rates
         # for it would be spending the quota on the least valuable call.
         ModelRole.QUERY_REWRITE: RoleConfig(
             ModelRole.QUERY_REWRITE,
-            hosted_cheap,
-            (local,) if settings.AI_LOCAL_FALLBACK else (),
+            rewrite_primary,
+            rewrite_chain,
             daily_limit=100,
             cost_per_1k=0.0001,
             # A rewrite is one short sentence, and it happens *before* the
             # rerank on the same request, so its budget has to leave room.
-            timeout_seconds=settings.REWRITE_TIMEOUT_SECONDS,
+            timeout_seconds=_timeout_for(rewrite_primary, settings.REWRITE_TIMEOUT_SECONDS),
         ),
         ModelRole.CHAT: RoleConfig(
-            ModelRole.CHAT, hosted_strong, chain, daily_limit=150, cost_per_1k=0.0003
+            ModelRole.CHAT,
+            chat_primary,
+            chat_chain,
+            daily_limit=150,
+            cost_per_1k=0.0003,
+            timeout_seconds=_timeout_for(chat_primary, 30),
         ),
         ModelRole.AGENT: RoleConfig(
             ModelRole.AGENT,
-            hosted_strong,
-            chain,
+            agent_primary,
+            agent_chain,
             daily_limit=100,
             cost_per_1k=0.0003,
             # Runs in a worker with nobody waiting, so it can afford to think.
-            timeout_seconds=settings.LLM_TIMEOUT_SECONDS,
+            timeout_seconds=_timeout_for(agent_primary, settings.LLM_TIMEOUT_SECONDS),
         ),
         # No fallback, by design. If the judge changes mid-run the numbers
         # before and after are not comparable, and a quiet downgrade would
         # produce a chart that looks like a regression in the system under
         # test. Better to stop and say the evaluation cannot run.
         ModelRole.EVALUATOR: RoleConfig(
-            ModelRole.EVALUATOR, hosted_strong, (), daily_limit=200, cost_per_1k=0.0003
+            ModelRole.EVALUATOR,
+            eval_primary,
+            eval_chain,
+            daily_limit=200,
+            cost_per_1k=0.0003,
+            timeout_seconds=_timeout_for(eval_primary, 30),
         ),
     }
 

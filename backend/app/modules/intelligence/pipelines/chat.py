@@ -411,11 +411,15 @@ def _ground_citations(answer: str, state: ChatState) -> tuple[str, list[str]]:
     fabricated ticket number is uniquely corrosive: it is specific, it looks
     checkable, and the reader only finds out after clicking.
 
-    Marked rather than deleted. Removing the token silently would leave a
-    sentence that reads as though it cited something, and rewriting the whole
-    answer would discard a count that was correct. `[unverified: OS-1042]` is
-    ugly on purpose -- the reader needs to see that one part of the sentence is
-    load-bearing and one is not.
+    Two treatments, because there are two cases. A fabricated reference used
+    as *decoration* -- a parenthetical hanging off a claim that came from a real
+    tool result -- is **removed**, leaving the true claim intact. A fabricated
+    reference that is the *subject* of its sentence is **marked**
+    `[unverified: OS-1042]`, because deleting it would leave wreckage.
+
+    Marking everything was the earlier behaviour. It was defensible, but it
+    still put a specific, checkable, invented ticket number in front of the
+    reader. See `_strip_decorative` for what changed the decision.
     """
     cited = set(REFERENCE_PATTERN.findall(answer))
     if not cited:
@@ -426,15 +430,80 @@ def _ground_citations(answer: str, state: ChatState) -> tuple[str, list[str]]:
     if not ungrounded:
         return answer, []
 
-    marked = answer
-    for reference in ungrounded:
-        marked = re.sub(rf"\b{re.escape(reference)}\b", f"[unverified: {reference}]", marked)
+    cleaned, stripped = _strip_decorative(answer, ungrounded)
 
-    marked += (
-        "\n\nNote: the reference(s) marked unverified were not found in the data I "
-        "looked up, so treat them with suspicion."
-    )
-    return marked, ungrounded
+    # Whatever survived stripping is load-bearing in its sentence -- removing
+    # it would leave "  is about payroll" -- so it is marked instead.
+    remaining = [reference for reference in ungrounded if reference not in stripped]
+    for reference in remaining:
+        cleaned = re.sub(rf"\b{re.escape(reference)}\b", f"[unverified: {reference}]", cleaned)
+
+    notes = []
+    if stripped:
+        notes.append(
+            f"removed {len(stripped)} ticket reference(s) I could not find in the data I looked up"
+        )
+    if remaining:
+        notes.append("marked the reference(s) above as unverified for the same reason")
+    cleaned += "\n\nNote: " + "; ".join(notes) + "."
+
+    return cleaned, ungrounded
+
+
+#: A parenthetical or bracketed group made up only of references, separators and
+#: whitespace -- the shape a model produces when it decorates a claim with
+#: citations rather than making a claim *about* a ticket.
+_CITATION_GROUP = re.compile(r"\s*[(\[][^()\[\]]*[)\]]")
+
+
+def _strip_decorative(answer: str, ungrounded: list[str]) -> tuple[str, set[str]]:
+    """Remove fabricated references that were only decorating a claim.
+
+    ## Why strip here but mark elsewhere
+
+    The two cases are different and the distinction is what makes this safe.
+
+        "UI has the most open bugs with 2 tickets (OS-1042, OS-1043)"
+        "OS-1042 is about payroll"
+
+    In the first, the count came from a real aggregate and the parenthetical is
+    ornament -- deleting it leaves a true sentence. In the second the reference
+    *is* the subject, and deleting it leaves wreckage. So a citation group whose
+    entire contents are ungrounded references is removed; anything else is
+    marked.
+
+    The previous behaviour marked both, which was defensible -- the reader could
+    see which half was load-bearing -- but it still put a specific, checkable,
+    invented ticket number in front of them. A RAGAS faithfulness score of 0.00
+    on an answer whose *factual claim was correct* is what made the difference
+    worth making: the claim was fine and only the ornament was false.
+
+    Returns the cleaned answer and the set of references actually removed.
+    """
+    stripped: set[str] = set()
+    ungrounded_set = set(ungrounded)
+
+    def replace(match: re.Match[str]) -> str:
+        group = match.group(0)
+        found = set(REFERENCE_PATTERN.findall(group))
+        if not found or not found <= ungrounded_set:
+            # Empty of references, or contains at least one real one. Either
+            # way this group is not pure fabrication and is left alone.
+            return group
+        # Nothing but ungrounded references, separators and whitespace?
+        residue = REFERENCE_PATTERN.sub("", group).strip(" ()[],;:·—-")
+        if residue:
+            return group
+        stripped.update(found)
+        return ""
+
+    cleaned = _CITATION_GROUP.sub(replace, answer)
+
+    # Tidy what removal left behind: a space before punctuation, or two spaces
+    # where a parenthetical used to sit.
+    cleaned = re.sub(r"\s+([,.;:])", r"\1", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    return cleaned.strip(), stripped
 
 
 # -------------------------------------------------------------------- routing

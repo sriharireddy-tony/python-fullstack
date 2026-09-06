@@ -1,0 +1,2480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>OS Tracker RAG Anatomy</title>
+<meta name="description" content="A file-by-file walkthrough of OS Tracker's hybrid RAG and agent layer.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+
+<style>
+/* ============================================================ tokens
+   Light is the base. Dark redefines only the tokens, twice: once for
+   prefers-color-scheme (the un-stamped default most viewers see), once
+   for an explicit data-theme stamp so the toggle wins either way. */
+:root {
+  --bg:        #f4f6f8;
+  --surface:   #ffffff;
+  --surface-2: #eceff3;
+  --line:      #d8dee6;
+  --line-soft: #e6eaf0;
+  --text:      #141922;
+  --text-2:    #4a5464;
+  --text-3:    #78838f;
+
+  /* Accents that mean something. Teal is always the meaning-based
+     retriever, amber always the literal-token one, indigo always
+     "this stage calls a language model". */
+  --semantic:  #1f7d78;
+  --semantic-w:#dcefee;
+  --lexical:   #a8631a;
+  --lexical-w: #f6e9d8;
+  --model:     #5546c4;
+  --model-w:   #e6e3f8;
+
+  --good:      #2f7d47;
+  --warn:      #9a6f12;
+  --crit:      #b0453a;
+
+  --shadow: 0 1px 2px rgba(20,25,34,.05), 0 6px 18px rgba(20,25,34,.05);
+  --radius: 10px;
+  --measure: 68ch;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:        #0c1016;
+    --surface:   #141a23;
+    --surface-2: #1b222d;
+    --line:      #2a3441;
+    --line-soft: #202834;
+    --text:      #e4e9f0;
+    --text-2:    #a3aebd;
+    --text-3:    #77828f;
+
+    --semantic:  #58c4bd;
+    --semantic-w:#12302f;
+    --lexical:   #e0a057;
+    --lexical-w: #342614;
+    --model:     #a394f5;
+    --model-w:   #221d3f;
+
+    --good:      #5cc07a;
+    --warn:      #d5a63c;
+    --crit:      #e0776a;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:        #0c1016;
+  --surface:   #141a23;
+  --surface-2: #1b222d;
+  --line:      #2a3441;
+  --line-soft: #202834;
+  --text:      #e4e9f0;
+  --text-2:    #a3aebd;
+  --text-3:    #77828f;
+
+  --semantic:  #58c4bd;
+  --semantic-w:#12302f;
+  --lexical:   #e0a057;
+  --lexical-w: #342614;
+  --model:     #a394f5;
+  --model-w:   #221d3f;
+
+  --good:      #5cc07a;
+  --warn:      #d5a63c;
+  --crit:      #e0776a;
+
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+}
+
+/* ============================================================ base */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, .display {
+  font-family: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 700;
+  text-wrap: balance;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0;
+}
+
+code, pre, .mono, .num {
+  font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-ligatures: none;
+}
+
+a { color: inherit; text-decoration-color: var(--text-3); text-underline-offset: 3px; }
+a:hover { text-decoration-color: currentColor; }
+:focus-visible { outline: 2px solid var(--model); outline-offset: 3px; border-radius: 3px; }
+
+/* ============================================================ shell */
+.shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 24px 120px;
+}
+
+@media (min-width: 1080px) {
+  .shell { grid-template-columns: 232px minmax(0, 1fr); gap: 56px; padding: 0 40px 140px; }
+}
+
+/* --------------------------------------------------------- nav */
+.toc { display: none; }
+
+@media (min-width: 1080px) {
+  .toc {
+    display: block;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    max-height: 100vh;
+    overflow-y: auto;
+    padding: 48px 0 40px;
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+}
+.toc-label {
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-3);
+  margin: 22px 0 8px;
+}
+.toc-label:first-child { margin-top: 0; }
+.toc a {
+  display: block;
+  padding: 4px 0 4px 12px;
+  border-left: 2px solid var(--line-soft);
+  color: var(--text-2);
+  text-decoration: none;
+  transition: color .12s, border-color .12s;
+}
+.toc a:hover { color: var(--text); border-left-color: var(--model); }
+
+/* --------------------------------------------------------- masthead */
+.masthead { padding: 72px 0 40px; border-bottom: 1px solid var(--line); }
+.eyebrow {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0 0 18px;
+}
+.masthead h1 { font-size: clamp(34px, 5.2vw, 58px); margin-bottom: 20px; }
+.standfirst {
+  font-size: 20px;
+  line-height: 1.5;
+  color: var(--text-2);
+  max-width: 62ch;
+  margin: 0;
+}
+
+.vitals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 1px;
+  background: var(--line-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-top: 36px;
+}
+.vital { background: var(--surface); padding: 14px 16px; }
+.vital dt {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 5px;
+}
+.vital dd {
+  margin: 0;
+  font-family: "Bricolage Grotesque", sans-serif;
+  font-weight: 700;
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------- sections */
+main { min-width: 0; }
+section { padding-top: 64px; scroll-margin-top: 24px; }
+section > * { max-width: var(--measure); }
+section > .bleed, section > .wide { max-width: none; }
+
+.kicker {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0 0 10px;
+}
+h2 { font-size: clamp(26px, 3.4vw, 36px); margin-bottom: 16px; }
+h3 { font-size: 21px; margin: 40px 0 12px; }
+h4 { font-size: 16px; margin: 28px 0 8px; font-weight: 700; }
+p { margin: 0 0 18px; }
+p.lead { font-size: 19px; color: var(--text-2); }
+
+ul, ol { margin: 0 0 18px; padding-left: 22px; }
+li { margin-bottom: 8px; }
+li::marker { color: var(--text-3); }
+
+strong { font-weight: 600; }
+em { font-style: italic; }
+
+/* --------------------------------------------------------- inline bits */
+code:not(pre code) {
+  font-size: .85em;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.chip-sem  { color: var(--semantic); background: var(--semantic-w); border-color: var(--semantic); }
+.chip-lex  { color: var(--lexical);  background: var(--lexical-w);  border-color: var(--lexical); }
+.chip-llm  { color: var(--model);    background: var(--model-w);    border-color: var(--model); }
+.chip-free { color: var(--text-2);   background: var(--surface-2);  border-color: var(--line); }
+
+/* --------------------------------------------------------- code */
+pre {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0 0 20px;
+  box-shadow: var(--shadow);
+}
+pre code { background: none; border: 0; padding: 0; white-space: pre; }
+.filepath {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 6px;
+  display: block;
+}
+
+/* --------------------------------------------------------- callouts */
+.note {
+  border-left: 3px solid var(--line);
+  background: var(--surface);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 16px 20px;
+  margin: 0 0 22px;
+  font-size: 16px;
+}
+.note p:last-child { margin-bottom: 0; }
+.note-title {
+  font-family: "Bricolage Grotesque", sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 6px;
+  display: block;
+}
+.note-broke { border-left-color: var(--crit); }
+.note-broke .note-title { color: var(--crit); }
+.note-why   { border-left-color: var(--model); }
+.note-why .note-title { color: var(--model); }
+.note-key   { border-left-color: var(--good); }
+.note-key .note-title { color: var(--good); }
+
+/* --------------------------------------------------------- stages */
+.stages { display: flex; flex-direction: column; gap: 14px; margin: 0 0 24px; }
+.stage {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+}
+.stage-n {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  padding-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.stage-h {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.stage-h h4 { margin: 0; font-size: 16px; }
+.stage-file {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.stage p { margin: 0 0 8px; font-size: 15.5px; }
+.stage p:last-child { margin-bottom: 0; }
+
+/* --------------------------------------------------------- tables */
+.tablewrap { overflow-x: auto; margin: 0 0 24px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+th {
+  font-family: "Bricolage Grotesque", sans-serif;
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 700;
+  white-space: nowrap;
+  background: var(--surface-2);
+  position: sticky;
+  top: 0;
+}
+tr:last-child td { border-bottom: 0; }
+td.mono, th.mono { font-family: "JetBrains Mono", monospace; font-size: 12.5px; white-space: nowrap; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; }
+tbody tr:hover { background: var(--surface-2); }
+caption {
+  caption-side: bottom;
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-3);
+  border-top: 1px solid var(--line-soft);
+}
+.pkg-row td { background: var(--surface-2); font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 600; letter-spacing: .04em; }
+.pkg-row:hover td { background: var(--surface-2); }
+
+/* --------------------------------------------------------- diagram */
+.diagram {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px;
+  overflow-x: auto;
+  margin: 0 0 24px;
+  box-shadow: var(--shadow);
+}
+.diagram pre {
+  border: 0; background: none; padding: 0; margin: 0; box-shadow: none;
+  font-size: 12.5px; line-height: 1.55; color: var(--text-2);
+}
+.legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line-soft); font-size: 12.5px; color: var(--text-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+
+/* --------------------------------------------------- code trace
+   One hop through the pipeline: what came in, the code that ran,
+   what went out. The data shapes are the point -- the code is the
+   evidence for them. */
+.hop {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  margin: 0 0 18px;
+  overflow: hidden;
+}
+.hop-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px 18px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line-soft);
+}
+.hop-n {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.hop-head h4 { margin: 0; font-size: 15px; }
+.hop-head .path {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-left: auto;
+}
+.hop-body { padding: 16px 18px; }
+.hop-body > p { font-size: 15px; margin: 0 0 12px; }
+.hop-body > p:last-child { margin-bottom: 0; }
+.hop-body pre { margin-bottom: 12px; }
+
+/* data in / data out */
+.io {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1px;
+  background: var(--line-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+@media (min-width: 700px) { .io { grid-template-columns: 1fr 1fr; } }
+.io-cell { background: var(--surface); padding: 10px 13px; min-width: 0; }
+.io-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 5px;
+}
+.io-cell code {
+  display: block;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-2);
+}
+.io-in  { border-left: 2px solid var(--text-3); }
+.io-out { border-left: 2px solid var(--good); }
+
+.shapeflow {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  overflow-x: auto;
+  margin: 0 0 26px;
+  box-shadow: var(--shadow);
+}
+.shapeflow pre {
+  border: 0; background: none; padding: 0; margin: 0; box-shadow: none;
+  font-size: 12.5px; line-height: 1.6; color: var(--text-2);
+}
+
+/* --------------------------------------------------------- q&a */
+.qa { border-top: 1px solid var(--line); padding: 20px 0; }
+.qa:last-of-type { border-bottom: 1px solid var(--line); }
+.q {
+  font-family: "Bricolage Grotesque", sans-serif;
+  font-weight: 700;
+  font-size: 17px;
+  margin: 0 0 10px;
+}
+.qa p { margin-bottom: 12px; }
+.qa p:last-child { margin-bottom: 0; }
+
+/* --------------------------------------------------------- misc */
+hr { border: 0; border-top: 1px solid var(--line); margin: 56px 0 0; }
+.footnote { font-size: 14px; color: var(--text-3); }
+.two-col { display: grid; gap: 20px; grid-template-columns: minmax(0,1fr); }
+@media (min-width: 760px) { .two-col { grid-template-columns: 1fr 1fr; } }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+}
+.card h4 { margin-top: 0; }
+.card p:last-child { margin-bottom: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+/* --------------------------------------------------- theme toggle
+   Only present in the standalone file: the artifact host supplies its own.
+   Fixed rather than in flow so it does not disturb the reading column. */
+.theme-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  box-shadow: var(--shadow);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.theme-toggle:hover { color: var(--text); border-color: var(--text-3); }
+@media print { .theme-toggle { display: none; } }
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" type="button" id="themeToggle" aria-live="polite">
+  <span id="themeLabel">Auto</span>
+</button>
+
+<div class="shell">
+
+<nav class="toc" aria-label="Contents">
+  <p class="toc-label">Orientation</p>
+  <a href="#what">What this system is</a>
+  <a href="#storage">Where a ticket lives</a>
+  <p class="toc-label">The two paths</p>
+  <a href="#write">Write path — indexing</a>
+  <a href="#read">Read path — retrieval</a>
+  <a href="#retrieval">Retrieval, in depth</a>
+  <a href="#trace">Code trace, hop by hop</a>
+  <p class="toc-label">The agents</p>
+  <a href="#analysis">Analysis agent</a>
+  <a href="#chat">Chat assistant</a>
+  <a href="#guardrails">Guardrails</a>
+  <p class="toc-label">Rigour</p>
+  <a href="#eval">Evaluation</a>
+  <a href="#patterns">Patterns used</a>
+  <p class="toc-label">Reference</p>
+  <a href="#files">Every file</a>
+  <a href="#failures">What went wrong</a>
+  <a href="#interview">Interview questions</a>
+</nav>
+
+<main>
+
+<header class="masthead">
+  <p class="eyebrow">OS Tracker · intelligence module</p>
+  <h1>Anatomy of a Hybrid RAG System</h1>
+  <p class="standfirst">
+    A complete walk through the AI layer of a multi-tenant bug tracker — how a support
+    ticket becomes a vector, how two different searches disagree and get reconciled, and
+    how an agent reasons over the result without ever being trusted.
+  </p>
+
+  <dl class="vitals">
+    <div class="vital"><dt>Module</dt><dd>12,621 loc</dd></div>
+    <div class="vital"><dt>Embedding</dt><dd>1024-d</dd></div>
+    <div class="vital"><dt>Retrievers</dt><dd>2</dd></div>
+    <div class="vital"><dt>Read tools</dt><dd>7</dd></div>
+    <div class="vital"><dt>Write tools</dt><dd>0</dd></div>
+    <div class="vital"><dt>RLS tables</dt><dd>13</dd></div>
+  </dl>
+</header>
+
+<!-- ==================================================== WHAT ==== -->
+<section id="what">
+  <p class="kicker">Orientation</p>
+  <h2>What this system actually is</h2>
+
+  <p class="lead">
+    Keka's support team raises bugs that HRMS customers report. Six engineering teams —
+    Platform, CoreHR, Payroll, UI, Performance, Workforce — resolve them. The AI layer
+    exists to answer three questions a human would otherwise answer by memory.
+  </p>
+
+  <div class="two-col">
+    <div class="card">
+      <h4>Has this been reported before?</h4>
+      <p>The <strong>similar issues</strong> panel on a ticket. Hybrid retrieval plus an
+      optional model judgement. This is the RAG core.</p>
+    </div>
+    <div class="card">
+      <h4>What is this bug, and what next?</h4>
+      <p>The <strong>analysis agent</strong>. An unattended ReAct loop that gathers
+      evidence with read-only tools and writes a triage report.</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:20px">
+    <h4>Anything I can ask in words</h4>
+    <p>The <strong>chat assistant</strong>. Multi-turn, tool-using, conversation
+    persisted in Postgres, retained 30 days.</p>
+  </div>
+
+  <h3>The one sentence that explains the architecture</h3>
+  <p>
+    <strong>Postgres is the truth. Everything else is a derived index you can throw
+    away.</strong> That has been proven, not asserted — the entire vector store was
+    deleted and rebuilt from Postgres in 11.8 seconds during development.
+  </p>
+  <p>
+    Every design decision downstream follows from it. The vector database holds ids,
+    vectors and filter metadata, and <em>no ticket text</em>. Sensitive content lives in
+    exactly one place, so there is one store to secure, back up, and satisfy a deletion
+    request against.
+  </p>
+
+  <div class="note note-key">
+    <span class="note-title">The colour code on this page</span>
+    <p>
+      <span class="chip chip-sem">semantic</span> marks the meaning-based retriever,
+      <span class="chip chip-lex">lexical</span> the literal-token one,
+      <span class="chip chip-llm">llm call</span> any stage that costs money, and
+      <span class="chip chip-free">free</span> any stage that does not. Most of the
+      pipeline is free, and that is deliberate.
+    </p>
+  </div>
+</section>
+
+<!-- ==================================================== STORAGE ==== -->
+<section id="storage">
+  <p class="kicker">Foundations</p>
+  <h2>Where a ticket lives, and who can see it</h2>
+
+  <p>
+    A ticket is a row in the <code>tickets</code> table in PostgreSQL 18. Not a document,
+    not a file — a row with typed columns, a foreign key to a tenant, and a soft-delete
+    timestamp. That single fact removes an entire category of RAG problem: no parsers, no
+    OCR, no encoding guesses, no loader picking up a temp file.
+  </p>
+
+  <h3>Tenant isolation is enforced by the database</h3>
+  <p>
+    Thirteen tenant-scoped tables run <strong>row-level security</strong> with
+    <code>FORCE ROW LEVEL SECURITY</code>. Two database roles exist:
+    <code>os_migrate</code> owns the schema and has <code>BYPASSRLS</code>;
+    <code>os_app</code> owns nothing and cannot bypass. The application connects as
+    <code>os_app</code>.
+  </p>
+  <p>
+    Every request opens a session, sets <code>app.tenant_id</code>, and the database
+    filters every query from then on. A developer who forgets a
+    <code>WHERE tenant_id = ?</code> is caught by Postgres, not by code review.
+  </p>
+
+  <div class="note note-broke">
+    <span class="note-title">The trap this created</span>
+    <p>
+      <code>set_config(..., is_local =&gt; true)</code> is <strong>transaction-scoped</strong>.
+      Commit mid-run and the tenant scope silently vanishes. The analysis agent commits as
+      it goes, so two unrelated-looking symptoms appeared at once: tools reported "ticket
+      not found", and step inserts violated RLS. One cause. The fix is a helper,
+      <code>commit_preserving_scope()</code>, that re-applies the scope after every commit.
+    </p>
+  </div>
+
+  <h3>What the AI layer adds to the schema</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Table</th><th>Holds</th><th>Why it exists</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">ticket_vector_state</td><td>ticket id, model, dimension, source hash</td><td>Answers "which tickets are missing vectors?" without reading the whole vector store</td></tr>
+        <tr><td class="mono">ai_jobs</td><td>tenant, kind, payload, status, attempts</td><td>The transactional outbox — work queued in the same transaction as the change that caused it</td></tr>
+        <tr><td class="mono">ai_suggestions</td><td>relation, confidence, reason, payload</td><td>What the model claimed, and whether a human agreed. The accuracy record</td></tr>
+        <tr><td class="mono">ai_analysis_runs / _steps</td><td>status, report, per-turn trace</td><td>The agent's audit trail — every tool call it made, in order</td></tr>
+        <tr><td class="mono">ai_conversations / _messages</td><td>transcript, retention date</td><td>Chat history, expired after 30 days</td></tr>
+        <tr><td class="mono">langgraph.*</td><td>checkpoints</td><td>LangGraph's own schema, excluded from Alembic autogenerate so it cannot be dropped</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="footnote">
+    Note what is <em>absent</em>: no table stores ticket text for AI purposes. The text is
+    already in <code>tickets</code>, and duplicating it would create a second place to
+    secure.
+  </p>
+</section>
+
+<!-- ==================================================== WRITE ==== -->
+<section id="write">
+  <p class="kicker">Path one of two</p>
+  <h2>The write path: how a ticket becomes a vector</h2>
+
+  <p class="lead">
+    Nothing here is synchronous with the user's request. A support agent filing a bug at
+    3am must never wait on a GPU, and must never fail because one is down.
+  </p>
+
+  <div class="diagram bleed">
+<pre>
+  user clicks "Create Ticket"
+          │
+          ▼
+  ┌───────────────────────────────────────────┐
+  │  ONE POSTGRES TRANSACTION                 │
+  │    INSERT INTO tickets ...                │
+  │    emit(TICKET_CREATED)                   │
+  │      └─ INSERT INTO ai_jobs ...           │   ← the outbox row
+  └───────────────────────────────────────────┘
+          │  commit — both rows, or neither
+          ▼
+  response returns.  User is not waiting.
+
+          ⋯ up to 3 seconds later ⋯
+
+  ┌───────────────────────────────────────────┐
+  │  WORKER PROCESS  (separate, restartable)  │
+  │    claim jobs  FOR UPDATE SKIP LOCKED     │
+  │      ↓                                    │
+  │    ingestion  → load ticket + metadata    │
+  │      ↓                                    │
+  │    chunking   → assemble bounded text     │
+  │      ↓                                    │
+  │    hash       → already current? stop     │
+  │      ↓                                    │
+  │    embed      → 1024 floats  (Ollama)     │
+  │      ↓                                    │
+  │    upsert     → Pinecone namespace        │
+  │      ↓                                    │
+  │    record     → ticket_vector_state       │
+  └───────────────────────────────────────────┘
+</pre>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--text-3)"></span> no stage on this path blocks an HTTP request</span>
+    </div>
+  </div>
+
+  <div class="stages">
+    <div class="stage">
+      <div class="stage-n">01</div>
+      <div>
+        <div class="stage-h"><h4>Emit, don't call</h4><span class="stage-file">core/events.py · subscribers.py</span><span class="chip chip-free">free</span></div>
+        <p>
+          The <code>tickets</code> module does not know the AI layer exists. It emits a
+          domain event; <code>intelligence</code> subscribed at startup. The handler
+          receives <em>the emitter's own session</em>, so the outbox row commits or rolls
+          back with the ticket itself.
+        </p>
+        <p>
+          Handler exceptions are logged and swallowed. A misconfigured AI layer must never
+          block ticket creation — reconciliation picks up what was missed.
+        </p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">02</div>
+      <div>
+        <div class="stage-h"><h4>Claim work safely</h4><span class="stage-file">jobs/worker.py · repository.py</span><span class="chip chip-free">free</span></div>
+        <p>
+          <code>SELECT ... FOR UPDATE SKIP LOCKED</code> lets N workers run with no broker —
+          contending workers step over locked rows instead of blocking. The claim commits
+          <em>before</em> slow work starts, so holding it never blocks anyone else.
+        </p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">03</div>
+      <div>
+        <div class="stage-h"><h4>Ingest</h4><span class="stage-file">ingestion/ticket_source.py</span><span class="chip chip-free">free</span></div>
+        <p>
+          Load the ticket (always excluding soft-deleted rows — one definition, so no
+          caller can forget it) and build the metadata stored beside the vector:
+          <code>ticket_number</code>, <code>team_id</code>, <code>client_id</code>,
+          <code>status</code>, <code>priority</code>, <code>created_at</code>,
+          <code>source_hash</code>.
+        </p>
+        <p>
+          Metadata is chosen for <em>filtering</em>, not display. Adding a field later only
+          affects tickets embedded afterwards, so the list is chosen for what a search
+          might one day need.
+        </p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">04</div>
+      <div>
+        <div class="stage-h"><h4>Chunk — by deciding not to</h4><span class="stage-file">chunking/policy.py</span><span class="chip chip-free">free</span></div>
+        <p>
+          Chunking exists to fit long documents into a context window and to give retrieval
+          a unit smaller than the whole document. Neither applies: a ticket is ~1–2 KB and
+          is already the unit a human wants back. Returning "paragraph three of OS-1042"
+          would help nobody.
+        </p>
+        <p>
+          What survives is <strong>bounding</strong>. Title 300 chars, description 2000,
+          steps 1000 — title first, so if truncation happens the title is what survives.
+        </p>
+        <p>
+          Deliberately excluded: <strong>comments</strong> (they change constantly, so the
+          vector never settles), <strong>resolution notes</strong> (written after the bug is
+          understood — including them leaks the outcome into a triage-time signal and
+          inflates offline scores), and <strong>client name</strong> (would cluster tickets
+          by customer instead of by problem).
+        </p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">05</div>
+      <div>
+        <div class="stage-h"><h4>Hash, and usually stop</h4><span class="stage-file">embeddings/service.py</span><span class="chip chip-free">free</span></div>
+        <p>
+          <code>sha256(model | instruction_version | normalised_text)</code>. If the stored
+          hash matches, the job ends here having cost one indexed query.
+        </p>
+        <p>
+          Folding the <em>model name</em> into the hash is the important part: changing the
+          embedding model invalidates every stored vector automatically. That is what made
+          the 4096→1024 migration a one-line config change rather than a data migration.
+        </p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">06</div>
+      <div>
+        <div class="stage-h"><h4>Embed</h4><span class="stage-file">embeddings/embedder.py</span><span class="chip chip-sem">semantic</span></div>
+        <p>
+          <code>qwen3-embedding:0.6b</code> via local Ollama, 1024 dimensions. The dimension
+          is <em>probed from the model at startup</em>, never configured — a hardcoded wrong
+          value means rebuilding the index, so the model is the authority.
+        </p>
+        <p>
+          Qwen3-Embedding is <strong>asymmetric</strong>: queries take a task-instruction
+          prefix, documents do not. The port exposes <code>embed_query</code> and
+          <code>embed_documents</code> as separate methods precisely so this cannot be got
+          wrong silently — using the wrong one produces no error, just measurably worse recall.
+        </p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">07</div>
+      <div>
+        <div class="stage-h"><h4>Store</h4><span class="stage-file">vectordb/pinecone_store.py</span><span class="chip chip-free">free</span></div>
+        <p>
+          Pinecone serverless, one index, <strong>one namespace per tenant</strong>. A query
+          names exactly one namespace and cannot read across them — there is no filter to
+          forget. The namespace name derives from the authenticated tenant id and never
+          accepts client input.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Why 1024 and not 4096</h3>
+  <p>
+    The build started on the 8B Qwen3 model at 4096 dimensions. That was never a decision —
+    it was the default the model emitted. At a million tickets it is the difference between
+    16 GB of vectors and 4 GB, plus four times the index memory and four times the distance
+    computation per comparison.
+  </p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Route to 1024</th><th>Trade</th></tr></thead>
+      <tbody>
+        <tr><td><strong>0.6B tag</strong> — chosen</td><td>Native 1024. Smaller and faster on the write path. Lower benchmark scores than 8B</td></tr>
+        <tr><td>Truncate 8B (Matryoshka)</td><td>Keeps the stronger model, but pays full 8B inference then discards three quarters of the output</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    The 0.6B won on a design argument as much as a performance one: the dimension is probed,
+    so a native model kept that intact as one config line. Truncation would have added a
+    slice-and-renormalise step plus a dimension setting — reintroducing exactly the
+    hardcoded value the probe exists to eliminate.
+  </p>
+
+  <h3>Two stores means drift, so drift is measured</h3>
+  <p>
+    Writing Postgres and Pinecone is a dual write. The outbox makes it recoverable rather
+    than atomic; <code>ai_backfill --reconcile</code> makes it visible. It diffs both
+    directions and reports <em>missing vectors</em>, <em>orphaned vectors</em>,
+    <em>unrecorded in pg</em>, <em>lost from store</em>.
+  </p>
+  <div class="note note-why">
+    <span class="note-title">The honest cost of choosing a separate vector database</span>
+    <p>
+      <code>pgvector</code> would delete this entire problem — vectors inside the database
+      that already enforces RLS, one store, transactional consistency. It is the better
+      engineering choice. A managed vector store was chosen deliberately for the learning
+      goal, and the cost is written down rather than hidden: a dual write, an outbox, and a
+      reconciliation job.
+    </p>
+  </div>
+</section>
+
+<!-- ==================================================== READ ==== -->
+<section id="read">
+  <p class="kicker">Path two of two</p>
+  <h2>The read path: opening a ticket</h2>
+
+  <p class="lead">
+    <code>GET /tickets/{ref}/similar</code> runs a <strong>LangGraph state machine</strong>,
+    not a function. The reason is the cycle: this is <em>corrective</em> RAG — it grades its
+    own retrieval and can go back for more.
+  </p>
+
+  <div class="diagram bleed">
+<pre>
+                    START
+                      │
+                   [guard]              bound · redact · screen        free
+                      │
+              blocked?├──── yes ─────────────────► finish
+                      │no
+                      ▼
+                [references]            "same as OS-142"               free
+                      │
+                [identifiers]           ERR-40001 → pin exact match    free
+                      │
+                   [embed]              one local embedding call       semantic
+                      │
+          ┌───────────┴───────────┐     same superstep = concurrent
+          ▼                       ▼
+  [retrieve_semantic]     [retrieve_lexical]      vector ∥ ts_rank_cd
+          └───────────┬───────────┘
+                      ▼
+                   [fuse]               cascade, not RRF               free
+                      │
+                   [grade]              two counts, no model           free
+                      │
+        ┌─────────────┼─────────────┐
+        ▼             ▼             ▼
+    [rewrite]     [hydrate]      finish
+        │             │
+        │         [rerank]                                            llm
+        │             │
+        └──► back to embed ─┘                                         THE CYCLE
+</pre>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--semantic)"></span> vector search</span>
+      <span><span class="swatch" style="background:var(--lexical)"></span> keyword search</span>
+      <span><span class="swatch" style="background:var(--model)"></span> costs an LLM call</span>
+      <span><span class="swatch" style="background:var(--text-3)"></span> deterministic and free</span>
+    </div>
+  </div>
+
+  <h3>What each node does</h3>
+
+  <div class="stages">
+    <div class="stage">
+      <div class="stage-n">01</div>
+      <div>
+        <div class="stage-h"><h4>guard</h4><span class="stage-file">retrieval/hydrate.py · security/input.py</span><span class="chip chip-free">free</span></div>
+        <p>
+          Bound to 8000 characters, redact anything resembling PII or a credential, screen
+          for injection markers. It is the <em>first node in the graph</em>, so no later
+          node has to wonder whether its text has been through this.
+        </p>
+        <p>
+          That is the argument for a guardrail as a node rather than a helper: the topology
+          makes it unskippable. If it blocks, a conditional edge jumps straight to
+          <code>finish</code> — control flow lives in edges, which is what keeps the
+          execution trace honest about which nodes actually ran.
+        </p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">02</div>
+      <div>
+        <div class="stage-h"><h4>references &amp; identifiers</h4><span class="stage-file">retrieval/exact.py · query/parsing.py</span><span class="chip chip-free">free</span></div>
+        <p>
+          <code>OS-1042</code> and <code>ERR-40001</code> are <strong>facts, not hints</strong>.
+          They are looked up with AND semantics and <em>pinned above the ranking</em>.
+        </p>
+        <p>
+          Pinned only when the lookup matches exactly one ticket. An earlier version pinned
+          anything matching up to three, and a shared <code>/api/v3/...</code> path cost a
+          duplicate query its rank-1 result.
+        </p>
+        <p>Sequential, not parallel — both write <code>pinned</code>, and the second must see what the first added.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">03</div>
+      <div>
+        <div class="stage-h"><h4>embed</h4><span class="stage-file">embeddings/embed_node.py</span><span class="chip chip-sem">semantic</span></div>
+        <p>
+          Embeds the query text <em>live</em>. This is the subtlety worth knowing: the read
+          path never looks up the ticket's stored vector. A ticket created one second ago,
+          not yet embedded, still gets working similar-issue results — because the ticket
+          you are looking at is the <em>query</em>, and the stored vectors are the
+          <em>corpus</em>.
+        </p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">04</div>
+      <div>
+        <div class="stage-h"><h4>retrieve, twice, concurrently</h4><span class="stage-file">retrieval/retrieve.py</span><span class="chip chip-sem">semantic</span><span class="chip chip-lex">lexical</span></div>
+        <p>
+          Two nodes in the same LangGraph superstep, so they run concurrently and their
+          writes merge through a reducer keyed by source. Two nodes rather than one because
+          they fail independently and the ablation script disables one without touching the
+          other.
+        </p>
+        <p>
+          If the query vector is missing, semantic returns an <em>empty ranking rather than
+          raising</em> — a degraded result beats no result on a page a human is already reading.
+        </p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">05</div>
+      <div>
+        <div class="stage-h"><h4>fuse</h4><span class="stage-file">retrieval/fuse.py · retrieval/fusion.py</span><span class="chip chip-free">free</span></div>
+        <p>
+          A <strong>cascade</strong>: the leading retriever's order, with the other's finds
+          appended below. See the next section for why this beat Reciprocal Rank Fusion.
+        </p>
+        <p>
+          The score floor is applied <em>after</em> fusion, not per retriever. A document
+          ranked 40th by both is a better candidate than one ranked 8th by one, and a
+          per-retriever cutoff would discard it before fusion ever saw the agreement.
+        </p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">06</div>
+      <div>
+        <div class="stage-h"><h4>grade — the node that makes this corrective</h4><span class="stage-file">retrieval/grade.py</span><span class="chip chip-free">free</span></div>
+        <p>
+          <strong>No LLM here, deliberately.</strong> Asking a model "are these results
+          good?" costs a call and a second of latency to answer a question two counts
+          already answer: how many candidates cleared the floor, and whether the retrievers
+          agreed.
+        </p>
+        <div class="tablewrap" style="margin-top:12px">
+          <table>
+            <thead><tr><th>Condition</th><th>Grade</th><th>Route</th></tr></thead>
+            <tbody>
+              <tr><td>A pinned exact match exists</td><td class="mono">good</td><td>rerank — already certain</td></tr>
+              <tr><td>≥3 candidates</td><td class="mono">good</td><td>rerank</td></tr>
+              <tr><td>Too few, rewrites remaining</td><td class="mono">weak</td><td><strong>rewrite → back to embed</strong></td></tr>
+              <tr><td>Too few, rewrites exhausted</td><td class="mono">empty</td><td>finish — "no similar issues" is a real answer</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">07</div>
+      <div>
+        <div class="stage-h"><h4>hydrate → rerank</h4><span class="stage-file">retrieval/hydrate.py · rerank/reranker.py</span><span class="chip chip-llm">llm call</span></div>
+        <p>
+          Hydrate loads candidate text from Postgres — never from vector-store metadata.
+          Rerank then classifies each candidate as
+          <code>duplicate</code> / <code>recurring</code> / <code>related</code> /
+          <code>unrelated</code>, with a confidence, and drops anything at or below 0.55.
+        </p>
+        <p>
+          The <code>duplicate</code> vs <code>recurring</code> distinction is the one that
+          matters commercially: one means "someone is already working on this", the other
+          means "this was fixed and has come back". They route to entirely different responses.
+        </p>
+        <p>Optional. With reranking off, the graph returns the fused order unchanged — correct degradation, not failure.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>The cycle, and why it cannot run away</h3>
+  <p>
+    <code>rewrite</code> routes back to <code>embed</code>, not to <code>guard</code>.
+    Re-guarding a model-generated rewrite would redact labels the model was already given,
+    turning <code>[EMAIL]</code> into <code>[[EMAIL]]</code> on the second pass.
+  </p>
+  <p>Two independent limits guard the same loop:</p>
+  <ul>
+    <li><code>max_rewrites = 2</code> — the business rule, checked in <code>grade</code>, held in state. Termination never depends on a model deciding to stop.</li>
+    <li><code>recursion_limit = 40</code> — LangGraph's own backstop, counted in supersteps. The safety net <em>for the business rule being wrong</em>.</li>
+  </ul>
+
+  <div class="note note-key">
+    <span class="note-title">Cost is in the topology, not a footnote</span>
+    <p>
+      Blocked input: <strong>0</strong> LLM calls. Good retrieval, rerank off:
+      <strong>0</strong>. Good retrieval, rerank on: <strong>1</strong>. Worst case with
+      rewrites: <strong>3</strong>. On a 500-request daily free quota those numbers are the
+      design.
+    </p>
+  </div>
+</section>
+
+<!-- ==================================================== RETRIEVAL ==== -->
+<section id="retrieval">
+  <p class="kicker">The core</p>
+  <h2>Retrieval, in depth</h2>
+
+  <p class="lead">
+    This is the part of the system with real measurements behind it, and the part most
+    worth being able to defend.
+  </p>
+
+  <h3>Two retrievers that are good at different things</h3>
+
+  <div class="two-col">
+    <div class="card">
+      <h4><span class="chip chip-sem">semantic</span> Vector search</h4>
+      <p>
+        Cosine similarity in Pinecone. Finds paraphrases: <em>"salary slip shows no data for
+        contract staff"</em> against <em>"Payslip PDF generates blank for contractors"</em>
+        shares almost no words.
+      </p>
+      <p class="footnote">Weak at literal tokens — an embedding flattens <code>80C</code> and <code>ECR</code> into "something about tax".</p>
+    </div>
+    <div class="card">
+      <h4><span class="chip chip-lex">lexical</span> Postgres full-text</h4>
+      <p>
+        <code>ts_rank_cd</code> over a GIN-indexed generated column. Catches exactly what
+        embeddings are worst at: error codes, stack-trace fragments, rare product names.
+      </p>
+      <p class="footnote">Free — the column and index already existed for the ticket list's search box.</p>
+    </div>
+  </div>
+
+  <h4>The most important five lines in the module</h4>
+  <span class="filepath">app/modules/intelligence/lexical/postgres_fts.py</span>
+<pre><code>(
+    SELECT string_agg(quote_literal(lexeme), ' | ')
+    FROM unnest(tsvector_to_array(to_tsvector('english', :query_text))) AS lexeme
+)::tsquery</code></pre>
+  <p>Two properties, both load-bearing:</p>
+  <ul>
+    <li><strong>One tokenizer.</strong> The lexemes come from the same analyzer that built
+    <code>search_vector</code>, so query and index cannot disagree about what a token is.</li>
+    <li><strong>OR, not AND.</strong> <code>plainto_tsquery</code> joins terms with
+    <code>&amp;</code>, which is right for a search box and wrong here — the query is a whole
+    bug description, so requiring every term matches nothing. Rank by <em>how much</em>
+    overlaps rather than filtering on total overlap.</li>
+  </ul>
+
+  <div class="note note-broke">
+    <span class="note-title">The bug that made keyword search look useless</span>
+    <p>
+      Postgres tokenizes <code>ERR-40001</code> as <code>'err'</code> + <code>'-40001'</code> —
+      the hyphen stays with the number. The Python-side query builder stripped hyphens and
+      searched for <code>40001</code>, which appears in no document. <strong>Every
+      error-code lookup had been silently returning nothing.</strong> It read as "keyword
+      search is just weak at identifiers"; it was returning zero rows.
+    </p>
+    <p>
+      Fixed by building the tsquery in SQL, so query and index are analysed by the same
+      analyzer and <em>cannot</em> disagree. Recall@5 on identifier queries went from
+      0.083 to 0.625; recall@20 from 0.583 to 1.000.
+    </p>
+  </div>
+
+  <h3>Why the fusion is a cascade and not RRF</h3>
+  <p>
+    Reciprocal Rank Fusion is the textbook answer. It was implemented, measured, and
+    <strong>lost to its own inputs on both query families</strong>.
+  </p>
+
+  <div class="tablewrap wide">
+    <table>
+      <caption>100-ticket corpus, no verbatim duplicates. 36 paraphrase queries, 24 identifier queries. All configurations unaided (exact probe off).</caption>
+      <thead>
+        <tr><th>Configuration</th><th class="num">dup R@5</th><th class="num">dup R@20</th><th class="num">ident R@20</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="chip chip-sem">semantic</span> alone</td><td class="num"><strong>1.000</strong></td><td class="num"><strong>1.000</strong></td><td class="num">0.583</td></tr>
+        <tr><td><span class="chip chip-lex">lexical</span> alone</td><td class="num">0.931</td><td class="num">0.986</td><td class="num"><strong>1.000</strong></td></tr>
+        <tr><td>RRF, equal weight</td><td class="num">0.986</td><td class="num">1.000</td><td class="num">0.792</td></tr>
+        <tr><td><strong>cascade (shipped)</strong></td><td class="num"><strong>1.000</strong></td><td class="num"><strong>1.000</strong></td><td class="num">0.583 → <strong>1.000</strong> with probe</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    RRF's whole value is its <strong>agreement bonus</strong> — a document both retrievers
+    ranked reasonably beats one a single retriever loved. That bonus is also its failure
+    mode when the retrievers are of unequal quality for the query at hand, and on this
+    corpus they always are, in whichever direction the query points:
+  </p>
+<pre><code>1/(60+35) + 1/(60+2)  =  0.0266   >   1/(60+1)  =  0.0164
+        weak retriever's rank 2          strong retriever's rank 1</code></pre>
+
+  <p>And weighting the secondary down does not fix it — that is provable. Require that an agreement bonus can never lift a document above the leader's own top hit:</p>
+<pre><code>1/(K + 2) + w/(K + 1)  ≤  1/(K + 1)
+                    w  ≤  1/(K + 2)  =  0.016   at K = 60</code></pre>
+  <p>
+    At any weight small enough to be safe, the secondary retriever contributes nothing but
+    the ordering of documents <em>below</em> the leader's list. "Keep the agreement bonus"
+    and "never rank worse than the better retriever" are not simultaneously satisfiable.
+    The choice has to be made, not tuned around.
+  </p>
+
+  <h4>What ships instead</h4>
+  <p>The leader's order, with the other's finds appended below it. Guarantees, at any cutoff up to the leader's depth:</p>
+  <ul>
+    <li>the first <em>n</em> results are exactly the leader's first <em>n</em> — never worse than the leader alone;</li>
+    <li>documents only the secondary found are still present further down;</li>
+    <li><code>agreed</code> is still populated, so the reranker and the UI keep the cross-retriever agreement signal even though ordering no longer uses it.</li>
+  </ul>
+
+  <div class="note note-why">
+    <span class="note-title">A dependency worth naming</span>
+    <p>
+      The cascade is the right fusion <em>given the probe</em>, not on its own merits.
+      Unaided on identifier queries the cascade scores 0.583 and RRF scores 0.792 — RRF's
+      agreement bonus pulls keyword hits into the top 20 while the cascade appends them
+      below the depth cutoff. <strong>RRF is genuinely the better fusion for that family.</strong>
+    </p>
+    <p>
+      It loses anyway, because the exact probe answers identifier queries deterministically
+      before ranking runs, and paying RRF's head-precision cost on every paraphrase query to
+      buy a rescue that never fires is a bad trade. Remove the probe and the decision must be
+      re-made — which is why <code>rrf, no probe</code> is a permanent row in the ablation.
+    </p>
+  </div>
+
+  <h3>The score shown to a human is not the score used for ranking</h3>
+  <p>
+    Fusion ranks by <em>position</em>, so every fused score lands near <code>0.0164</code>
+    regardless of how alike two tickets are. Displaying that as a "match score" would look
+    like a measurement and mean nothing. So the raw cosine similarity is carried alongside,
+    display-only, and <code>RankedList</code> still discards scores for ranking purposes.
+  </p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Result</th><th class="num">fused score</th><th class="num">cosine</th><th>Shown as</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">OS-18</td><td class="num">0.0164</td><td class="num">0.889</td><td>89% · very close</td></tr>
+        <tr><td class="mono">OS-19</td><td class="num">0.0161</td><td class="num">0.829</td><td>83% · very close</td></tr>
+        <tr><td class="mono">OS-3</td><td class="num">0.0159</td><td class="num">0.444</td><td>44% · distant</td></tr>
+      </tbody>
+      <caption>The fused column is nearly flat. The cosine column is what a reader needs.</caption>
+    </table>
+  </div>
+  <p class="footnote">
+    <code>null</code>, not <code>0</code>, when only keyword search found a ticket — "we did
+    not compare vectors" is a different claim from "the meanings are unrelated".
+  </p>
+</section>
+
+<!-- ==================================================== TRACE ==== -->
+<section id="trace">
+  <p class="kicker">Follow the data</p>
+  <h2>One request, traced through every file</h2>
+
+  <p class="lead">
+    The sections above explain the shape. This one is the receipts: the actual code at
+    each hop, what data arrives, and what leaves. Two journeys — a ticket becoming a
+    vector, and a vector becoming a panel.
+  </p>
+
+  <h3>Journey one — a ticket becomes a vector</h3>
+
+  <div class="shapeflow bleed">
+<pre>
+   Ticket row            "Full and final settlement omits the notice-period…"
+      │                  + description + steps_to_reproduce
+      │
+      ▼  chunking/policy.py
+   str                   one string, 1,115 chars, blank-line separated
+      │
+      ▼  embeddings/service.py
+   sha256 hash           "53be27d04d0d4c63…"   ← unchanged? stop here
+      │
+      ▼  embeddings/embedder.py            POST /api/embed
+   list[float]           [0.0268, -0.0332, 0.0095, … ]  1024 values
+      │
+      ▼  vectordb/pinecone_store.py        upsert
+   {id, values, metadata}
+      │
+      ▼
+   Pinecone namespace    tenant_01a05489439d716dbc78ab0867838221
+</pre>
+  </div>
+
+  <div class="hop">
+    <div class="hop-head">
+      <span class="hop-n">01</span><h4>The ticket module emits, and knows nothing more</h4>
+      <span class="path">modules/tickets/service.py</span>
+    </div>
+    <div class="hop-body">
+<pre><code>await emit(
+    DomainEvent.TICKET_CREATED,
+    self._session,          # the SAME session the ticket was written in
+    self._tenant_id,
+    ticket.id,
+)</code></pre>
+      <div class="io">
+        <div class="io-cell io-in"><div class="io-label">in</div><code>a Ticket row, flushed but not yet committed</code></div>
+        <div class="io-cell io-out"><div class="io-label">out</div><code>nothing returned — a subscriber writes a row</code></div>
+      </div>
+      <p>
+        Passing <em>the emitter's own session</em> is what makes this atomic. Whatever the
+        handler writes commits with the ticket or rolls back with it.
+      </p>
+    </div>
+  </div>
+
+  <div class="hop">
+    <div class="hop-head">
+      <span class="hop-n">02</span><h4>The AI layer queues work — no model called</h4>
+      <span class="path">intelligence/subscribers.py</span>
+    </div>
+    <div class="hop-body">
+<pre><code>async def _enqueue_embed(ctx: EventContext) -> None:
+    if not (settings.AI_ENABLED and settings.AI_SIMILARITY_ENABLED):
+        return
+    if not settings.AI_AUTO_EMBED_ON_WRITE:      # currently False
+        return
+    await AiJobRepository(ctx.session).enqueue(
+        tenant_id=ctx.tenant_id,
+        kind=AiJobKind.EMBED_TICKET,
+        payload={"ticket_id": str(ctx.entity_id)},
+    )</code></pre>
+      <div class="io">
+        <div class="io-cell io-in"><div class="io-label">in</div><code>EventContext(session, tenant_id, entity_id)</code></div>
+        <div class="io-cell io-out"><div class="io-label">out</div><code>ai_jobs row:
+{ kind: "embed_ticket",
+  payload: {"ticket_id": "01a07058-…"},
+  status: "queued" }</code></div>
+      </div>
+      <p>
+        With <code>AI_AUTO_EMBED_ON_WRITE</code> off — the current setting — this returns
+        early and nothing is queued. The embedding console is then the only thing that
+        creates vectors.
+      </p>
+    </div>
+  </div>
+
+  <div class="hop">
+    <div class="hop-head">
+      <span class="hop-n">03</span><h4>A worker claims the job safely</h4>
+      <span class="path">intelligence/repository.py</span>
+    </div>
+    <div class="hop-body">
+<pre><code>SELECT id FROM ai_jobs
+WHERE status = 'queued' AND scheduled_at &lt;= now()
+ORDER BY scheduled_at, created_at
+LIMIT :limit
+FOR UPDATE SKIP LOCKED          -- other workers step OVER locked rows</code></pre>
+      <div class="io">
+        <div class="io-cell io-in"><div class="io-label">in</div><code>worker id, batch limit (10)</code></div>
+        <div class="io-cell io-out"><div class="io-label">out</div><code>[(job_id, tenant_id, kind, payload), …]</code></div>
+      </div>
+      <p>
+        The claim commits immediately, before any slow work starts. Run five workers and
+        none of them blocks another — no broker required.
+      </p>
+    </div>
+  </div>
+
+  <div class="hop">
+    <div class="hop-head">
+      <span class="hop-n">04</span><h4>Load the ticket</h4>
+      <span class="path">intelligence/ingestion/ticket_source.py</span>
+    </div>
+    <div class="hop-body">
+<pre><code>def indexable_tickets() -&gt; Select[tuple[Ticket]]:
+    # ONE definition of "belongs in the index", so no caller
+    # can forget the soft-delete filter.
+    return select(Ticket).where(Ticket.deleted_at.is_(None))
+
+
+async def load_ticket(session, ticket_id) -&gt; Ticket | None:
+    result = await session.execute(
+        indexable_tickets().where(Ticket.id == ticket_id)
+    )
+    return result.scalar_one_or_none()</code></pre>
+      <div class="io">
+        <div class="io-cell io-in"><div class="io-label">in</div><code>UUID("01a07058-6833-72a4-…")</code></div>
+        <div class="io-cell io-out"><div class="io-label">out</div><code>Ticket(title=…, description=…, status=…, team_id=…)</code></div>
+      </div>
+      <p>Returns <code>None</code> rather than raising — a ticket deleted between queueing and running is ordinary, not an error.</p>
+    </div>
+  </div>
+
+  <div class="hop">
+    <div class="hop-head">
+      <span class="hop-n">05</span><h4>Assemble the text that will be embedded</h4>
+      <span class="path">intelligence/chunking/policy.py</span>
+    </div>
+    <div class="hop-body">
+<pre><code>parts = [
+    (ticket.title or "")[: settings.EMBED_TITLE_MAX],           # 300
+    (ticket.description or "")[: settings.EMBED_DESCRIPTION_MAX],  # 2000
+    (ticket.steps_to_reproduce or "")[: settings.EMBED_STEPS_MAX], # 1000
+]
+return "\n\n".join(p.strip() for p in parts if p and p.strip())</code></pre>
+      <div class="io">
+        <div class="io-cell io-in"><div class="io-label">in</div><code>Ticket object</code></div>
+        <div class="io-cell io-out"><div class="io-label">out</div><code>"Full and final settlement omits the
+notice-period recovery for early exits
+
+When an employee resigns and serves less
+than their contractual notice period…"
+
+1,115 chars</code></div>
+      </div>
+      <p>
+        Title first, so if truncation bites, the title survives. Comments, resolution notes
+        and client name are excluded — see the write-path section for why each one would
+        poison the vector.
+      </p>
+    </div>
+  </div>
+
+  <div class="hop">
+    <div class="hop-head">
+      <span class="hop-n">06</span><h4>Hash — and usually stop right here</h4>
+      <span class="path">intelligence/embeddings/service.py</span>
+    </div>
+    <div class="hop-body">
+<pre><code>normalised = _WHITESPACE.sub(" ", text).strip().lower()
+payload = f"{model}|{instruction_version}|{normalised}"
+source_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+existing = await self._state.get(ticket.id, self._embeddings.model_name)
+if existing is not None and existing.source_hash == source_hash:
+    return None            # already current — costs one indexed query</code></pre>
+      <div class="io">
+        <div class="io-cell io-in"><div class="io-label">in</div><code>text + model name + instruction version</code></div>
+        <div class="io-cell io-out"><div class="io-label">out</div><code>"53be27d04d0d4c63319b99ef0fbf5e46…"
+or None → job ends, no embedding call</code></div>
+      </div>
+      <p>
+        Folding the <strong>model name</strong> into the hash is why switching
+        <code>qwen3-embedding</code> → <code>qwen3-embedding:0.6b</code> invalidated every
+        vector automatically. Nothing goes stale quietly.
+      </p>
+    </div>
+  </div>
+
+  <div class="hop">
+    <div class="hop-head">
+      <span class="hop-n">07</span><h4>The actual embedding call</h4>
+      <span class="path">intelligence/embeddings/embedder.py</span>
+    </div>
+    <div class="hop-body">
+<pre><code>async def _embed(self, inputs: list[str]) -&gt; list[list[float]]:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(300.0)) as client:
+        response = await client.post(
+            f"{self._base_url}/api/embed",             # localhost:11434
+            json={"model": self._model, "input": inputs},
+        )
+        response.raise_for_status()
+        payload = response.json()
+
+    vectors = payload.get("embeddings")
+    if not vectors or len(vectors) != len(inputs):
+        raise RuntimeError(f"Ollama returned {len(vectors or [])} for {len(inputs)}")
+    return [[float(v) for v in vector] for vector in vectors]</code></pre>
+      <div class="io">
+        <div class="io-cell io-in"><div class="io-label">in</div><code>["Full and final settlement omits…"]
+batched 16 at a time</code></div>
+        <div class="io-cell io-out"><div class="io-label">out</div><code>[[0.02679, -0.03322, 0.00953,
+  0.00916, 0.01228, … ]]
+
+1024 floats per input</code></div>
+      </div>
+      <p>
+        Documents go through <code>embed_documents</code>; a query goes through
+        <code>embed_query</code>, which prepends a task instruction. Two methods because the
+        model is asymmetric and using the wrong one produces <em>no error</em>, just worse recall.
+      </p>
+    </div>
+  </div>
+
+  <div class="hop">
+    <div class="hop-head">
+      <span class="hop-n">08</span><h4>Store — and note what the id is</h4>
+      <span class="path">intelligence/vectordb/pinecone_store.py</span>
+    </div>
+    <div class="hop-body">
+<pre><code>namespace = namespace_for(tenant_id)     # "tenant_01a05489439d716d…"
+
+vectors = [
+    {
+        "id": str(ticket_id),            # ← THE VECTOR ID *IS* THE TICKET ID
+        "values": vector,                #   1024 floats
+        "metadata": _clean_metadata(metadata),
+    }
+    for ticket_id, vector, metadata in items
+]
+self._require_index().upsert(vectors=vectors, namespace=namespace)</code></pre>
+      <div class="io">
+        <div class="io-cell io-in"><div class="io-label">in</div><code>(uuid, [1024 floats], metadata)</code></div>
+        <div class="io-cell io-out"><div class="io-label">out</div><code>stored in the tenant's namespace.
+Metadata: ticket_number, team_id,
+client_id, status, priority,
+created_at, source_hash
+
+NO TICKET TEXT.</code></div>
+      </div>
+      <p>
+        That single line — <code>"id": str(ticket_id)</code> — is the answer to "how does it
+        know which ticket a vector belongs to". It never has to work it out. The id was the
+        ticket's own UUID from the moment it was written.
+      </p>
+    </div>
+  </div>
+
+  <hr style="margin:44px 0 0">
+
+  <h3>Journey two — a vector becomes the panel you see</h3>
+
+  <div class="shapeflow bleed">
+<pre>
+   GET /tickets/OS-4/similar
+      │
+      ▼  api/similar_router.py → service.py
+   SimilarityState        {tenant_id, ticket_id, query_text, sources}
+      │
+      ▼  embeddings/embed_node.py
+   query_vector           [0.0268, -0.0332, … ] 1024 floats  ← built LIVE
+      │
+      ├──────────────────────────┬──────────────────────────┐
+      ▼ retrieve_semantic        ▼ retrieve_lexical
+   Pinecone query             Postgres ts_rank_cd
+   [(uuid, 0.889),            [(uuid, 0.41),
+    (uuid, 0.829), …]          (uuid, 0.33), …]
+      │                          │
+      ▼ rank_only                ▼ rank_only        SCORES DROPPED HERE
+   RankedList(SEMANTIC,       RankedList(LEXICAL,
+     ticket_ids=(…))            ticket_ids=(…))
+      └──────────────┬───────────┘
+                     ▼  retrieval/fuse.py
+   [FusedCandidate(ticket_id, score=1/(60+pos), ranks={…})]
+                     │
+                     ▼  retrieval/hydrate.py        ← ids become details
+   SELECT * FROM tickets WHERE id IN (…)
+                     │
+                     ▼  service.py
+   [SimilarTicket(reference="OS-18", title=…, similarity=0.889)]
+                     │
+                     ▼  api/similar_router.py
+   JSON → React panel
+</pre>
+  </div>
+
+  <div class="hop">
+    <div class="hop-head">
+      <span class="hop-n">01</span><h4>The ticket you opened becomes the query</h4>
+      <span class="path">intelligence/service.py</span>
+    </div>
+    <div class="hop-body">
+<pre><code>state: SimilarityState = {
+    "tenant_id":  self._tenant_id,
+    "ticket_id":  ticket.id,        # excluded from its own results
+    "query_text": build_query_text(ticket.title, ticket.description),
+    "sources":    sources,          # {SEMANTIC, LEXICAL}
+}</code></pre>
+      <div class="io">
+        <div class="io-cell io-in"><div class="io-label">in</div><code>Ticket OS-4, loaded from Postgres</code></div>
+        <div class="io-cell io-out"><div class="io-label">out</div><code>SimilarityState — a plain dict that
+LangGraph threads through every node</code></div>
+      </div>
+      <p>
+        This is a document-to-document search dressed as a query-to-document one. The query
+        is built by the <em>same convention</em> as the stored embedding text — a query
+        assembled differently from the documents is the commonest reason a hybrid retriever
+        quietly underperforms.
+      </p>
+    </div>
+  </div>
+
+  <div class="hop">
+    <div class="hop-head">
+      <span class="hop-n">02</span><h4>Embed the query, live</h4>
+      <span class="path">intelligence/embeddings/embed_node.py</span>
+    </div>
+    <div class="hop-body">
+<pre><code>async def embed_query(state, deps) -&gt; dict[str, object]:
+    if RetrievalSource.SEMANTIC not in state.get("sources", frozenset()):
+        return {"trace": ["embed:skipped"]}
+    vector = await deps.embeddings.embed_query(state["query_text"])
+    return {"query_vector": vector, "trace": ["embed"]}</code></pre>
+      <div class="io">
+        <div class="io-cell io-in"><div class="io-label">in</div><code>state["query_text"] — OS-4's own text</code></div>
+        <div class="io-cell io-out"><div class="io-label">out</div><code>state["query_vector"] = [1024 floats]</code></div>
+      </div>
+      <p>
+        <strong>Nothing looks up OS-4's stored vector.</strong> The ticket you are reading is
+        the query; the stored vectors are the corpus. That is why the panel works on a ticket
+        created one second ago that has never been embedded.
+      </p>
+      <p>
+        A node returns a <em>partial dict</em>, and LangGraph merges it into the state. That
+        is the whole contract — no node mutates shared state.
+      </p>
+    </div>
+  </div>
+
+  <div class="hop">
+    <div class="hop-head">
+      <span class="hop-n">03a</span><h4><span class="chip chip-sem">semantic</span> Vector search</h4>
+      <span class="path">vectordb/pinecone_store.py</span>
+    </div>
+    <div class="hop-body">
+<pre><code>self._require_index().query(
+    vector=embedding,           # the 1024 floats from step 02
+    top_k=fetch,                # limit + exclusions + 5
+    namespace=namespace,        # hard tenant partition
+    include_metadata=True,
+    filter=where or None,
+)
+
+# …then, for each match:
+VectorHit(
+    ticket_id=uuid.UUID(str(match["id"])),
+    score=float(match.get("score", 0.0)),   # cosine SIMILARITY, no conversion
+    metadata=dict(match.get("metadata") or {}),
+)</code></pre>
+      <div class="io">
+        <div class="io-cell io-in"><div class="io-label">in</div><code>[1024 floats], top_k=50, namespace</code></div>
+        <div class="io-cell io-out"><div class="io-label">out</div><code>[VectorHit(01a07058-6833…, 0.889),
+ VectorHit(01a07058-682b…, 0.829),
+ VectorHit(01a07058-6837…, 0.444)]</code></div>
+      </div>
+      <p>
+        Pinecone returns <em>similarity</em> (larger is closer); Chroma returned
+        <em>distance</em> (smaller is closer). Carrying the old <code>1 - d</code> conversion
+        across the port would have inverted every ranking while still producing
+        plausible-looking numbers.
+      </p>
+    </div>
+  </div>
+
+  <div class="hop">
+    <div class="hop-head">
+      <span class="hop-n">03b</span><h4><span class="chip chip-lex">lexical</span> Keyword search, in parallel</h4>
+      <span class="path">lexical/postgres_fts.py</span>
+    </div>
+    <div class="hop-body">
+<pre><code>query = text(_OR_TSQUERY).bindparams(query_text=query_text)
+rank  = func.ts_rank_cd(_WEIGHTS, Ticket.search_vector, query)
+
+stmt = (
+    select(Ticket.id, rank.label("rank"))
+    .where(
+        Ticket.deleted_at.is_(None),
+        Ticket.search_vector.op("@@")(query),
+    )
+    .order_by(rank.desc(), Ticket.id)
+    .limit(limit + len(exclude or ()))
+)</code></pre>
+      <div class="io">
+        <div class="io-cell io-in"><div class="io-label">in</div><code>the same query_text, as raw words</code></div>
+        <div class="io-cell io-out"><div class="io-label">out</div><code>[LexicalHit(01a07058-6837…, 0.412),
+ LexicalHit(01a07058-6833…, 0.331), …]</code></div>
+      </div>
+      <p>
+        Runs in the <em>same LangGraph superstep</em> as the vector search, so the two are
+        concurrent. Note the ordering differs from the semantic result — that disagreement is
+        exactly what fusion has to resolve.
+      </p>
+    </div>
+  </div>
+
+  <div class="hop">
+    <div class="hop-head">
+      <span class="hop-n">04</span><h4>Scores are deliberately thrown away</h4>
+      <span class="path">retrieval/fusion.py</span>
+    </div>
+    <div class="hop-body">
+<pre><code>def rank_only(hits, source) -&gt; RankedList:
+    """Turn scored hits into a ranked list, dropping the scores.
+
+    Dropped *here*, at the boundary, rather than carried along and
+    ignored later. If they were still in scope downstream, someone
+    would eventually blend them.
+    """
+    seen, ordered = set(), []
+    for ticket_id, _score in sorted(hits, key=lambda pair: -pair[1]):
+        if ticket_id not in seen:
+            seen.add(ticket_id)
+            ordered.append(ticket_id)
+    return RankedList(source=source, ticket_ids=tuple(ordered))</code></pre>
+      <div class="io">
+        <div class="io-cell io-in"><div class="io-label">in</div><code>[(uuid, 0.889), (uuid, 0.829), …]</code></div>
+        <div class="io-cell io-out"><div class="io-label">out</div><code>RankedList(source=SEMANTIC,
+  ticket_ids=(uuid, uuid, uuid))
+
+order only — no scores</code></div>
+      </div>
+      <p>
+        A cosine of 0.72 and a <code>ts_rank_cd</code> of 0.09 are not comparable numbers.
+        "Third" and "third" are. That is the entire reason rank-based fusion needs no weight
+        tuning — and the reason the displayed match percentage had to be carried separately.
+      </p>
+    </div>
+  </div>
+
+  <div class="hop">
+    <div class="hop-head">
+      <span class="hop-n">05</span><h4>Fuse — the leader's order, then the rest</h4>
+      <span class="path">retrieval/fusion.py</span>
+    </div>
+    <div class="hop-body">
+<pre><code># leader first, in its own order, then everyone else in theirs
+lead_first = [leader, *sorted(s for s in by_source if s != leader)]
+for source in lead_first:
+    for ticket_id in by_source[source].ticket_ids:
+        if ticket_id not in seen:
+            seen.add(ticket_id)
+            ordered.append(ticket_id)
+
+out += [
+    FusedCandidate(
+        ticket_id=ticket_id,
+        score=1.0 / (k + position),     # rank-derived, k = 60
+        ranks=dict(ranks[ticket_id]),   # {SEMANTIC: 1, LEXICAL: 4}
+    )
+    for position, ticket_id in enumerate(ordered, start=1)
+]</code></pre>
+      <div class="io">
+        <div class="io-cell io-in"><div class="io-label">in</div><code>two RankedLists + pinned exact matches</code></div>
+        <div class="io-cell io-out"><div class="io-label">out</div><code>[FusedCandidate(uuid, 0.0164,
+   ranks={SEMANTIC:1, LEXICAL:4}),
+ FusedCandidate(uuid, 0.0161,
+   ranks={SEMANTIC:2}), …]</code></div>
+      </div>
+      <p>
+        <code>ranks</code> is what survives to the UI: a candidate found by both retrievers
+        gets <code>agreed = True</code>, which is the strongest confidence signal available
+        without calling a model.
+      </p>
+    </div>
+  </div>
+
+  <div class="hop">
+    <div class="hop-head">
+      <span class="hop-n">06</span><h4>The step you asked about — ids become details</h4>
+      <span class="path">intelligence/service.py</span>
+    </div>
+    <div class="hop-body">
+<pre><code>ids = [candidate.ticket_id for candidate in candidates]
+rows = await self._session.execute(
+    select(Ticket).where(Ticket.id.in_(ids), Ticket.deleted_at.is_(None))
+)
+by_id = {ticket.id: ticket for ticket in rows.scalars().all()}
+
+for candidate in candidates:                 # fused order preserved
+    ticket = by_id.get(candidate.ticket_id)
+    out.append(SimilarTicket(
+        reference=ticket.reference,          # "OS-" + ticket_number
+        title=ticket.title,                  # ← from POSTGRES, not the vector DB
+        status=ticket.status.value,
+        resolution_summary=_summarise(ticket.resolution_notes),
+        score=candidate.score,               # fused rank score
+        similarity=vector_scores.get(candidate.ticket_id),  # real cosine
+        ranks=candidate.ranks,
+        agreed=candidate.agreed,
+    ))</code></pre>
+      <div class="io">
+        <div class="io-cell io-in"><div class="io-label">in</div><code>[FusedCandidate(uuid, …), …]
++ vector_scores {uuid: 0.889}</code></div>
+        <div class="io-cell io-out"><div class="io-label">out</div><code>[SimilarTicket(
+   reference="OS-18",
+   title="SCIM retry causes multiple…",
+   status="open",
+   similarity=0.889,
+   agreed=True), …]</code></div>
+      </div>
+      <p>
+        <strong>One SQL query turns three UUIDs into three full tickets.</strong> The title,
+        status and resolution notes are read from Postgres every time, so an edited ticket
+        shows its new title immediately — even before it is re-embedded.
+      </p>
+      <p>
+        <code>reference</code> is not stored anywhere. It is a property:
+        <code>f"OS-{self.ticket_number}"</code>.
+      </p>
+    </div>
+  </div>
+
+  <div class="hop">
+    <div class="hop-head">
+      <span class="hop-n">07</span><h4>Out as JSON</h4>
+      <span class="path">api/similar_router.py</span>
+    </div>
+    <div class="hop-body">
+<pre><code>SimilarTicketOut(
+    reference=item.reference,
+    title=item.title,
+    score=round(item.score, 6),
+    similarity=(None if item.similarity is None
+                else round(item.similarity, 4)),   # ← what the badge shows
+    sources=[source.value for source in item.ranks],
+    agreed=item.agreed,
+    relation=item.relation.value if item.relation else None,
+    confidence=item.confidence,
+)</code></pre>
+      <div class="io">
+        <div class="io-cell io-in"><div class="io-label">in</div><code>SimilarityResult</code></div>
+        <div class="io-cell io-out"><div class="io-label">out</div><code>{"reference": "OS-18",
+ "title": "SCIM retry causes…",
+ "score": 0.016393,
+ "similarity": 0.8889,
+ "sources": ["semantic", "lexical"],
+ "agreed": true}</code></div>
+      </div>
+      <p>
+        The React panel renders <code>similarity</code> as <strong>89% · very close</strong>
+        and <code>reference</code> as the link that opens the preview modal. This router maps
+        field by field — which is exactly how <code>similarity</code> was silently dropped the
+        first time it was added.
+      </p>
+    </div>
+  </div>
+
+  <div class="note note-key">
+    <span class="note-title">Count the AI in journey two</span>
+    <p>
+      One embedding call at step 02. That is all — with reranking off, no chat model is
+      involved anywhere. Steps 03–07 are cosine arithmetic, a Postgres index scan, list
+      manipulation, and a <code>WHERE id IN (…)</code>.
+    </p>
+  </div>
+</section>
+
+<!-- ==================================================== ANALYSIS ==== -->
+<section id="analysis">
+  <p class="kicker">Agent one of two</p>
+  <h2>The analysis agent</h2>
+
+  <p class="lead">
+    An unattended ReAct loop. Reads one ticket, gathers evidence with read-only tools, and
+    writes a triage report. Runs in the worker, not in a request — minutes rather than
+    milliseconds, several LLM calls, and it commits as it goes.
+  </p>
+
+  <h3>ReAct via structured output, not native tool calling</h3>
+  <p>
+    Each turn the model returns an <code>AgentDecision</code>: either a tool to call with
+    arguments, or a decision to finish. This is deliberately <em>not</em> provider-native
+    tool calling — one port then serves both Gemini and Ollama identically, which is the
+    only reason the fallback chain works at all.
+  </p>
+
+  <h4>The seven tools, and the zero</h4>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th class="mono">tool</th><th>Returns</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">get_ticket</td><td>One ticket's full text and status</td></tr>
+        <tr><td class="mono">search_tickets</td><td>Filtered list — team, status, client, date</td></tr>
+        <tr><td class="mono">find_similar_tickets</td><td>The retrieval pipeline, reused</td></tr>
+        <tr><td class="mono">get_history</td><td>Status transitions — tells a fixed bug from a recurring one</td></tr>
+        <tr><td class="mono">get_comments</td><td>The conversation on a ticket</td></tr>
+        <tr><td class="mono">count_tickets</td><td>Aggregates, bucketed</td></tr>
+        <tr><td class="mono">find_people</td><td>Resolves a name to a user</td></tr>
+      </tbody>
+      <caption>There is no write tool. Not a disabled one — none exists. A successful prompt injection still cannot change anything.</caption>
+    </table>
+  </div>
+
+  <h3>Four independent limits, all routing to a partial report</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Limit</th><th class="mono">value</th><th>Guards against</th></tr></thead>
+      <tbody>
+        <tr><td>Turn cap</td><td class="mono">8</td><td>A model that will not stop reasoning</td></tr>
+        <tr><td>Wall clock</td><td class="mono">300 s</td><td>A slow or hanging provider</td></tr>
+        <tr><td>Tool calls</td><td class="mono">24</td><td>Fan-out across tools without converging</td></tr>
+        <tr><td>Cost cap</td><td class="mono">$0.05</td><td>An expensive loop nobody is watching</td></tr>
+      </tbody>
+      <caption>Plus repeat detection on tool-call signatures. Every limit routes to <code>report</code>, so a partial answer is still written and persisted.</caption>
+    </table>
+  </div>
+
+  <div class="note note-broke">
+    <span class="note-title">The agent wrote a report from zero evidence</span>
+    <p>
+      Given an empty observation list, the model produced a fluent, confident, entirely
+      invented report. The failure mode was not being wrong — it was being wrong from
+      nothing.
+    </p>
+    <p>
+      Fixed with a deterministic <code>prime</code> node: the agent's first observation is
+      the ticket itself, fetched by code before the model gets a turn. It can no longer
+      start from nothing.
+    </p>
+  </div>
+
+  <div class="note note-broke">
+    <span class="note-title">Citations validated on the wrong surface</span>
+    <p>
+      The structured <code>related_references</code> field was empty while the prose
+      cheerfully cited OS-193 and OS-201. Validation checked the field, so the invented
+      citations in the sentence a human actually reads went straight through.
+    </p>
+    <p>
+      Fixed by extracting references from the prose too, validating the union against what
+      the agent actually retrieved, and excluding the subject ticket. That shared regex now
+      lives in <code>utils/references.py</code> precisely because two copies of a security
+      boundary is a defect waiting to happen.
+    </p>
+  </div>
+</section>
+
+<!-- ==================================================== CHAT ==== -->
+<section id="chat">
+  <p class="kicker">Agent two of two</p>
+  <h2>The chat assistant</h2>
+
+  <p>
+    Same tool registry, same read-only constraint, different shape: multi-turn, and the
+    conversation has to survive a restart.
+  </p>
+
+  <h3>Persistence, and a Windows problem</h3>
+  <p>
+    LangGraph's <code>AsyncPostgresSaver</code> cannot run on the Windows
+    ProactorEventLoop. The solution is <code>ThreadedPostgresSaver</code> — an async wrapper
+    over the sync <code>PostgresSaver</code> using <code>asyncio.to_thread</code>. It has to
+    subclass <code>BaseCheckpointSaver</code> because LangGraph <code>isinstance</code>-checks
+    the checkpointer rather than duck-typing it.
+  </p>
+  <p class="footnote">
+    Two more sharp edges: <code>PostgresSaver</code> needs <code>row_factory=dict_row</code>
+    (caught by mypy before it could lose a conversation), and <code>os_app</code> cannot
+    <code>CREATE SCHEMA</code>, so a bootstrap script runs <code>setup()</code> as the
+    migration role and grants DML.
+  </p>
+
+  <h3>Turn-scoped state</h3>
+  <p>
+    Observations from ten minutes ago are not evidence for the current question, and
+    carrying them would grow the prompt without bound. But <code>operator.add</code> cannot
+    express "reset" — so a <code>CLEAR</code> sentinel plus a custom
+    <code>turn_scoped</code> reducer does.
+  </p>
+  <p>
+    The transcript itself uses <code>add_messages</code>, which appends and merges updates
+    by message id rather than duplicating.
+  </p>
+
+  <div class="note note-broke">
+    <span class="note-title">The local model invented three ticket numbers</span>
+    <p>
+      Chat had no citation grounding. Running on the local fallback, it cited OS-1042,
+      OS-1043 and OS-1044 — none of which existed.
+    </p>
+    <p>
+      Now every claimed reference is validated against <em>this turn's observations plus
+      references already in the transcript</em> — the second half matters, because
+      "what was that ticket number again?" legitimately cites something retrieved three
+      turns ago. Ungrounded citations are marked
+      <code>[unverified: OS-XXXX]</code> and a caveat line is appended.
+    </p>
+  </div>
+</section>
+
+<!-- ==================================================== GUARDRAILS ==== -->
+<section id="guardrails">
+  <p class="kicker">Defence</p>
+  <h2>Guardrails, in three layers</h2>
+
+  <p class="lead">
+    Prompt wording is advisory — a determined injection talks a model past it. So
+    enforcement lives outside the model, in places that do not depend on it behaving.
+  </p>
+
+  <div class="tablewrap wide">
+    <table>
+      <thead><tr><th>Layer</th><th>File</th><th>Does</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Input</strong></td><td class="mono">security/input.py</td><td>Bound to 8000 chars, redact PII and credentials, log injection markers. Markers are <em>logged, not blocking</em> — a bug report legitimately contains the words "ignore previous instructions"</td></tr>
+        <tr><td><strong>Tools</strong></td><td class="mono">tools/registry.py</td><td>No write verb exists. The strongest guarantee in the system, because it is structural rather than behavioural</td></tr>
+        <tr><td><strong>Output</strong></td><td class="mono">generation/grounded_answer.py</td><td>Citation grounding, confidence floor, authority-claim rewriting</td></tr>
+        <tr><td><strong>Budget</strong></td><td class="mono">security/budget.py</td><td>Per-user rate, per-role daily cap, per-tenant monthly cost</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Three rules that must not erode</h3>
+  <ul>
+    <li><strong>The model is never an authorization boundary.</strong> RLS and permissions decide; the model only ever sees what the caller could already read.</li>
+    <li><strong>The agent has no write tools.</strong> Not disabled — absent.</li>
+    <li><strong>Severity and impact stay human-entered.</strong> A model could be talked into P1 by the bug reporter.</li>
+  </ul>
+
+  <div class="note note-broke">
+    <span class="note-title">Two guardrail bugs worth remembering</span>
+    <p>
+      <strong>A silently discarded filter.</strong> An injection-shaped status value was
+      safely coerced away — and the query silently widened from "closed" to the entire
+      corpus, with nothing telling the model, which then reasoned confidently about "the
+      closed tickets". Tool results now carry <code>ignored_filters</code> and a warning.
+    </p>
+    <p>
+      <strong>A credential redaction gap.</strong> The pattern matched
+      <code>"token: Bearer"</code> and left <code>sk-live-…</code> in the text. Fixed with a
+      scheme-aware pattern plus unlabelled secret-shape patterns.
+    </p>
+  </div>
+
+  <h3>Model roles, and one that must never fall back</h3>
+  <p>
+    The registry is keyed by <em>role</em>, not model name — so swapping which model serves
+    a role is configuration, not code. Each role has an ordered fallback chain:
+    hosted-strong → hosted-cheap → local.
+  </p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th class="mono">role</th><th>Used for</th><th>Fallback</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">rerank</td><td>The most quality-sensitive call — a wrong answer is shown to a human as a confident judgement</td><td>chain</td></tr>
+        <tr><td class="mono">query_rewrite</td><td>Cheap, forgiving, high volume</td><td>chain</td></tr>
+        <tr><td class="mono">chat</td><td>The conversational assistant</td><td>chain</td></tr>
+        <tr><td class="mono">agent</td><td>The analysis reasoning loop</td><td>chain</td></tr>
+        <tr><td class="mono">evaluator</td><td>Grades the system's own output</td><td><strong>none — fails instead</strong></td></tr>
+      </tbody>
+      <caption>The evaluator must not silently fall back. A benchmark that quietly changes judge mid-run produces numbers that cannot be compared.</caption>
+    </table>
+  </div>
+
+  <div class="note note-broke">
+    <span class="note-title">Local chain-of-thought nearly broke reranking</span>
+    <p>
+      <code>qwen3:8b</code> emitted 217 output tokens for "Say OK" against Gemini's 9 — all
+      of it reasoning that was then discarded, because the output is schema-constrained
+      anyway. Rerank went from timing out to about 5 seconds by passing
+      <code>"think": false</code>.
+    </p>
+  </div>
+</section>
+
+<!-- ==================================================== EVAL ==== -->
+<section id="eval">
+  <p class="kicker">Rigour</p>
+  <h2>Evaluation, and why most of it is free</h2>
+
+  <p class="lead">
+    Seven full ablations, four re-seeds, three re-embeds of the entire corpus, and one
+    architecture reversal — at a total cost of <strong>zero LLM calls</strong>.
+  </p>
+  <p>
+    That zero is the point. Anything needing an LLM judge at $0.002 a call gets run once,
+    believed, and shipped wrong.
+  </p>
+
+  <h3>Three tiers</h3>
+  <div class="tablewrap wide">
+    <table>
+      <thead><tr><th>Tier</th><th>Measures</th><th>Cost</th><th>Runs</th></tr></thead>
+      <tbody>
+        <tr><td>Retrieval metrics</td><td>recall@k, MRR, nDCG per query family</td><td>free</td><td>every change</td></tr>
+        <tr><td>Rerank precision</td><td>precision@5, results shown vs padded</td><td>LLM</td><td>on demand</td></tr>
+        <tr><td>Red team</td><td>28 structural checks + behavioural probes</td><td>mostly free</td><td>every change</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Two query families, because one would have given the wrong answer</h3>
+  <p>
+    Running only paraphrase queries measures what embeddings are best at — keyword search
+    looks like pure overhead, and deleting it would have been justified by a benchmark that
+    never tested what it is for. The second family is an error code pasted from a log.
+  </p>
+  <p>
+    The harness prints its own verdict: <strong>KEEP BOTH</strong> — because unaided, no
+    single retriever wins everywhere, and the shipped fusion matches the winner on every
+    family.
+  </p>
+
+  <div class="note note-broke">
+    <span class="note-title">The benchmark itself was lying — twice</span>
+    <p>
+      <strong>Run 1:</strong> every configuration scored 1.000 on every metric. That reads
+      as success and means the benchmark has no power to distinguish anything. Cause: the
+      golden set paraphrased ticket <em>titles</em> and reused the base description, so the
+      task was exact-text matching.
+    </p>
+    <p>
+      <strong>Run 7:</strong> the corpus itself was flattering the results. 220 tickets drawn
+      by weighted sampling from 64 scenarios meant 200 of them sat in an exact-duplicate
+      group — nine tickets sharing a title word for word. Rebuilt as 80 distinct bugs plus
+      20 hand-written variants. The conclusions held; the margins did not. The case for
+      embeddings on paraphrases shrank from +0.158 to <strong>+0.014 — one query.</strong>
+    </p>
+    <p>
+      Six of seven runs were misleading in some way, and none of them looked misleading. The
+      metric was never what was wrong — the setup was.
+    </p>
+  </div>
+
+  <h3>Does the reranker earn its call?</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Configuration</th><th class="num">precision@5</th><th class="num">shown</th><th class="num">s/query</th></tr></thead>
+      <tbody>
+        <tr><td>retrieval only</td><td class="num">0.275</td><td class="num">40</td><td class="num">0.7</td></tr>
+        <tr><td>retrieval + rerank</td><td class="num"><strong>0.635</strong></td><td class="num">20</td><td class="num">4.3</td></tr>
+      </tbody>
+      <caption>+0.360 precision@5 for +3.5s. It halved the list rather than padding it — a panel showing two good matches beats one showing five of which three are noise.</caption>
+    </table>
+  </div>
+</section>
+
+<!-- ==================================================== PATTERNS ==== -->
+<section id="patterns">
+  <p class="kicker">Vocabulary</p>
+  <h2>Patterns this system uses, and why</h2>
+
+  <div class="tablewrap wide">
+    <table>
+      <thead><tr><th>Pattern</th><th>Where</th><th>What it buys</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Ports and adapters</strong></td><td class="mono">ports.py + adapters</td><td>Swapping Chroma for Pinecone took one new file and four config lines. No node, graph, or service changed</td></tr>
+        <tr><td><strong>Transactional outbox</strong></td><td class="mono">ai_jobs + worker</td><td>The job's existence is atomic with the ticket's. No broker, no dual write on the critical path</td></tr>
+        <tr><td><strong>Domain events</strong></td><td class="mono">core/events.py</td><td>Dependencies point one way: intelligence knows about tickets, tickets knows nothing about intelligence</td></tr>
+        <tr><td><strong>Corrective RAG</strong></td><td class="mono">grade → rewrite → embed</td><td>The pipeline grades its own retrieval and can go back for more, with a cap that is not the model's decision</td></tr>
+        <tr><td><strong>Hybrid retrieval</strong></td><td class="mono">semantic ∥ lexical</td><td>Neither retriever wins everywhere, and which one wins keeps changing</td></tr>
+        <tr><td><strong>Cascade fusion</strong></td><td class="mono">retrieval/fusion.py</td><td>Never worse than the better retriever. RRF kept as a measured-and-rejected ablation row</td></tr>
+        <tr><td><strong>Content-hash idempotency</strong></td><td class="mono">source_hash</td><td>Re-runs are free; a model change invalidates the corpus automatically</td></tr>
+        <tr><td><strong>ReAct via structured output</strong></td><td class="mono">AgentDecision</td><td>One port serves both hosted and local models, so the fallback chain actually works</td></tr>
+        <tr><td><strong>Role-keyed model registry</strong></td><td class="mono">llm/registry.py</td><td>Swapping models is configuration. The evaluator deliberately has no fallback</td></tr>
+        <tr><td><strong>Structural guarantees over behavioural</strong></td><td class="mono">tools/</td><td>"No write tool exists" beats "the prompt says not to write"</td></tr>
+        <tr><td><strong>Reducers for graph state</strong></td><td class="mono">pipelines/state.py</td><td>Concurrent nodes merge cleanly; turn-scoped fields reset without unbounded growth</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ==================================================== FILES ==== -->
+<section id="files">
+  <p class="kicker">Reference</p>
+  <h2>Every file, and what it is for</h2>
+
+  <p>
+    The module follows a stage-based layout: each package is one stage of the RAG pipeline.
+    12,621 lines across 21 packages.
+  </p>
+
+  <div class="tablewrap wide">
+    <table>
+      <thead><tr><th>File</th><th class="num">loc</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr class="pkg-row"><td colspan="3">schemas/ — every shape the layer passes around</td></tr>
+        <tr><td class="mono">api.py</td><td class="num">200</td><td>Pydantic request/response contracts for the HTTP surface</td></tr>
+        <tr><td class="mono">types.py</td><td class="num">203</td><td><code>RankedList</code>, <code>FusedCandidate</code>, <code>SimilarTicket</code>, <code>SimilarityResult</code>. Imports no vendor and no SQLAlchemy</td></tr>
+        <tr><td class="mono">reports.py</td><td class="num">213</td><td>The schemas the model is constrained to produce — <code>AgentDecision</code>, <code>AnalysisReport</code>, <code>RerankResult</code></td></tr>
+
+        <tr class="pkg-row"><td colspan="3">ingestion/ — tickets into documents</td></tr>
+        <tr><td class="mono">ticket_source.py</td><td class="num">97</td><td>Loading indexable tickets (one soft-delete filter, so no caller forgets) and building vector metadata</td></tr>
+
+        <tr class="pkg-row"><td colspan="3">chunking/ — how a ticket becomes text</td></tr>
+        <tr><td class="mono">policy.py</td><td class="num">87</td><td>One chunk per ticket, field-level caps, and the documented trigger for when a real chunker would be needed</td></tr>
+
+        <tr class="pkg-row"><td colspan="3">embeddings/ — producing vectors</td></tr>
+        <tr><td class="mono">embedder.py</td><td class="num">119</td><td>Ollama client. Probes the dimension at startup; separate query and document methods for the asymmetric model</td></tr>
+        <tr><td class="mono">service.py</td><td class="num">161</td><td>Source hash, skip-if-current, batch upsert, bookkeeping</td></tr>
+        <tr><td class="mono">embed_node.py</td><td class="num">28</td><td>The graph node that embeds a query</td></tr>
+
+        <tr class="pkg-row"><td colspan="3">vectordb/ — dense storage</td></tr>
+        <tr><td class="mono">pinecone_store.py</td><td class="num">361</td><td>Namespace per tenant, lazy index creation with a readiness wait, dimension mismatch refused loudly. <code>count</code> is built on <code>list</code> because index stats lag by minutes</td></tr>
+
+        <tr class="pkg-row"><td colspan="3">lexical/ — keyword retrieval</td></tr>
+        <tr><td class="mono">postgres_fts.py</td><td class="num">163</td><td><code>ts_rank_cd</code> over the GIN-indexed generated column. Builds its tsquery in SQL so query and index share a tokenizer</td></tr>
+
+        <tr class="pkg-row"><td colspan="3">retrieval/ — finding and combining candidates</td></tr>
+        <tr><td class="mono">retrieve.py</td><td class="num">91</td><td>The two retriever nodes. Degrade to an empty ranking rather than raising</td></tr>
+        <tr><td class="mono">fusion.py</td><td class="num">325</td><td>Pure functions: <code>cascade</code>, <code>reciprocal_rank_fusion</code>, the safe-weight derivation. Testable with lists of integers</td></tr>
+        <tr><td class="mono">fuse.py</td><td class="num">70</td><td>The node. Thin by design — a node moves data, it does not hold the algorithm</td></tr>
+        <tr><td class="mono">exact.py</td><td class="num">126</td><td>Reference resolution and identifier probing. Pins only unique matches</td></tr>
+        <tr><td class="mono">grade.py</td><td class="num">100</td><td>The corrective decision. Two counts, no model</td></tr>
+        <tr><td class="mono">hydrate.py</td><td class="num">81</td><td>Loads candidate text from Postgres; also holds the guard node</td></tr>
+        <tr><td class="mono">catalogue.py</td><td class="num">61</td><td>Session-bound text lookup for the reranker</td></tr>
+        <tr><td class="mono">deps.py</td><td class="num">84</td><td><code>RetrievalDeps</code> — ports and numbers only, no vendor imports</td></tr>
+
+        <tr class="pkg-row"><td colspan="3">rerank/ — model judgement</td></tr>
+        <tr><td class="mono">reranker.py</td><td class="num">181</td><td>Classifies up to 10 candidates, drops anything at or below 0.55 confidence</td></tr>
+
+        <tr class="pkg-row"><td colspan="3">query/ — reading the question</td></tr>
+        <tr><td class="mono">parsing.py</td><td class="num">233</td><td>Query assembly, identifier and reference extraction. The regex that keeps whole identifiers intact</td></tr>
+        <tr><td class="mono">rewriter.py</td><td class="num">118</td><td>Rewrites a weak query, always from the original wording — never a paraphrase of a paraphrase</td></tr>
+
+        <tr class="pkg-row"><td colspan="3">cache/ — the result round-trip</td></tr>
+        <tr><td class="mono">similar_cache.py</td><td class="num">128</td><td>Serialise and restore a result. Keyed by ticket <em>version</em>, so an edit invalidates automatically. Holds no ticket text</td></tr>
+
+        <tr class="pkg-row"><td colspan="3">prompts/ — versioned instructions</td></tr>
+        <tr><td class="mono">analysis · chat · rerank</td><td class="num">160</td><td>The three system prompts, one file each</td></tr>
+        <tr><td class="mono">shared.py</td><td class="num">60</td><td>The injection notice, parameterised — one definition, so hardening it hardens all three</td></tr>
+        <tr><td class="mono">versions.py</td><td class="num">57</td><td>Version = hash of the prompt text. There is no bump to forget</td></tr>
+
+        <tr class="pkg-row"><td colspan="3">llm/ — model access</td></tr>
+        <tr><td class="mono">registry.py</td><td class="num">468</td><td>Role-keyed selection, fallback chains, cost accounting priced by the model that actually answered</td></tr>
+        <tr><td class="mono">gemini.py</td><td class="num">162</td><td>Hosted client. Flattens Gemini 3.x content blocks to text</td></tr>
+        <tr><td class="mono">ollama.py</td><td class="num">185</td><td>Local client. Disables chain-of-thought by default</td></tr>
+
+        <tr class="pkg-row"><td colspan="3">generation/ — trustworthy answers</td></tr>
+        <tr><td class="mono">grounded_answer.py</td><td class="num">91</td><td>Citation grounding, confidence floor, authority-claim rewriting</td></tr>
+
+        <tr class="pkg-row"><td colspan="3">security/ — input defence and spend</td></tr>
+        <tr><td class="mono">input.py</td><td class="num">113</td><td>Bound, redact, screen. 8000-char cap</td></tr>
+        <tr><td class="mono">rules.py</td><td class="num">130</td><td>The patterns: PII, credentials, injection markers</td></tr>
+        <tr><td class="mono">budget.py</td><td class="num">118</td><td>Per-user rate, per-role daily, per-tenant monthly. Wall-clock guard</td></tr>
+
+        <tr class="pkg-row"><td colspan="3">pipelines/ — the state machines</td></tr>
+        <tr><td class="mono">similarity.py</td><td class="num">205</td><td>The corrective RAG graph. Compiled once and cached</td></tr>
+        <tr><td class="mono">analysis.py</td><td class="num">606</td><td>The agent loop: prime, decide, act, report. Four limits, all routing to a partial report</td></tr>
+        <tr><td class="mono">chat.py</td><td class="num">628</td><td>Multi-turn assistant with turn-scoped working memory</td></tr>
+        <tr><td class="mono">state.py</td><td class="num">123</td><td>Typed state plus the reducers — merge by source, <code>turn_scoped</code>, <code>add_messages</code></td></tr>
+        <tr><td class="mono">checkpointer.py</td><td class="num">301</td><td><code>ThreadedPostgresSaver</code>, because the async saver cannot run on Windows</td></tr>
+
+        <tr class="pkg-row"><td colspan="3">tools/ — what the agents may do</td></tr>
+        <tr><td class="mono">tickets.py</td><td class="num">376</td><td>Five read tools over tickets</td></tr>
+        <tr><td class="mono">analytics.py</td><td class="num">215</td><td>Counting and bucketing</td></tr>
+        <tr><td class="mono">schemas.py</td><td class="num">198</td><td>Argument validation and coercion</td></tr>
+        <tr><td class="mono">registry.py</td><td class="num">354</td><td>Dispatch, plus <code>describe_tool</code> — the descriptions the model actually receives</td></tr>
+
+        <tr class="pkg-row"><td colspan="3">eval/ — measurement</td></tr>
+        <tr><td class="mono">datasets.py</td><td class="num">400</td><td>16 golden clusters, 20 variants, each in a different customer's voice</td></tr>
+        <tr><td class="mono">retrieval.py</td><td class="num">141</td><td>recall@k, MRR, nDCG</td></tr>
+        <tr><td class="mono">report.py</td><td class="num">180</td><td>Table rendering and the printed verdict</td></tr>
+        <tr><td class="mono">redteam.py</td><td class="num">192</td><td>Structural checks split from behavioural probes</td></tr>
+
+        <tr class="pkg-row"><td colspan="3">api/ · jobs/ · observability/ · utils/ · root</td></tr>
+        <tr><td class="mono">api/similar_router.py</td><td class="num">339</td><td>The similar-issues and analysis endpoints</td></tr>
+        <tr><td class="mono">api/chat_router.py</td><td class="num">175</td><td>Conversation endpoints</td></tr>
+        <tr><td class="mono">api/embedding_router.py</td><td class="num">210</td><td>The embedding console, gated on <code>embedding:manage</code></td></tr>
+        <tr><td class="mono">jobs/worker.py</td><td class="num">233</td><td>Drains the outbox. Also runs retention and stale-job sweeps</td></tr>
+        <tr><td class="mono">observability/tracing.py</td><td class="num">60</td><td>LangSmith wiring, optional</td></tr>
+        <tr><td class="mono">utils/graph.py</td><td class="num">72</td><td><code>adapt()</code> — one generic replacing three identical copies</td></tr>
+        <tr><td class="mono">utils/references.py</td><td class="num">52</td><td>The <code>OS-####</code> pattern. One definition, because it is a security boundary</td></tr>
+        <tr><td class="mono">ports.py</td><td class="num">198</td><td>The Protocols every adapter implements. <code>tenant_id</code> on every method</td></tr>
+        <tr><td class="mono">repository.py</td><td class="num">553</td><td>Outbox claim/complete/fail, vector state, suggestions</td></tr>
+        <tr><td class="mono">service.py</td><td class="num">454</td><td>Orchestrates the similarity graph, cache, and suggestion persistence</td></tr>
+        <tr><td class="mono">embedding_console.py</td><td class="num">363</td><td>Index status, embed, force re-embed, delete. Synchronous because a person is watching</td></tr>
+        <tr><td class="mono">subscribers.py</td><td class="num">69</td><td>The only coupling to the tickets module, pointing the correct way</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ==================================================== FAILURES ==== -->
+<section id="failures">
+  <p class="kicker">The good part</p>
+  <h2>What went wrong, and what it taught</h2>
+
+  <p class="lead">
+    This is the strongest material in the project. Anyone can draw a RAG pipeline on a
+    whiteboard; far fewer can say "my benchmark was lying to me, and here is how I caught it".
+  </p>
+
+  <div class="tablewrap wide">
+    <table>
+      <thead><tr><th>Failure</th><th>Why it was invisible</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td>Saturated benchmark — everything scored 1.000</td><td>Reads as success</td><td>Give every golden variant its own description</td></tr>
+        <tr><td>Tokenizer mismatch broke every error-code lookup</td><td>Reads as "keyword search is weak here"</td><td>Build the tsquery in SQL</td></tr>
+        <tr><td>RRF scored below its own inputs</td><td>Fusion is supposed to help</td><td>Derive the safe-weight bound; ship a cascade</td></tr>
+        <tr><td>Leader-per-query heuristic dropped recall</td><td>Reads as "fusion does not help"</td><td>Stop spending a fact as a hint — pin exact matches instead</td></tr>
+        <tr><td>The corpus itself flattered every number</td><td>200 of 220 tickets were near-copies</td><td>Rebuild as 80 distinct + 20 hand-written variants</td></tr>
+        <tr><td>Agent wrote a report from zero evidence</td><td>The prose was fluent</td><td>Deterministic <code>prime</code> node</td></tr>
+        <tr><td>Citations validated on the wrong surface</td><td>The structured field was empty and clean</td><td>Validate prose and field together</td></tr>
+        <tr><td>Tool descriptions never reached the model</td><td>Only parameter names were sent</td><td><code>describe_tool()</code> — cost two wasted rounds of tool redesign first</td></tr>
+        <tr><td>Daily budgets counted per model, not per role</td><td>Rerank silently exhausted rewrite's budget</td><td>Add <code>role=</code> to the accounting</td></tr>
+        <tr><td>Local model billed at hosted rates</td><td>Cost numbers looked plausible</td><td>Price by the model that answered</td></tr>
+        <tr><td><code>SET LOCAL</code> lost on mid-run commit</td><td>Two unrelated-looking symptoms</td><td><code>commit_preserving_scope()</code></td></tr>
+        <tr><td>Similarity silently dropped by the cache</td><td>Cache only reads on the second request, only with Redis</td><td>Extract the round-trip; assert it field by field</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note note-key">
+    <span class="note-title">The thread running through all of them</span>
+    <p>
+      Every one of these failed <em>silently</em> and looked like something else. None was
+      caught by a type error or a crash. They were caught by measuring, by two query families
+      instead of one, and by testing against a real database rather than a mock.
+    </p>
+  </div>
+</section>
+
+<!-- ==================================================== INTERVIEW ==== -->
+<section id="interview">
+  <p class="kicker">Preparation</p>
+  <h2>Questions you should expect</h2>
+
+  <div class="qa">
+    <p class="q">Walk me through what happens when a ticket is created.</p>
+    <p>
+      Row inserted in Postgres; in the <em>same transaction</em> a domain event fires and the
+      intelligence module writes one outbox row. Both commit or neither does. The response
+      returns immediately — no model is called on the write path. A separate worker claims
+      the job with <code>FOR UPDATE SKIP LOCKED</code>, loads the ticket, assembles bounded
+      text, hashes it, and skips if the hash is unchanged. Otherwise it embeds to 1024
+      dimensions locally and upserts into the tenant's Pinecone namespace, then records the
+      state row for reconciliation.
+    </p>
+  </div>
+
+  <div class="qa">
+    <p class="q">Why hybrid retrieval? Isn't a good embedding model enough?</p>
+    <p>
+      I measured it. On paraphrase queries semantic wins at recall@20, 1.000 against 0.986.
+      On error-code queries keyword search wins, 1.000 against 0.583. Neither can be dropped
+      because <em>which one is better keeps changing with the query</em>. I'd add that the
+      honest version of this argument rests almost entirely on the identifier family — the
+      paraphrase margin is a single query.
+    </p>
+  </div>
+
+  <div class="qa">
+    <p class="q">You used RRF, right? Everyone does.</p>
+    <p>
+      I implemented it and it lost to its own inputs on both query families. The reason is
+      structural: at K=60 an agreement bonus large enough to matter is large enough to
+      displace the leader's top hit. Requiring that it never does gives
+      <code>w ≤ 1/(K+2) ≈ 0.016</code>, at which point the secondary only orders the tail —
+      which <em>is</em> a cascade. So I shipped the cascade and kept RRF as a permanent
+      ablation row.
+    </p>
+  </div>
+
+  <div class="qa">
+    <p class="q">How do you know your retrieval is actually good?</p>
+    <p>
+      I mostly know that it is <em>comparatively</em> better, and I'd be careful to say so.
+      The labels are planted by the seed and written by the same author as the system, and
+      the eval script prints that caveat itself. What the harness genuinely gives me is the
+      ability to tell whether a change helped, on two query families, for free. In production
+      I'd replace synthetic labels with acceptance data — the panel already records whether a
+      human agreed with each suggestion.
+    </p>
+  </div>
+
+  <div class="qa">
+    <p class="q">What stops prompt injection?</p>
+    <p>
+      Three things, and the prompt is the weakest. The input guardrail bounds and redacts
+      before anything is sent. <strong>The tool layer has no write verb at all</strong>, so a
+      successful injection still cannot change data. The output guardrail validates every
+      citation against what was actually retrieved. The prompt's injection notice raises the
+      cost of an attack; the architecture is what makes a successful one survivable.
+    </p>
+  </div>
+
+  <div class="qa">
+    <p class="q">Why LangGraph rather than a for-loop?</p>
+    <p>
+      For the similarity pipeline, the cycle: <code>grade</code> routes to
+      <code>rewrite</code>, which routes back to <code>embed</code>. A conditional edge is
+      how you express that without control flow leaking into the nodes. And the topology is
+      what makes the guard unskippable — it is the first node, so no later node has to check.
+      For the chat assistant, the checkpointer: a conversation survives a restart because
+      state is persisted per thread, not held in memory.
+    </p>
+  </div>
+
+  <div class="qa">
+    <p class="q">Why a separate vector database when you already run Postgres?</p>
+    <p>
+      Honestly, <code>pgvector</code> would have been the better engineering choice — one
+      store, transactional consistency, and RLS already enforced. I chose a managed vector
+      store deliberately for the learning goal, and the cost is written down rather than
+      hidden: a dual write, an outbox, and a reconciliation job. I'd also point out the port
+      made it swappable — moving from Chroma to Pinecone took one new file and four config
+      lines.
+    </p>
+  </div>
+
+  <div class="qa">
+    <p class="q">What would break first at 100× the data?</p>
+    <p>
+      Three things. Retrieval depth — 20 candidates over 100 tickets is generous, over
+      100,000 it is thin, and HNSW recall stops being free. The reranker — 10 candidates per
+      query at one LLM call each does not scale to a busy queue, so it would need to become
+      selective rather than default-on. And the evaluation — a golden set of 20 pairs is
+      adequate here and meaningless at a million, which is the strongest argument for
+      self-labelling from acceptance data.
+    </p>
+  </div>
+
+  <div class="qa">
+    <p class="q">What's the weakest part of this system?</p>
+    <p>
+      No unit tests. There are verification scripts — 71 end-to-end checks, 28 red-team
+      checks, a console suite — but they need a live database, Ollama, and Pinecone, so
+      nothing runs on every change in CI. That is the gap I would close first. The synthetic
+      corpus is second: 100 tickets is small, and the labels and the system share an author.
+    </p>
+  </div>
+</section>
+
+<hr>
+<p class="footnote" style="margin-top:24px">
+  Built from the code as it stands: 12,621 lines across 21 packages, mypy strict clean,
+  13 tenant-scoped tables with row-level security enforced, 71 end-to-end checks and 28
+  structural red-team checks passing.
+</p>
+
+</main>
+</div>
+
+<script>
+// Cycles auto -> light -> dark. "Auto" removes the stamp entirely so the
+// prefers-color-scheme media query takes over, which is the same three-state
+// model the stylesheet was written for.
+(function () {
+  var order = ["auto", "light", "dark"];
+  var label = document.getElementById("themeLabel");
+  var button = document.getElementById("themeToggle");
+  var current = "auto";
+
+  try {
+    var saved = localStorage.getItem("rag-anatomy-theme");
+    if (saved && order.indexOf(saved) !== -1) current = saved;
+  } catch (e) {
+    // Private windows and blocked site data both throw here. The page must
+    // still render, so a failed read simply means "auto".
+  }
+
+  function apply(next) {
+    current = next;
+    if (next === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", next);
+    label.textContent = next.charAt(0).toUpperCase() + next.slice(1);
+    try { localStorage.setItem("rag-anatomy-theme", next); } catch (e) {}
+  }
+
+  button.addEventListener("click", function () {
+    apply(order[(order.indexOf(current) + 1) % order.length]);
+  });
+
+  apply(current);
+})();
+</script>
+
+</body>
+</html>

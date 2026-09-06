@@ -133,6 +133,19 @@ class AnalyticsTools:
             "filters_applied": applied,
             "total_tickets": total,
             "buckets": buckets,
+            # Stated explicitly, because its absence was being filled in by the
+            # model. Handed counts with no references, a local model was
+            # observed decorating a correct answer with invented ones --
+            # "UI has the most open bugs with 2 tickets (OS-1042, OS-1043)",
+            # where the count was right and neither ticket existed.
+            #
+            # A tool result has to describe its own shape, and "there is
+            # nothing here to cite" is part of that shape.
+            "ticket_references": [],
+            "note": (
+                "Counts only. This result contains no ticket references, so do not "
+                "cite any. Use search_tickets if the answer needs specific tickets."
+            ),
         }
 
     async def reopen_rate(self, args: AnalyticsArgs) -> dict[str, Any]:

@@ -194,6 +194,28 @@ class Settings(BaseSettings):
     #: Falls back to the local Ollama model when the hosted quota is gone, so
     #: development is never blocked. Never applied to the evaluator role.
     AI_LOCAL_FALLBACK: bool = True
+    #: Serve every role from the local model, with the hosted ones as fallback.
+    #:
+    #: The inverse of the default. Off, hosted models lead and the local one
+    #: catches quota exhaustion; on, nothing leaves the machine unless the
+    #: local model fails outright.
+    #:
+    #: Three consequences worth knowing before turning it on:
+    #:
+    #: * **Cost goes to zero.** Nothing is billed.
+    #: * **Latency roughly quadruples on rerank** -- measured 24.7s local
+    #:   against 4.0s hosted, which is why `_timeout_for` below widens the
+    #:   per-role deadlines when local leads.
+    #: * **LangSmith stops showing prompts.** The Ollama adapter talks raw
+    #:   HTTP rather than being a LangChain chat model, so its calls are not
+    #:   LLM spans. Graph structure and node timings still trace; the prompt
+    #:   and response text does not.
+    AI_PREFER_LOCAL: bool = False
+    #: Deadline for a role whose primary is the local model. The per-role
+    #: timeouts below are sized for a hosted model answering in seconds; an 8B
+    #: model on consumer hardware needs materially more, and a deadline that
+    #: kills every call is worse than a slow one.
+    OLLAMA_TIMEOUT_SECONDS: int = 180
 
     AGENT_MAX_TURNS: int = 8
     AGENT_TIMEOUT_SECONDS: int = 300

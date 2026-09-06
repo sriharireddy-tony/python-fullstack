@@ -81,6 +81,32 @@ class TicketSearchArgs(BaseModel):
     created_to: date | None = None
     limit: Annotated[int, Field(ge=1, le=MAX_ROWS)] = 10
 
+    @field_validator("status", "priority", mode="before")
+    @classmethod
+    def _accept_bare_string(cls, value: object) -> object:
+        """Accept ``"open"`` where the schema declares ``["open"]``.
+
+        Asking for one status is the common case, and a model asked for "open
+        tickets" naturally emits a bare string. Strictly that is a type error,
+        and it *was* one: the tool rejected it with
+
+            Input should be a valid list  [input: "open"]
+
+        which the assistant faithfully reported as "the search query had an
+        invalid format for the status filter" -- a true sentence that is
+        useless to the person who asked which tickets are open.
+
+        Coercing here rather than widening the annotation to ``str | list[str]``
+        keeps one shape for everything downstream: the field is still a list by
+        the time any query sees it, so no caller needs to handle both.
+
+        Found by the RAGAS run, which scored that answer 0.00 for relevancy.
+        Nothing else was measuring whether a refusal was *warranted*.
+        """
+        if isinstance(value, str):
+            return [value]
+        return value
+
     @field_validator("status", "priority")
     @classmethod
     def _bound_lists(cls, value: list[str] | None) -> list[str] | None:

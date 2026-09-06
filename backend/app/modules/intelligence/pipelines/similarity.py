@@ -184,10 +184,28 @@ def similarity_graph() -> CompiledStateGraph[SimilarityState, RetrievalDeps, Any
     graph.add_edge("rerank", "finish")
     graph.add_edge("finish", END)
 
-    # No checkpointer: this graph is a pure function of its input and completes
-    # in one call, so there is nothing to resume. The chatbot in Phase F is
-    # where a checkpointer earns its cost.
-    return graph.compile(name="similarity")
+    # ``checkpointer=False``, not the default ``None``, and the difference is
+    # load-bearing.
+    #
+    # This graph is a pure function of its input and completes in one call, so
+    # there is nothing to resume -- ``None`` says "no checkpointer of my own"
+    # and would be enough if it were only ever invoked at the top level. It is
+    # not: the ``find_similar_tickets`` tool runs it from inside a *chat* graph
+    # node, and a nested graph inherits its parent's checkpointer. The chat
+    # graph persists to Postgres, so the parent's saver then tried to serialise
+    # this graph's state -- which holds ``dict[uuid.UUID, ...]`` in
+    # ``catalogue`` and ``vector_scores`` -- and msgpack rejects non-string
+    # dict keys:
+    #
+    #     TypeError: Dict key must a type serializable with OPT_NON_STR_KEYS
+    #
+    # The tool caught it and the assistant said it could not search, so nothing
+    # crashed and nothing lied. But similar-issue lookup was simply unavailable
+    # to the chatbot, silently, while working perfectly on the ticket page.
+    #
+    # ``False`` declines the inheritance explicitly, which is what this graph
+    # means: never persist me, wherever I am invoked from.
+    return graph.compile(name="similarity", checkpointer=False)
 
 
 async def run_similarity(state: SimilarityState, deps: RetrievalDeps) -> SimilarityState:
