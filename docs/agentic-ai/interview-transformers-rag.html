@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>Transformers, Embeddings & RAG</title>
-<meta name="description" content="36 senior interview questions on transformers, embeddings and production RAG.">
+<meta name="description" content="119 senior interview questions across 18 topics: transformers, embeddings, RAG, agents, LangGraph and enterprise GenAI architecture.">
 <title>Transformers, Embeddings &amp; RAG</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -336,6 +336,92 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: "IB
 }
 .dia pre { border: 0; background: none; padding: 0; margin: 0; box-shadow: none; color: var(--text-2); font-size: 12px; line-height: 1.5; }
 
+/* ------------------------------------------------------ mobile navigation
+   Below 1100px the sidebar becomes a slide-in panel driven by a sticky bar.
+   Same markup, so the scroll-spy in the footer script still applies. */
+.mobilebar {
+  position: sticky;
+  top: 0;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+@media (min-width: 1100px) { .mobilebar { display: none; } }
+
+.navbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.navbtn:hover { border-color: var(--attn); color: var(--attn); }
+.mobilebar-title {
+  font-family: Archivo, sans-serif;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1099px) {
+  .index {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    background: var(--bg);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 16px 20px 80px;
+    border-right: 0;
+    transform: translateX(-100%);
+    transition: transform .18s ease;
+  }
+  body.nav-open .index { transform: translateX(0); }
+  body.nav-open { overflow: hidden; }
+
+  /* Bigger tap targets in the panel than in the desktop rail. */
+  .index a { padding: 9px 0 9px 13px; font-size: 14.5px; }
+
+  /* The theme toggle sits in the bar's row rather than over the masthead. */
+  .theme-toggle { top: 9px; right: 16px; z-index: 60; }
+}
+
+.navclose {
+  display: none;
+  position: sticky;
+  top: 0;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 9px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--attn);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+@media (max-width: 1099px) { .navclose { display: block; } }
+
 .theme-toggle {
   position: fixed; top: 14px; right: 14px; z-index: 60;
   padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px;
@@ -347,13 +433,20 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: "IB
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
 </style>
+
+<button class="theme-toggle" type="button" id="themeToggle"><span id="themeLabel">Auto</span></button>
 </head>
 <body>
-<button class="theme-toggle" type="button" id="themeToggle"><span id="themeLabel">Auto</span></button>
+<div class="mobilebar"><button class="navbtn" type="button" id="navToggle" aria-expanded="false" aria-controls="indexNav">
+    ☰ Contents
+  </button>
+  <span class="mobilebar-title" id="mobileWhere">Transformers, Embeddings &amp; RAG</span>
+</div>
 
 <div class="shell">
 
-<nav class="index" aria-label="Question index">
+<nav class="index" id="indexNav" aria-label="Question index">
+  <button class="navclose" type="button" id="navClose">← Close contents</button>
   <div class="index-brand">Transformers, Embeddings &amp; RAG</div>
   <div class="index-sub">Senior interview prep</div>
 
@@ -398,6 +491,119 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: "IB
   <a href="#q3-14"><span class="qn">3.14</span>Evaluating RAG</a>
   <a href="#q3-15"><span class="qn">3.15</span>Troubleshooting in production</a>
   <a href="#q3-16"><span class="qn">3.16</span>Small-scale vs enterprise-scale</a>
+
+  <h4>4 · Chunking strategies</h4>
+  <a href="#q4-1"><span class="qn">4.1</span>The six strategies, compared</a>
+  <a href="#q4-2"><span class="qn">4.2</span>Fixed-size and the overlap question</a>
+  <a href="#q4-3"><span class="qn">4.3</span>Recursive character splitting</a>
+  <a href="#q4-4"><span class="qn">4.4</span>Semantic chunking</a>
+  <a href="#q4-5"><span class="qn">4.5</span>Justifying a choice for a business case</a>
+
+  <h4>5 · Vector databases &amp; indexing</h4>
+  <a href="#q5-1"><span class="qn">5.1</span>Choosing a vector store</a>
+  <a href="#q5-2"><span class="qn">5.2</span>pgvector vs a dedicated store</a>
+  <a href="#q5-3"><span class="qn">5.3</span>HNSW, in detail</a>
+  <a href="#q5-4"><span class="qn">5.4</span>Metadata indexing and filtered ANN</a>
+  <a href="#q5-5"><span class="qn">5.5</span>Index optimization and tuning</a>
+  <a href="#q5-6"><span class="qn">5.6</span>Thousands to millions</a>
+
+  <h4>6 · Retrieval optimization &amp; re-ranking</h4>
+  <a href="#q6-1"><span class="qn">6.1</span>Bi-encoder vs cross-encoder</a>
+  <a href="#q6-2"><span class="qn">6.2</span>Retriever vs re-ranker</a>
+  <a href="#q6-3"><span class="qn">6.3</span>Picking a re-ranking model</a>
+  <a href="#q6-4"><span class="qn">6.4</span>Top-K optimization in practice</a>
+  <a href="#q6-5"><span class="qn">6.5</span>The optimization order</a>
+
+  <h4>7 · RAG evaluation metrics</h4>
+  <a href="#q7-1"><span class="qn">7.1</span>Precision, recall, hit rate</a>
+  <a href="#q7-2"><span class="qn">7.2</span>MRR, MAP, nDCG</a>
+  <a href="#q7-3"><span class="qn">7.3</span>Which metric for which failure</a>
+  <a href="#q7-4"><span class="qn">7.4</span>Faithfulness and hallucination detection</a>
+  <a href="#q7-5"><span class="qn">7.5</span>Building a golden set</a>
+  <a href="#q7-6"><span class="qn">7.6</span>Is my RAG system working?</a>
+
+  <h4>8 · Agentic AI</h4>
+  <a href="#q8-1"><span class="qn">8.1</span>What makes something an agent</a>
+  <a href="#q8-2"><span class="qn">8.2</span>Tool calling, and doing it portably</a>
+  <a href="#q8-3"><span class="qn">8.3</span>Single vs multi-agent</a>
+  <a href="#q8-4"><span class="qn">8.4</span>Agent routing</a>
+  <a href="#q8-5"><span class="qn">8.5</span>Planning and reasoning</a>
+  <a href="#q8-6"><span class="qn">8.6</span>Human-in-the-loop</a>
+  <a href="#q8-7"><span class="qn">8.7</span>Failure handling and limits</a>
+  <a href="#q8-8"><span class="qn">8.8</span>Design an enterprise agent system</a>
+
+  <h4>9 · LangGraph</h4>
+  <a href="#q9-1"><span class="qn">9.1</span>StateGraph, nodes, edges</a>
+  <a href="#q9-2"><span class="qn">9.2</span>State and reducers</a>
+  <a href="#q9-3"><span class="qn">9.3</span>Conditional edges and cycles</a>
+  <a href="#q9-4"><span class="qn">9.4</span>Compilation and invocation</a>
+  <a href="#q9-5"><span class="qn">9.5</span>Checkpointers and persistence</a>
+  <a href="#q9-6"><span class="qn">9.6</span>How information moves through a graph</a>
+  <a href="#q9-7"><span class="qn">9.7</span>Error handling in a graph</a>
+
+  <h4>10 · Agent architecture patterns</h4>
+  <a href="#q10-1"><span class="qn">10.1</span>The pattern catalogue</a>
+  <a href="#q10-2"><span class="qn">10.2</span>ReAct</a>
+  <a href="#q10-3"><span class="qn">10.3</span>Router and supervisor</a>
+  <a href="#q10-4"><span class="qn">10.4</span>Planner–executor</a>
+  <a href="#q10-5"><span class="qn">10.5</span>Reflection and Reflexion</a>
+  <a href="#q10-6"><span class="qn">10.6</span>Choosing, and its cost</a>
+
+  <h4>11 · Production agent evaluation</h4>
+  <a href="#q11-1"><span class="qn">11.1</span>The metrics that matter</a>
+  <a href="#q11-2"><span class="qn">11.2</span>Measuring task success</a>
+  <a href="#q11-3"><span class="qn">11.3</span>Tool-call success rate</a>
+  <a href="#q11-4"><span class="qn">11.4</span>Cost and token accounting</a>
+  <a href="#q11-5"><span class="qn">11.5</span>Debugging a failed run</a>
+
+  <h4>12 · Enterprise GenAI architecture</h4>
+  <a href="#q12-1"><span class="qn">12.1</span>End-to-end architecture</a>
+  <a href="#q12-2"><span class="qn">12.2</span>AuthN, authZ and the model</a>
+  <a href="#q12-3"><span class="qn">12.3</span>Input and output guardrails</a>
+  <a href="#q12-4"><span class="qn">12.4</span>Intent classification</a>
+  <a href="#q12-5"><span class="qn">12.5</span>Caching strategies</a>
+  <a href="#q12-6"><span class="qn">12.6</span>Security threat model</a>
+
+  <h4>13 · Prompt engineering &amp; management</h4>
+  <a href="#q13-1"><span class="qn">13.1</span>Prompts as artefacts</a>
+  <a href="#q13-2"><span class="qn">13.2</span>Versioning without a bump</a>
+  <a href="#q13-3"><span class="qn">13.3</span>Testing a prompt change</a>
+  <a href="#q13-4"><span class="qn">13.4</span>Promotion across environments</a>
+  <a href="#q13-5"><span class="qn">13.5</span>Techniques that earn their tokens</a>
+
+  <h4>14 · Observability</h4>
+  <a href="#q14-1"><span class="qn">14.1</span>What to instrument</a>
+  <a href="#q14-2"><span class="qn">14.2</span>Tracing an LLM application</a>
+  <a href="#q14-3"><span class="qn">14.3</span>The tool landscape</a>
+  <a href="#q14-4"><span class="qn">14.4</span>Monitoring retrieval quality live</a>
+  <a href="#q14-5"><span class="qn">14.5</span>Alerting on a non-deterministic system</a>
+
+  <h4>15 · Azure AI &amp; cloud</h4>
+  <a href="#q15-1"><span class="qn">15.1</span>What to claim, honestly</a>
+  <a href="#q15-2"><span class="qn">15.2</span>The reference architecture</a>
+  <a href="#q15-3"><span class="qn">15.3</span>Azure OpenAI specifics</a>
+  <a href="#q15-4"><span class="qn">15.4</span>Azure AI Search</a>
+  <a href="#q15-5"><span class="qn">15.5</span>Mapping what you built onto Azure</a>
+
+  <h4>16 · Python &amp; backend engineering</h4>
+  <a href="#q16-1"><span class="qn">16.1</span>async/await and where it helps</a>
+  <a href="#q16-2"><span class="qn">16.2</span>FastAPI dependency injection</a>
+  <a href="#q16-3"><span class="qn">16.3</span>Exception handling at the boundary</a>
+  <a href="#q16-4"><span class="qn">16.4</span>Structuring an LLM integration</a>
+  <a href="#q16-5"><span class="qn">16.5</span>Coding problems to expect</a>
+
+  <h4>17 · Docker, Kubernetes &amp; CI/CD</h4>
+  <a href="#q17-1"><span class="qn">17.1</span>What to claim, honestly</a>
+  <a href="#q17-2"><span class="qn">17.2</span>Containerising this application</a>
+  <a href="#q17-3"><span class="qn">17.3</span>Kubernetes for AI workloads</a>
+  <a href="#q17-4"><span class="qn">17.4</span>A CI/CD pipeline for GenAI</a>
+
+  <h4>18 · Production software engineering</h4>
+  <a href="#q18-1"><span class="qn">18.1</span>From requirement to design</a>
+  <a href="#q18-2"><span class="qn">18.2</span>Documenting decisions</a>
+  <a href="#q18-3"><span class="qn">18.3</span>Sequence diagrams and UML</a>
+  <a href="#q18-4"><span class="qn">18.4</span>Monolith or microservices</a>
+  <a href="#q18-5"><span class="qn">18.5</span>Code review for AI code</a>
 </nav>
 
 <main>
@@ -407,11 +613,11 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: "IB
   <p class="eyebrow">Interview preparation · senior</p>
   <h1>Transformers, Embeddings &amp; Production RAG</h1>
   <p class="standfirst">
-    Thirty-six questions with the answer a senior engineer is expected to give:
-    a definition, working code, and the failure that taught it. Every
-    <span style="color:var(--attn)">In this system</span> box is real code from
-    OS&nbsp;Tracker — a multi-tenant hybrid-RAG bug tracker — because a measured
-    answer beats a memorised one.
+    119 questions across 18 topics, each answered the way a senior engineer is
+    expected to: a definition, working code, and the failure that taught it. The
+    <span style="color:var(--attn)">In this system</span> boxes are real code from a
+    multi-tenant hybrid-RAG bug tracker — and where there is no such box, there is no
+    such experience, which is said plainly rather than papered over.
   </p>
 </header>
 
@@ -2186,6 +2392,3391 @@ else:
   </article>
 </section>
 
+<!-- ============================================================ SECTION 4 -->
+<section class="sec" id="s4">
+  <div class="sec-head">
+    <span class="sec-n">Section 4</span>
+    <h2>Chunking strategies</h2>
+  </div>
+  <p class="sec-intro">
+    Questions 3.3 and 3.4 covered the overview and the case for not chunking. This
+    section is the detail an interviewer digs into once you have named a strategy.
+  </p>
+
+  <article class="qa" id="q4-1">
+    <div class="qa-head"><span class="qa-n">4.1</span>
+      <h3>Compare the chunking strategies you know.</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th>Strategy</th><th>Split point</th><th>Preserves</th><th>Fails when</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Fixed-size</strong></td><td>Every N tokens</td><td>Nothing</td><td>Always cuts something; mitigated by overlap</td></tr>
+            <tr><td><strong>Sentence</strong></td><td>Sentence boundary</td><td>Grammatical units</td><td>Single sentences lack context to be retrievable</td></tr>
+            <tr><td><strong>Paragraph</strong></td><td>Blank line</td><td>One idea per chunk</td><td>Paragraph length varies wildly; some are one line</td></tr>
+            <tr><td><strong>Recursive</strong></td><td>Try ¶, then sentence, then word</td><td>Largest natural unit that fits</td><td>Still blind to document structure</td></tr>
+            <tr><td><strong>Structure-aware</strong></td><td>Headings, sections, functions</td><td>Author's own organisation</td><td>Needs a parser per format; fails on flat text</td></tr>
+            <tr><td><strong>Semantic</strong></td><td>Where topic similarity drops</td><td>Topical coherence</td><td>Costs embeddings at ingest; boundaries unstable</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The ordering is roughly cheapest-to-most-faithful. Recursive is the pragmatic
+        default; structure-aware is the right answer whenever the format gives you
+        structure to use.
+      </p>
+      <div class="box said">
+        <span class="box-t">Frame it as a trade, not a ranking</span>
+        <p>
+          "The strategies differ in how much they respect the document's own boundaries
+          versus how much machinery they need. I start with whatever structure the format
+          already gives me, because that structure was put there by a human deciding what
+          belongs together — which is exactly the judgement I'd otherwise be trying to
+          reconstruct."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q4-2">
+    <div class="qa-head"><span class="qa-n">4.2</span>
+      <h3>Fixed-size chunking — how much overlap, and why any?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>
+        Overlap exists to survive a bad cut. If an answer straddles a boundary, neither
+        chunk contains it whole — overlap gives a second chance.
+      </p>
+<pre><code>def fixed_chunks(tokens, size=512, overlap=64):
+    step = size - overlap
+    return [tokens[i:i + size] for i in range(0, len(tokens), step)]
+
+# 10,000 tokens, size 512, overlap 64
+#   stride 448  ->  ~23 chunks  ->  index is ~14% larger than the corpus</code></pre>
+      <p>
+        10–20% is the usual band. The cost is real and often forgotten: overlap inflates
+        the index, and it puts <em>near-duplicate</em> chunks into your top-k, so three of
+        your five results can be three windows over the same paragraph.
+      </p>
+      <div class="box breaks">
+        <span class="box-t">Deduplicate after retrieval</span>
+        <p>
+          With overlap you should collapse results that share a parent document or overlap
+          textually, otherwise the context window fills with the same sentences repeated.
+          This is a bug people ship without noticing, because each individual result looks
+          relevant.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q4-3">
+    <div class="qa-head"><span class="qa-n">4.3</span>
+      <h3>How does recursive character splitting actually work?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>
+        It tries separators in order of preference, and only falls to a worse one when a
+        piece is still too large.
+      </p>
+<pre><code>SEPARATORS = ["\n\n", "\n", ". ", " ", ""]     # best -> worst
+
+def recursive_split(text, size, seps=SEPARATORS):
+    if len(text) <= size:
+        return [text]
+    sep, rest = seps[0], seps[1:]
+    parts = text.split(sep) if sep else list(text)
+
+    out, buf = [], ""
+    for part in parts:
+        candidate = buf + sep + part if buf else part
+        if len(candidate) <= size:
+            buf = candidate                       # keep accumulating
+        else:
+            if buf:
+                out.append(buf)
+            # this part alone is still too big -> recurse with a finer separator
+            out.extend(recursive_split(part, size, rest) if len(part) > size else [part])
+            buf = ""
+    if buf:
+        out.append(buf)
+    return out</code></pre>
+      <p>
+        The empty string at the end is the guarantee of termination: worst case it splits
+        per character, so no chunk can ever exceed the limit. That is why it is the safe
+        default — it never produces an oversized chunk that silently gets truncated by the
+        embedding model.
+      </p>
+    </div>
+  </article>
+
+  <article class="qa" id="q4-4">
+    <div class="qa-head"><span class="qa-n">4.4</span>
+      <h3>What is semantic chunking and is it worth it?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>Embed each sentence, walk the document, cut where consecutive similarity drops.</p>
+<pre><code>vectors = embed([s for s in sentences])
+sims = [cosine(vectors[i], vectors[i + 1]) for i in range(len(vectors) - 1)]
+
+threshold = np.percentile(sims, 5)      # relative, not absolute -- see 2.6
+boundaries = [i for i, s in enumerate(sims) if s < threshold]</code></pre>
+      <p>
+        Note the threshold is a <strong>percentile of this document</strong>, not a fixed
+        number. An absolute cutoff fails for the reason in 2.6: cosine values are not
+        portable.
+      </p>
+      <div class="box breaks">
+        <span class="box-t">Usually not worth it — say so</span>
+        <p>
+          It costs an embedding call per sentence at ingest, boundaries move when you
+          change embedding model, and published comparisons rarely show it beating
+          structure-aware splitting on documents that <em>have</em> structure. It earns
+          its place on long unstructured narrative — transcripts, interview notes — where
+          there are no headings to use.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q4-5">
+    <div class="qa-head"><span class="qa-n">4.5</span>
+      <h3>Pick a chunking strategy for these three cases and justify it.</h3></div>
+    <div class="tags"><span class="tag t-trap">the actual test</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        This is the question the section exists for. The method: <strong>ask what unit the
+        user wants back</strong>, then chunk to that.
+      </p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Use case</th><th>Strategy</th><th>Because</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Legal contracts</strong><br>"what does the indemnity clause say?"</td>
+              <td>Structure-aware on clause numbering, parent–child</td>
+              <td>The clause is the retrieval unit and the legal unit. Splitting mid-clause changes its meaning; returning the whole contract buries it</td>
+            </tr>
+            <tr>
+              <td><strong>Support tickets</strong><br>"has this bug been reported?"</td>
+              <td><strong>No chunking</strong> — one vector per ticket</td>
+              <td>~1 KB, already the unit a human wants back. "Paragraph 3 of OS-1042" answers nobody</td>
+            </tr>
+            <tr>
+              <td><strong>Product manuals</strong><br>"how do I reset the device?"</td>
+              <td>Structure-aware on headings, then recursive within long sections</td>
+              <td>A procedure is a heading plus its steps. Cutting the steps from the heading loses what the procedure is <em>for</em></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="box said">
+        <span class="box-t">The reusable formula</span>
+        <p>
+          "What is the smallest self-contained thing a user would be satisfied to be shown?
+          Embed that. If it is too small to be found on its own, embed the small thing and
+          return its parent."
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- ============================================================ SECTION 5 -->
+<section class="sec" id="s5">
+  <div class="sec-head">
+    <span class="sec-n">Section 5</span>
+    <h2>Vector databases &amp; indexing</h2>
+  </div>
+  <p class="sec-intro">
+    Expect to be asked which you have used and why. The strongest answers name the trade
+    the choice bought and the cost it charged.
+  </p>
+
+  <article class="qa" id="q5-1">
+    <div class="qa-head"><span class="qa-n">5.1</span>
+      <h3>How do you choose a vector store?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th>Store</th><th>Shape</th><th>Strength</th><th>Cost</th></tr></thead>
+          <tbody>
+            <tr><td><strong>pgvector</strong></td><td>Postgres extension</td><td>One store; joins and ACLs already work; transactional</td><td>Scales to ~10M before it hurts; index build is heavy</td></tr>
+            <tr><td><strong>Pinecone</strong></td><td>Managed serverless</td><td>Nothing to run; namespaces for tenancy</td><td>Dual write; network hop; vendor dependency</td></tr>
+            <tr><td><strong>Milvus</strong></td><td>Self-hosted distributed</td><td>Billions of vectors; many index types</td><td>Real operational burden — it is a cluster</td></tr>
+            <tr><td><strong>FAISS</strong></td><td>A library, not a database</td><td>Fastest; total control</td><td>No persistence, no filtering, no concurrency — you build all of it</td></tr>
+            <tr><td><strong>Azure AI Search</strong></td><td>Managed, hybrid-native</td><td>BM25 + vector + semantic re-ranker in one service; RBAC integration</td><td>Azure lock-in; per-index pricing</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>FAISS is the one people misclassify.</strong> It is an ANN library. If you
+        say "we used FAISS in production" expect to be asked how you handled persistence,
+        updates, filtering and multi-process access — because FAISS does none of them.
+      </p>
+      <div class="box said">
+        <span class="box-t">The decision rule</span>
+        <p>
+          "Start in the database you already have. A dedicated vector store buys scale and
+          charges you a dual write, an outbox and a reconciliation job — I pay that when
+          the index no longer fits comfortably beside the data, not before."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q5-2">
+    <div class="qa-head"><span class="qa-n">5.2</span>
+      <h3>Make the case for pgvector, then against it.</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p><strong>For:</strong></p>
+<pre><code>CREATE EXTENSION vector;
+ALTER TABLE tickets ADD COLUMN embedding vector(1024);
+CREATE INDEX ON tickets USING hnsw (embedding vector_cosine_ops)
+  WITH (m = 16, ef_construction = 64);
+
+-- The thing no dedicated store can do: one query, joined and access-controlled
+SELECT t.id, t.title, t.embedding <=> :q AS distance
+FROM tickets t
+JOIN teams tm ON tm.id = t.team_id
+WHERE t.deleted_at IS NULL          -- RLS applies automatically
+  AND tm.name = 'Payroll'
+ORDER BY distance
+LIMIT 20;</code></pre>
+      <p>
+        No dual write, no drift, no reconciliation job. Filters are ordinary SQL and your
+        existing row-level security applies to vector search for free — which is a
+        <em>security</em> argument, not a convenience one.
+      </p>
+      <p><strong>Against:</strong> index builds are slow and memory-hungry; HNSW in
+      Postgres competes with your OLTP workload for buffer cache; and past roughly 10M
+      vectors the operational profile stops resembling a database you also serve
+      transactions from.</p>
+      <div class="box mine">
+        <span class="box-t">In this system</span>
+        <p>
+          Pinecone was chosen deliberately for the learning goal, and the docs say plainly
+          that pgvector was the better engineering choice. The cost is written down rather
+          than hidden: a dual write, an outbox, and an <code>ai_backfill --reconcile</code>
+          job that diffs both directions for <em>missing</em>, <em>orphaned</em>,
+          <em>unrecorded</em> and <em>lost</em> vectors.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q5-3">
+    <div class="qa-head"><span class="qa-n">5.3</span>
+      <h3>Explain HNSW.</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>
+        A <strong>hierarchical navigable small-world graph</strong>. Vectors are nodes;
+        edges connect near neighbours. Layers are built with exponentially decaying
+        probability, so the top layer is sparse and long-range, the bottom contains
+        everything.
+      </p>
+      <div class="dia">
+<pre>  layer 2   ●───────────────────●            sparse: big jumps
+              \               /
+  layer 1   ●───●─────────●───●──────●       medium hops
+             \  |        /    |     /
+  layer 0   ●──●──●──●──●──●──●──●──●        every vector, short edges
+
+  search: enter at the top, greedily descend to the closest node,
+          drop a layer, repeat. O(log N) hops instead of O(N).</pre>
+      </div>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Parameter</th><th>Controls</th><th>Raise it to</th><th>Cost</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">M</td><td>Edges per node</td><td>Improve recall, especially high-dim</td><td>Memory, permanently</td></tr>
+            <tr><td class="mono">ef_construction</td><td>Build-time candidate breadth</td><td>Build a better graph</td><td>Index build time</td></tr>
+            <tr><td class="mono">ef_search</td><td>Query-time breadth</td><td>Improve recall <em>per query</em></td><td>Latency</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <code>ef_search</code> is the only one you can change without rebuilding, which
+        makes it your live recall/latency dial. Sensible defaults: M 16, ef_construction
+        64–200, ef_search ≥ top_k and tuned upward until recall plateaus.
+      </p>
+      <div class="box breaks">
+        <span class="box-t">Deletes are the weakness</span>
+        <p>
+          HNSW has no true delete — implementations tombstone and the graph degrades as
+          tombstones accumulate, because edges still point at removed nodes. High-churn
+          corpora need periodic rebuilds. Ask about this in an interview and you sound like
+          you have operated one.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q5-4">
+    <div class="qa-head"><span class="qa-n">5.4</span>
+      <h3>How does metadata filtering interact with ANN search?</h3></div>
+    <div class="tags"><span class="tag t-trap">under-appreciated</span></div>
+    <div class="qa-body">
+      <p>Badly, and this catches people out. Three implementations, three failure modes:</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Approach</th><th>How</th><th>Fails when</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Post-filter</strong></td><td>ANN for k, then drop non-matching</td><td>Selective filter → you asked for 20 and got 2</td></tr>
+            <tr><td><strong>Pre-filter</strong></td><td>Restrict the candidate set, then search</td><td>Graph walk gets trapped in an excluded region; recall collapses</td></tr>
+            <tr><td><strong>Partitioned</strong></td><td>A separate index per filter value</td><td>Only works for low-cardinality, known-ahead filters — like tenant</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The practical rule: <strong>over-fetch proportionally to filter selectivity</strong>,
+        and partition on anything both low-cardinality and always-present.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this system</span>
+        <p>
+          Tenant is partitioned — one namespace per tenant — because it is always present
+          and is a security boundary, not a filter. Everything else is a metadata filter
+          with deliberate over-fetch:
+        </p>
+<pre><code># Excluded ids (usually the ticket itself) are removed AFTER the search
+# and would otherwise eat into the limit.
+fetch = limit + len(exclude) + 5</code></pre>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q5-5">
+    <div class="qa-head"><span class="qa-n">5.5</span>
+      <h3>How do you optimise an index once it is live?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>In the order that gives the most for the least:</p>
+      <ol>
+        <li><strong>Measure recall against exact search first.</strong> Sample 200 queries, brute-force the true top-k, compare. Without this number you are tuning blind.</li>
+        <li><strong>Tune <code>ef_search</code>.</strong> Free, live, per-query. Usually where the answer is.</li>
+        <li><strong>Reduce dimensions.</strong> Linear savings in memory and compute — see 2.3.</li>
+        <li><strong>Quantise.</strong> float32 → int8 is 4× smaller for a few points of recall. Binary is 32× and needs a re-score pass.</li>
+        <li><strong>Rebuild if churn is high.</strong> Tombstones degrade the graph.</li>
+        <li><strong>Only then reshard.</strong> The expensive, structural option.</li>
+      </ol>
+<pre><code>def measure_recall(queries, k=20):
+    hits = 0
+    for q in queries:
+        exact = set(brute_force_topk(q, k))     # ground truth
+        approx = set(index.search(q, k))
+        hits += len(exact & approx)
+    return hits / (len(queries) * k)            # e.g. 0.94 = losing 6%</code></pre>
+      <div class="box said">
+        <span class="box-t">The line that shows operational maturity</span>
+        <p>
+          "ANN recall is a parameter, not a constant. Most teams never measure it, so they
+          cannot tell an index regression from a model regression — and those need
+          completely different fixes."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q5-6">
+    <div class="qa-head"><span class="qa-n">5.6</span>
+      <h3>What changes in the indexing architecture from thousands to millions?</h3></div>
+    <div class="tags"><span class="tag t-trap">explicitly asked</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th></th><th>~10k</th><th>~1M</th><th>50M+</th></tr></thead>
+          <tbody>
+            <tr><td>Index</td><td>Flat / exact</td><td>HNSW, single node</td><td>IVF-PQ or sharded HNSW</td></tr>
+            <tr><td>Memory</td><td>Megabytes</td><td>Fits one machine</td><td>Sharded; quantisation mandatory</td></tr>
+            <tr><td>Build</td><td>Seconds</td><td>Minutes</td><td>Hours — a scheduled job with checkpoints</td></tr>
+            <tr><td>Updates</td><td>Rebuild</td><td>Incremental</td><td>Streaming + periodic compaction</td></tr>
+            <tr><td>Recall</td><td>1.0 by construction</td><td>Tuned</td><td>Monitored as a production SLI</td></tr>
+            <tr><td>Filtering</td><td>Post-filter</td><td>Pre-filter</td><td>Partitioned + pre-filter</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The three transitions that actually hurt:</p>
+      <ul>
+        <li><strong>Exact → approximate.</strong> Retrieval recall stops being 1.0, so every offline number built with exact search becomes optimistic.</li>
+        <li><strong>Rebuild → incremental.</strong> Changing the embedding model turns from a command into a dual-index migration with backfill and cutover.</li>
+        <li><strong>Single → sharded.</strong> A query now fans out and merges, so tail latency is governed by your slowest shard.</li>
+      </ul>
+    </div>
+  </article>
+</section>
+
+<!-- ============================================================ SECTION 6 -->
+<section class="sec" id="s6">
+  <div class="sec-head">
+    <span class="sec-n">Section 6</span>
+    <h2>Retrieval optimization &amp; re-ranking</h2>
+  </div>
+  <p class="sec-intro">
+    Hybrid retrieval, query rewriting and thresholds are covered in 3.6–3.13. This
+    section is the encoder architecture question, which comes up in nearly every senior
+    RAG interview.
+  </p>
+
+  <article class="qa" id="q6-1">
+    <div class="qa-head"><span class="qa-n">6.1</span>
+      <h3>Bi-encoder versus cross-encoder.</h3></div>
+    <div class="tags"><span class="tag t-core">core</span><span class="tag t-deep">expect it</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        The difference is <strong>when the query and document meet</strong>, and everything
+        else follows from it.
+      </p>
+      <div class="dia">
+<pre>  BI-ENCODER                          CROSS-ENCODER
+
+  query ──► encoder ──► vector        [query [SEP] document]
+                          │                     │
+  doc   ──► encoder ──► vector             one encoder
+                          │                     │
+                     cosine(a, b)          relevance score
+
+  documents encoded ONCE, offline     re-encoded per (query, doc) pair
+  search = index lookup               search = N forward passes
+  fast, approximate                   slow, accurate</pre>
+      </div>
+      <div class="tw">
+        <table>
+          <thead><tr><th></th><th>Bi-encoder</th><th>Cross-encoder</th></tr></thead>
+          <tbody>
+            <tr><td>Token interaction</td><td>None — only vectors meet</td><td>Full self-attention across both</td></tr>
+            <tr><td>Precompute</td><td>Yes, that's the point</td><td>Impossible — depends on the query</td></tr>
+            <tr><td>Cost per query</td><td>1 encode + ANN</td><td>1 forward pass <em>per candidate</em></td></tr>
+            <tr><td>Scales to</td><td>Millions</td><td>Tens</td></tr>
+            <tr><td>Role</td><td>Retriever</td><td>Re-ranker</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        A bi-encoder must compress a document into a vector <em>before it knows the
+        question</em>. That is the fundamental limitation, and it is why re-ranking helps
+        so much: a cross-encoder can let the word "blank" in the query attend directly to
+        "empty file" in the document.
+      </p>
+<pre><code>from sentence_transformers import CrossEncoder
+reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+
+pairs  = [(query, doc.text) for doc in candidates]   # 20 candidates
+scores = reranker.predict(pairs)                     # 20 forward passes
+ranked = [d for _, d in sorted(zip(scores, candidates), reverse=True)]</code></pre>
+      <div class="box said">
+        <span class="box-t">One sentence</span>
+        <p>
+          "A bi-encoder answers 'which of these million documents is roughly relevant';
+          a cross-encoder answers 'of these twenty, which is actually best'. You need both
+          because neither can do the other's job at the other's scale."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q6-2">
+    <div class="qa-head"><span class="qa-n">6.2</span>
+      <h3>Retriever versus re-ranker — what is each responsible for?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th></th><th>Retriever</th><th>Re-ranker</th></tr></thead>
+          <tbody>
+            <tr><td>Optimises</td><td><strong>Recall</strong> — do not lose it</td><td><strong>Precision</strong> — order what survived</td></tr>
+            <tr><td>Sees</td><td>The whole corpus</td><td>10–50 candidates</td></tr>
+            <tr><td>Failure</td><td>Never returns the answer — <em>unrecoverable</em></td><td>Orders badly — recoverable</td></tr>
+            <tr><td>Budget</td><td>Milliseconds</td><td>Hundreds of ms to seconds</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The asymmetry in the "failure" row is the whole design principle:
+        <strong>a re-ranker can reorder what it is given but cannot recover what retrieval
+        never returned.</strong> So retrieval should be generous and slightly noisy on
+        purpose.
+      </p>
+      <div class="box breaks">
+        <span class="box-t">The common misconfiguration</span>
+        <p>
+          Retrieving 5 and re-ranking 5. That spends the re-ranker's entire value on
+          reordering a set that has already lost the answer. Retrieve 50, re-rank 20, show
+          5.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q6-3">
+    <div class="qa-head"><span class="qa-n">6.3</span>
+      <h3>How do you pick a re-ranking model?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th>Option</th><th>Latency / doc</th><th>When</th></tr></thead>
+          <tbody>
+            <tr><td><code>ms-marco-MiniLM-L-6-v2</code></td><td>~5–10ms</td><td>Default. Small, fast, well understood</td></tr>
+            <tr><td><code>bge-reranker-v2-m3</code></td><td>~20–40ms</td><td>Multilingual, stronger, still self-hosted</td></tr>
+            <tr><td>Cohere Rerank / Voyage</td><td>API call</td><td>No infrastructure; per-query cost; data leaves</td></tr>
+            <tr><td>Azure AI Search semantic ranker</td><td>Built into the query</td><td>Already on Azure AI Search — no extra hop</td></tr>
+            <tr><td>LLM-as-reranker</td><td>Seconds</td><td>Only when you need a <em>label</em>, not an order</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Start with a small cross-encoder. Reach for an LLM only when the output has to be
+        richer than a score.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this system — why an LLM, deliberately</span>
+        <p>
+          The panel must distinguish <code>duplicate</code> from <code>recurring</code>
+          from <code>related</code>, with a reason a human can read. "Someone is already
+          working on this" and "this was fixed and came back" route to different responses,
+          and a cross-encoder emits a number, not a label. That is the only justification
+          for paying seconds instead of milliseconds — and it is off by default, degrading
+          to the fused order when unavailable.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q6-4">
+    <div class="qa-head"><span class="qa-n">6.4</span>
+      <h3>How do you tune top-K empirically?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>
+        Sweep the retrieval depth and plot recall. The curve flattens; you want the knee,
+        not the maximum.
+      </p>
+<pre><code>for k in (5, 10, 20, 50, 100, 200):
+    r = recall_at_k(golden_queries, k=k)
+    print(f"k={k:>3}  recall={r:.3f}")
+
+# k=  5  recall=0.71
+# k= 10  recall=0.84
+# k= 20  recall=0.93
+# k= 50  recall=0.97     <- knee: +0.04 for 2.5x the re-rank cost
+# k=100  recall=0.98
+# k=200  recall=0.99</code></pre>
+      <p>
+        Retrieval depth is cheap; <strong>re-rank depth is the expensive one</strong>,
+        because it is a forward pass per candidate. So retrieve deep, re-rank shallow —
+        the two Ks are tuned against different budgets and should not be the same number.
+      </p>
+      <p>
+        And the final display K is a product decision, not a retrieval one: five results
+        that a human will read beats twenty they will scroll past.
+      </p>
+    </div>
+  </article>
+
+  <article class="qa" id="q6-5">
+    <div class="qa-head"><span class="qa-n">6.5</span>
+      <h3>Retrieval quality is poor. What do you try, in what order?</h3></div>
+    <div class="tags"><span class="tag t-trap">judgement test</span></div>
+    <div class="qa-body">
+      <p>Cheapest and highest-yield first. Most people start at the bottom of this list.</p>
+      <ol>
+        <li><strong>Build an evaluation set.</strong> Fifty labelled queries. Without it every later step is guesswork.</li>
+        <li><strong>Check the obvious break.</strong> Is anything indexed? Is the query embedded the same way as the documents (2.5)? Is the tokenizer consistent (3.6)?</li>
+        <li><strong>Add the missing retriever.</strong> Dense-only on identifier queries, or sparse-only on paraphrases, is the single biggest structural gap.</li>
+        <li><strong>Fix chunking.</strong> Usually the largest single quality lever, and free to evaluate.</li>
+        <li><strong>Add re-ranking.</strong> Reliable +0.2–0.4 precision@5 for real latency.</li>
+        <li><strong>Query rewriting.</strong> Helps conversational and vague queries; costs a call.</li>
+        <li><strong>Swap the embedding model.</strong> Expensive — a full re-embed — and usually smaller than the above.</li>
+        <li><strong>Fine-tune embeddings.</strong> Last. Needs labelled data you probably do not have.</li>
+      </ol>
+      <div class="box said">
+        <span class="box-t">Why the order is the answer</span>
+        <p>
+          "Almost everyone jumps to a better embedding model, which is the most expensive
+          change with one of the smallest effects. The first four steps are cheap, and in
+          my experience they account for most of the gap."
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- ============================================================ SECTION 7 -->
+<section class="sec" id="s7">
+  <div class="sec-head">
+    <span class="sec-n">Section 7</span>
+    <h2>RAG evaluation metrics</h2>
+  </div>
+  <p class="sec-intro">
+    3.14 covered the strategy. This section is the metric definitions — expect to be
+    asked to define MRR or nDCG cold, and to say which one you would actually use.
+  </p>
+
+  <article class="qa" id="q7-1">
+    <div class="qa-head"><span class="qa-n">7.1</span>
+      <h3>Define precision, recall and hit rate for retrieval.</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+<pre><code>def precision_at_k(retrieved, relevant, k):
+    top = retrieved[:k]
+    return len([d for d in top if d in relevant]) / k
+
+def recall_at_k(retrieved, relevant, k):
+    top = retrieved[:k]
+    return len([d for d in top if d in relevant]) / len(relevant)
+
+def hit_rate_at_k(retrieved, relevant, k):
+    return 1.0 if set(retrieved[:k]) & set(relevant) else 0.0</code></pre>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Metric</th><th>Asks</th><th>Use when</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Precision@k</strong></td><td>Of what I showed, how much was right?</td><td>The user reads everything shown</td></tr>
+            <tr><td><strong>Recall@k</strong></td><td>Of what was right, how much did I show?</td><td>Feeding an LLM — missing evidence is fatal</td></tr>
+            <tr><td><strong>Hit rate@k</strong></td><td>Was <em>anything</em> right in the top k?</td><td>One good document is enough to answer</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>Recall is usually the retrieval metric that matters in RAG</strong>, because
+        a re-ranker and an LLM can both ignore a bad document but neither can invent a
+        missing one.
+      </p>
+    </div>
+  </article>
+
+  <article class="qa" id="q7-2">
+    <div class="qa-head"><span class="qa-n">7.2</span>
+      <h3>Define MRR, MAP and nDCG. When is each right?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span><span class="tag t-deep">definitions expected cold</span></div>
+    <div class="qa-body">
+      <p><strong>MRR</strong> — reciprocal of the rank of the <em>first</em> correct result, averaged.</p>
+<pre><code>def mrr(results_per_query, relevant_per_query):
+    total = 0.0
+    for results, relevant in zip(results_per_query, relevant_per_query):
+        for rank, doc in enumerate(results, start=1):
+            if doc in relevant:
+                total += 1 / rank        # rank 1 -> 1.0, rank 4 -> 0.25
+                break
+    return total / len(results_per_query)</code></pre>
+      <p>Only the first hit counts. Right when one good answer ends the task — a lookup, a "did this happen before" check.</p>
+
+      <p><strong>MAP</strong> — average precision at every relevant position, then averaged over queries. Rewards getting <em>all</em> the relevant items high.</p>
+<pre><code>def average_precision(results, relevant):
+    hits, total = 0, 0.0
+    for rank, doc in enumerate(results, start=1):
+        if doc in relevant:
+            hits += 1
+            total += hits / rank         # precision at this position
+    return total / len(relevant) if relevant else 0.0</code></pre>
+
+      <p><strong>nDCG</strong> — the only one that handles <em>graded</em> relevance rather than binary, with a logarithmic position discount.</p>
+<pre><code>import numpy as np
+
+def ndcg_at_k(results, gains, k):        # gains: doc -> 0..3
+    def dcg(order):
+        return sum(gains.get(d, 0) / np.log2(i + 1) for i, d in enumerate(order, start=1))
+    ideal = sorted(gains, key=gains.get, reverse=True)[:k]
+    return dcg(results[:k]) / dcg(ideal) if dcg(ideal) else 0.0</code></pre>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Metric</th><th>Graded?</th><th>Position-aware?</th><th>Use for</th></tr></thead>
+          <tbody>
+            <tr><td>MRR</td><td>No</td><td>First hit only</td><td>Known-item search</td></tr>
+            <tr><td>MAP</td><td>No</td><td>All hits</td><td>Multiple relevant documents</td></tr>
+            <tr><td>nDCG</td><td><strong>Yes</strong></td><td>All, discounted</td><td>"Very / somewhat / not" relevant</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q7-3">
+    <div class="qa-head"><span class="qa-n">7.3</span>
+      <h3>Which metric would you actually put in CI?</h3></div>
+    <div class="tags"><span class="tag t-trap">judgement</span></div>
+    <div class="qa-body">
+      <p>
+        <strong>Recall@k for the gate, MRR alongside it for diagnosis.</strong> Recall
+        answers "can the system possibly succeed"; MRR answers "is it putting the answer
+        where a human will see it". They move independently and the pair localises a
+        regression.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this system — reported per query family</span>
+        <p>
+          Retrieval is measured on two families separately, and running only one would have
+          produced the wrong architecture: paraphrase queries make keyword search look like
+          pure overhead, while identifier queries are what it exists for. The harness prints
+          MRR, R@1/3/5/10/20 and nDCG per configuration, exits non-zero if the shipped
+          combiner falls below a single retriever, and costs <strong>zero LLM calls</strong>.
+        </p>
+      </div>
+      <div class="box said">
+        <span class="box-t">The line worth having</span>
+        <p>
+          "A single averaged number hides the case you care about. I report per query
+          family, because the whole point of hybrid retrieval is that different families
+          fail differently — and an average is exactly the shape that conceals that."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q7-4">
+    <div class="qa-head"><span class="qa-n">7.4</span>
+      <h3>How do you measure faithfulness and detect hallucination?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>Three layers, cheapest first, and the cheap one catches the most damaging class.</p>
+      <p><strong>1. Deterministic citation grounding.</strong> Extract every reference the model claimed; check each against what was actually retrieved. No model needed.</p>
+<pre><code>cited     = set(REFERENCE_PATTERN.findall(answer))    # \bOS-\d{1,6}\b
+allowed   = references_seen_in_tool_results(state)
+ungrounded = cited - allowed        # anything here was invented</code></pre>
+      <p><strong>2. Claim-level LLM judging</strong> — RAGAS faithfulness: decompose the answer into atomic claims, check each against the context, score = supported / total.</p>
+      <p><strong>3. NLI entailment</strong> — a smaller, cheaper, more consistent alternative: does the context <em>entail</em> each claim?</p>
+
+      <div class="box mine">
+        <span class="box-t">In this system — the exact hallucination, caught twice</span>
+        <p>
+          The local model answered a ticket count correctly, then decorated it with three
+          invented references: <code>OS-1042</code>, <code>OS-1043</code>,
+          <code>OS-1044</code>. RAGAS scored it <strong>faithfulness 0.20 with relevancy
+          0.88</strong> — the dangerous combination.
+        </p>
+        <p>
+          The cause was precise: the aggregate tool returned counts with <em>no</em>
+          references, and the model filled the absence. Making the tool declare
+          <code>"ticket_references": []</code> and stripping decorative fabrications took
+          faithfulness from <strong>0.73 to 0.92</strong>.
+        </p>
+      </div>
+
+      <div class="box breaks">
+        <span class="box-t">Two traps in LLM-as-judge</span>
+        <p>
+          <strong>The judge is unstable.</strong> One identical sample scored three times
+          at temperature 0: 0.25, 0.25, 1.00. Read judged metrics as a trend, never a
+          per-row verdict.
+        </p>
+        <p>
+          <strong>Relevancy punishes honest refusals.</strong> RAGAS classifies
+          noncommittal answers as irrelevant by design, so "the data does not answer that"
+          scores 0.00. Optimising it rewards guessing — which is why faithfulness is the
+          metric to gate on.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q7-5">
+    <div class="qa-head"><span class="qa-n">7.5</span>
+      <h3>How do you build a golden set without a labelling team?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <ul>
+        <li><strong>Harvest from usage.</strong> Accepted suggestions, clicked results, resolved tickets linked as duplicates. Free, real, and it grows.</li>
+        <li><strong>Mine existing structure.</strong> An FAQ is question–answer pairs. A ticket marked <code>duplicate_of</code> is a labelled pair someone already made.</li>
+        <li><strong>Synthesise, then have a human filter.</strong> Generate questions from documents with an LLM; keep the ones a person confirms. Cheap, and the filtering step is what makes it honest.</li>
+        <li><strong>Seed deliberately.</strong> Plant known relationships in a demo corpus.</li>
+      </ul>
+      <div class="box mine">
+        <span class="box-t">In this system — including the mistake</span>
+        <p>
+          16 clusters, 20 hand-written variants, each the same defect in a different
+          customer's voice. Clusters deliberately stress different retrievers: payslip and
+          leave clusters share almost no vocabulary (semantic should win); TDS and PF
+          hinge on <code>80C</code> and <code>ECR</code> (keyword should win).
+        </p>
+        <p>
+          <strong>The first version was worthless and looked perfect.</strong> Every
+          configuration scored 1.000 on every metric — because the variants paraphrased
+          only <em>titles</em> and reused the base description, so the task was exact-text
+          matching. A benchmark everything passes has no power to distinguish anything.
+        </p>
+        <p>
+          A later audit found a second version of the same fault one level out: the
+          surrounding corpus was drawn by weighted sampling, so 200 of 220 tickets sat in
+          an exact-duplicate group. Rebuilding it kept the conclusions and collapsed the
+          margins — the case for embeddings on paraphrase went from +0.158 to
+          <strong>+0.014</strong>.
+        </p>
+      </div>
+      <div class="box said">
+        <span class="box-t">The strongest thing you can say about evaluation</span>
+        <p>
+          "I audited my own benchmark and found it was flattering the results — twice. The
+          conclusions survived; the margins did not. A saturated benchmark reads as success,
+          which is what makes it dangerous."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q7-6">
+    <div class="qa-head"><span class="qa-n">7.6</span>
+      <h3>How would you determine whether a RAG system is working?</h3></div>
+    <div class="tags"><span class="tag t-trap">the summary question</span></div>
+    <div class="qa-body">
+      <p>Two questions, and they need separate answers because they fail independently.</p>
+      <div class="dia">
+<pre>  "Is it retrieving the right information?"
+      recall@k, MRR, nDCG on a golden set
+      per query family, not averaged
+      free -> gate every change on it
+
+  "Is it generating a reliable answer from that information?"
+      faithfulness   -- is every claim supported by the context?
+      groundedness   -- does every citation resolve?
+      relevancy      -- does it answer the question asked?
+      costs LLM calls -> run occasionally
+
+  AND, underneath both:
+      acceptance rate -- did a human agree?
+      the only number that is not a proxy</pre>
+      </div>
+      <p>
+        The separation is diagnostic. High retrieval + low faithfulness means the model is
+        ignoring good context — a prompt or model problem. Low retrieval + high
+        faithfulness means it is faithfully reporting that it found nothing — a retrieval
+        problem. Fixing the wrong one is the most common wasted week in RAG work.
+      </p>
+      <div class="box said">
+        <span class="box-t">Close on this</span>
+        <p>
+          "Every offline metric is a proxy. The number that is not a proxy is whether the
+          people using it accepted the answer — which is why the accept and reject buttons
+          exist partly as the evaluation dataset. The feature and its own labelled data are
+          the same thing."
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- ============================================================ SECTION 8 -->
+<section class="sec" id="s8">
+  <div class="sec-head">
+    <span class="sec-n">Section 8</span>
+    <h2>Agentic AI</h2>
+  </div>
+  <p class="sec-intro">
+    The section where enthusiasm is cheap and scars are valuable. Interviewers are
+    listening for whether you have run an agent unattended and know what it does when
+    nobody is watching.
+  </p>
+
+  <article class="qa" id="q8-1">
+    <div class="qa-head"><span class="qa-n">8.1</span>
+      <h3>What actually makes something an agent?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        <strong>The model decides the control flow.</strong> That is the whole definition,
+        and everything difficult follows from it.
+      </p>
+      <div class="tw">
+        <table>
+          <thead><tr><th></th><th>Who decides the next step</th><th>Steps known ahead?</th></tr></thead>
+          <tbody>
+            <tr><td>Single call</td><td>You</td><td>Yes — there is one</td></tr>
+            <tr><td>Chain / workflow</td><td>You</td><td>Yes, fixed sequence</td></tr>
+            <tr><td>Router</td><td>Model picks one branch, once</td><td>Bounded set</td></tr>
+            <tr><td><strong>Agent</strong></td><td><strong>Model, every iteration</strong></td><td><strong>No</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Because the path is not known in advance, you cannot test every path, cannot bound
+        cost by inspection, and cannot predict latency. That is the price, and it is why
+        the honest first question is whether you need one.
+      </p>
+      <div class="box said">
+        <span class="box-t">Say this before describing your agent</span>
+        <p>
+          "I'd check four things first: is the task genuinely multi-step and hard to
+          specify up front; does the outcome justify the latency and cost; is the model
+          actually capable at this task; and can errors be caught and rolled back. If any
+          answer is no, a workflow is better — most 'agent' problems are workflows with an
+          LLM step."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q8-2">
+    <div class="qa-head"><span class="qa-n">8.2</span>
+      <h3>How does tool calling work, and how do you make it portable?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>
+        The standard path is provider-native function calling: you send JSON-schema tool
+        definitions, the model returns a structured call, you execute it and feed the
+        result back.
+      </p>
+<pre><code>tools = [{
+    "type": "function",
+    "function": {
+        "name": "search_tickets",
+        "description": "Find tickets by text, status, priority, team, client, "
+                       "assignee, or date. Returns at most 25.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query":  {"type": "string"},
+                "status": {"type": "array", "items": {"type": "string"}},
+            },
+        },
+    },
+}]</code></pre>
+      <p>
+        The portability problem: every provider's schema and response shape differ, and
+        local models often support none of it. The alternative is
+        <strong>structured output</strong> — constrain the model to a decision object and
+        dispatch yourself.
+      </p>
+<pre><code>class AgentDecision(BaseModel):
+    action: Literal["use_tool", "answer"]
+    tool: str | None = None
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    reasoning: str
+
+decision = await model.generate_structured(SYSTEM, messages, AgentDecision)</code></pre>
+      <div class="box mine">
+        <span class="box-t">In this codebase</span>
+        <p>
+          Deliberately structured output rather than native tool calling — that is the only
+          reason one port serves both hosted Gemini and local Ollama identically, and
+          therefore the only reason the fallback chain works at all. A native-tool-calling
+          agent cannot fall back to a model that lacks it.
+        </p>
+      </div>
+      <div class="box breaks">
+        <span class="box-t">A bug that cost two rounds of redesign</span>
+        <p>
+          Tool <em>descriptions</em> were never being sent to the model — only parameter
+          names. The agent kept choosing wrong tools, which read as "the model is weak", so
+          the tools were redesigned twice before anyone checked what the model actually
+          received. Log the exact prompt before you tune the prompt.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q8-3">
+    <div class="qa-head"><span class="qa-n">8.3</span>
+      <h3>Single agent or multi-agent — how do you decide?</h3></div>
+    <div class="tags"><span class="tag t-trap">over-engineering trap</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        Default to <strong>one agent with more tools</strong>. Split only when there is a
+        reason a single agent cannot satisfy.
+      </p>
+      <p>Legitimate reasons to split:</p>
+      <ul>
+        <li><strong>Different permissions.</strong> A read-only research agent and an agent that can write are different trust boundaries — and that boundary is best enforced structurally.</li>
+        <li><strong>Different models.</strong> A cheap classifier in front of an expensive reasoner.</li>
+        <li><strong>Context pressure.</strong> Twenty tools is a large prompt and degrades selection accuracy; splitting keeps each prompt focused.</li>
+        <li><strong>Genuine parallelism.</strong> Independent subtasks that can run at once.</li>
+        <li><strong>Team ownership.</strong> Different teams shipping independently.</li>
+      </ul>
+      <div class="box breaks">
+        <span class="box-t">What multi-agent actually costs</span>
+        <p>
+          Every hand-off is a lossy summarisation, latency accumulates serially, cost
+          multiplies, and failures become non-local — agent C fails because agent A
+          misphrased something two hops back. Debugging a multi-agent system is
+          substantially harder than debugging one agent with ten tools.
+        </p>
+      </div>
+      <div class="box said">
+        <span class="box-t">The senior framing</span>
+        <p>
+          "Multi-agent is a decomposition strategy, not an upgrade. I use it when a
+          boundary already exists in the problem — usually permissions or ownership — not
+          to make the architecture look sophisticated."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q8-4">
+    <div class="qa-head"><span class="qa-n">8.4</span>
+      <h3>How does agent routing work?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>Three mechanisms, and you should reach for them in this order:</p>
+      <ol>
+        <li><strong>Rules.</strong> Deterministic, free, testable. A regex for an order number routes to order lookup. Use rules wherever the signal is unambiguous.</li>
+        <li><strong>Embedding similarity.</strong> Embed the query, compare to route exemplars. Cheap, no LLM, handles paraphrase.</li>
+        <li><strong>LLM classification.</strong> Most flexible, costs a call, and needs a fallback route for low confidence.</li>
+      </ol>
+<pre><code>async def route(query: str) -> str:
+    if ORDER_ID.search(query):                  # 1. deterministic
+        return "orders"
+
+    scores = {r: cosine(embed(query), exemplar) for r, exemplar in ROUTES.items()}
+    best, score = max(scores.items(), key=lambda kv: kv[1])
+    if score > 0.75:                            # 2. cheap semantic
+        return best
+
+    return await classify_with_llm(query)       # 3. expensive, last</code></pre>
+      <div class="box breaks">
+        <span class="box-t">Always have a default route</span>
+        <p>
+          The failure people ship is a router with no fallback: an unroutable query either
+          errors or gets silently forced into the nearest branch, which produces a
+          confident answer from the wrong specialist. "I am not sure which of these you
+          mean" is a valid route.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q8-5">
+    <div class="qa-head"><span class="qa-n">8.5</span>
+      <h3>What is the difference between planning and reasoning in an agent?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>
+        <strong>Reasoning</strong> is per-step: given what I know, what should I do next?
+        <strong>Planning</strong> is up-front: decompose the goal into steps before acting.
+      </p>
+      <div class="tw">
+        <table>
+          <thead><tr><th></th><th>Interleaved (ReAct)</th><th>Plan-first</th></tr></thead>
+          <tbody>
+            <tr><td>Adapts to surprises</td><td>Yes — replans every step</td><td>No, unless you add replanning</td></tr>
+            <tr><td>Parallelism</td><td>Hard — next step depends on last</td><td>Easy — independent steps visible</td></tr>
+            <tr><td>Cost predictability</td><td>Poor</td><td>Good — you can price the plan</td></tr>
+            <tr><td>Human review</td><td>Too late</td><td><strong>Plan can be approved before execution</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        That last row is the strongest argument for planning in enterprise settings: a plan
+        is a reviewable artefact. "Here is what I intend to do, approve it" is a control
+        point that an interleaved agent does not offer.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this codebase</span>
+        <p>
+          Interleaved, because the task — triage one ticket — is small and open-ended. But
+          the prompt encodes an <em>ordered preference</em> rather than leaving it free:
+          read the ticket, then look for neighbours, then check history, then read comments
+          only if something is unexplained. Unordered, the model fans out across every tool
+          on turn one and burns half its budget before reading the ticket.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q8-6">
+    <div class="qa-head"><span class="qa-n">8.6</span>
+      <h3>How do you design human-in-the-loop?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span><span class="tag t-trap">enterprise favourite</span></div>
+    <div class="qa-body">
+      <p>Four patterns, increasing in friction:</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Pattern</th><th>Human role</th><th>Use for</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Suggest</strong></td><td>Reads, ignores freely</td><td>Recommendations. Zero risk</td></tr>
+            <tr><td><strong>Approve</strong></td><td>Gates before execution</td><td>Writes, spends, sends</td></tr>
+            <tr><td><strong>Escalate</strong></td><td>Takes over on low confidence</td><td>Support, triage</td></tr>
+            <tr><td><strong>Review</strong></td><td>Audits after the fact</td><td>High volume, reversible actions</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Technically the requirement is that the agent must be able to <strong>pause and
+        resume across a process restart</strong> — a human may take a day. That means
+        durable state, not an in-memory loop.
+      </p>
+<pre><code># LangGraph: interrupt before a node, persist, resume later
+graph = builder.compile(checkpointer=saver, interrupt_before=["execute_write"])
+
+graph.invoke(state, config={"configurable": {"thread_id": tid}})   # pauses
+# ... hours later, different process ...
+graph.invoke(None, config={"configurable": {"thread_id": tid}})    # resumes</code></pre>
+      <div class="box mine">
+        <span class="box-t">In this codebase</span>
+        <p>
+          The <em>suggest</em> pattern, and the loop is closed: every suggestion carries
+          Agree / Not this, the verdict is stored with the relation, confidence and model
+          that produced it, and re-running the pipeline deletes only <em>pending</em> rows
+          — a human's judgement survives a model change. That decided data is simultaneously
+          the feature and its evaluation set.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q8-7">
+    <div class="qa-head"><span class="qa-n">8.7</span>
+      <h3>How do you stop an agent running away?</h3></div>
+    <div class="tags"><span class="tag t-trap">the production question</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        <strong>Multiple independent limits, none of which the model can talk its way
+        past.</strong> A limit the model is merely told about in a prompt is a suggestion.
+      </p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Limit</th><th>Catches</th></tr></thead>
+          <tbody>
+            <tr><td>Turn cap</td><td>A model that will not stop reasoning</td></tr>
+            <tr><td>Wall clock</td><td>A hanging provider — the turn cap never fires if a call never returns</td></tr>
+            <tr><td>Tool-call cap</td><td>Fan-out without convergence</td></tr>
+            <tr><td>Cost cap</td><td>An expensive loop nobody is watching</td></tr>
+            <tr><td>Repeat detection</td><td>The same call with near-identical arguments, forever</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        They are independent because each catches a failure the others miss. And
+        <strong>every limit must route to the same terminal step</strong>, so a partial
+        result is still written rather than the run vanishing.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this codebase — the values and why</span>
+<pre><code>AGENT_MAX_TURNS      = 8
+AGENT_TIMEOUT_SECONDS = 300
+AGENT_MAX_TOOL_CALLS = 24
+AGENT_MAX_COST       = 0.05</code></pre>
+        <p>
+          Plus signature-based repeat detection, and every limit routes to
+          <code>report</code> — so a run that exhausts its budget still persists what it
+          learned, flagged <code>partial</code> with a stop reason.
+        </p>
+        <p>
+          A separate lesson: a run that crashed mid-flight left its row in
+          <code>running</code> and blocked its ticket forever. Fixed with a staleness
+          sweep at twice the timeout — <strong>a state machine needs a way out of every
+          state, including the ones you reach by dying.</strong>
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q8-8">
+    <div class="qa-head"><span class="qa-n">8.8</span>
+      <h3>Design an agentic solution for an enterprise problem.</h3></div>
+    <div class="tags"><span class="tag t-trap">the design question</span></div>
+    <div class="qa-body">
+      <p>
+        Take <strong>invoice exception handling</strong>: a few percent of invoices fail
+        automated matching and land in a human queue.
+      </p>
+      <div class="dia">
+<pre>                    invoice fails 3-way match
+                              │
+                              ▼
+                    ┌──────────────────┐
+                    │   TRIAGE AGENT   │  classify the exception type
+                    │   read-only      │  price? quantity? missing PO? duplicate?
+                    └────────┬─────────┘
+                             │ routes
+        ┌────────────────────┼────────────────────┐
+        ▼                    ▼                    ▼
+  ┌───────────┐       ┌────────────┐       ┌────────────┐
+  │ RESEARCH  │       │ DUPLICATE  │       │ TOLERANCE  │
+  │ ERP, PO,  │       │ historical │       │ policy     │
+  │ receipts  │       │ search     │       │ lookup     │
+  │ READ ONLY │       │ READ ONLY  │       │ READ ONLY  │
+  └─────┬─────┘       └─────┬──────┘       └─────┬──────┘
+        └───────────────────┼────────────────────┘
+                            ▼
+                   ┌──────────────────┐
+                   │ RESOLUTION AGENT │  proposes ONE action + evidence
+                   └────────┬─────────┘
+                            ▼
+                   confidence >= 0.9 and
+                   amount < threshold?
+                     yes ──► auto-apply, log, sample for audit
+                     no  ──► HUMAN QUEUE with the proposal pre-filled</pre>
+      </div>
+      <p><strong>Responsibilities, stated per agent</strong> — this is what the question is really testing:</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Agent</th><th>Owns</th><th>Tools</th><th>Cannot</th></tr></thead>
+          <tbody>
+            <tr><td>Triage</td><td>Classification only</td><td>Read invoice, read match result</td><td>Investigate or decide</td></tr>
+            <tr><td>Research</td><td>Gathering evidence</td><td>ERP, PO, goods receipt, vendor master</td><td>Judge or write</td></tr>
+            <tr><td>Duplicate</td><td>Prior-invoice similarity</td><td>Hybrid search over history</td><td>Anything else</td></tr>
+            <tr><td>Tolerance</td><td>Policy interpretation</td><td>Policy RAG, tolerance tables</td><td>Apply the policy</td></tr>
+            <tr><td>Resolution</td><td>Proposing <em>one</em> action with evidence</td><td>None — reasons over inputs</td><td>Execute</td></tr>
+            <tr><td><strong>Executor</strong></td><td>The only write path</td><td>ERP write</td><td>Decide — it only executes approved actions</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The critical design choice: <strong>only one component can write, and it makes no
+        decisions.</strong> Every agent that reasons is read-only. A prompt injection in a
+        vendor's invoice description can therefore mislead the reasoning but cannot move
+        money — the blast radius is bounded structurally rather than behaviourally.
+      </p>
+      <div class="box said">
+        <span class="box-t">Close with the measurement</span>
+        <p>
+          "Success is not accuracy, it is <em>straight-through rate at a fixed error
+          budget</em> — what fraction resolves without a human, given that the error rate
+          stays under X. That reframes it from a model metric to a business one, and it is
+          the number finance actually cares about."
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- ============================================================ SECTION 9 -->
+<section class="sec" id="s9">
+  <div class="sec-head">
+    <span class="sec-n">Section 9</span>
+    <h2>LangGraph</h2>
+  </div>
+  <p class="sec-intro">
+    Expect to be asked how state moves between nodes. The answer that scores explains
+    reducers, because that is the part people skip.
+  </p>
+
+  <article class="qa" id="q9-1">
+    <div class="qa-head"><span class="qa-n">9.1</span>
+      <h3>Explain StateGraph, nodes and edges.</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>
+        LangGraph models an agent as a <strong>state machine</strong> rather than a loop.
+        A shared state object is threaded through nodes; edges decide what runs next.
+      </p>
+<pre><code>from langgraph.graph import StateGraph, START, END
+
+graph = StateGraph(MyState)
+
+graph.add_node("guard",    guard_input)      # (state) -> partial state
+graph.add_node("retrieve", retrieve)
+graph.add_node("answer",   answer)
+
+graph.add_edge(START, "guard")
+graph.add_conditional_edges("guard", route, {"retrieve": "retrieve", "end": END})
+graph.add_edge("retrieve", "answer")
+graph.add_edge("answer", END)
+
+app = graph.compile()</code></pre>
+      <p>
+        A node is an ordinary function returning a <strong>partial</strong> state dict,
+        which LangGraph merges. Nodes never mutate shared state — that is what makes them
+        unit-testable with a plain dictionary and no framework.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this codebase</span>
+        <p>
+          Nodes are written as <code>(state, deps)</code> functions with no LangGraph
+          import at all, and a single generic adapter converts them to the framework's
+          <code>(state, *, runtime)</code> shape. So the retrieval logic can be tested
+          with a dict and a fake, and the framework stays at the edge.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q9-2">
+    <div class="qa-head"><span class="qa-n">9.2</span>
+      <h3>What is a reducer and why do you need one?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span><span class="tag t-trap">the differentiator</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        A reducer defines <strong>how two writes to the same key combine</strong>. Without
+        one, the default is overwrite — and when two nodes run in the same superstep, one
+        silently wins.
+      </p>
+<pre><code>from typing import Annotated
+import operator
+
+class State(TypedDict):
+    question: str                                    # overwrite (default)
+    trace:    Annotated[list[str], operator.add]     # append
+    rankings: Annotated[list[RankedList], merge_by_source]   # custom</code></pre>
+      <p>
+        The concurrency case is where it matters. Two retriever nodes in the same superstep
+        both write <code>rankings</code>; with the default, you lose one retriever's
+        results and the bug looks like "the lexical retriever is broken".
+      </p>
+      <p>Custom reducers get interesting when you need semantics <code>operator.add</code> cannot express:</p>
+<pre><code>CLEAR = object()      # sentinel
+
+def turn_scoped(existing: list, incoming: list) -> list:
+    """Append -- unless the incoming batch begins with CLEAR, which resets."""
+    if incoming and incoming[0] is CLEAR:
+        return list(incoming[1:])
+    return existing + incoming</code></pre>
+      <div class="box mine">
+        <span class="box-t">In this codebase — why the sentinel exists</span>
+        <p>
+          The chat assistant's working memory must reset each turn: observations from ten
+          minutes ago are not evidence for the current question, and carrying them grows
+          every prompt for the life of the thread. But <code>operator.add</code> cannot
+          express "reset" — every write appends. Hence <code>CLEAR</code> plus
+          <code>turn_scoped</code>. The transcript itself uses LangGraph's
+          <code>add_messages</code>, which appends and merges updates by message id rather
+          than duplicating.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q9-3">
+    <div class="qa-head"><span class="qa-n">9.3</span>
+      <h3>How do conditional edges and cycles work, and how do you keep them safe?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>A conditional edge is a pure function of state returning the name of the next node.</p>
+<pre><code>def route_after_grading(state) -> str:
+    grade = state.get("grade")
+    if grade == "weak":
+        return "rewrite"        # -> cycles back
+    if grade == "empty":
+        return "finish"
+    return "rerank"
+
+graph.add_conditional_edges(
+    "grade", route_after_grading,
+    {"rewrite": "rewrite", "rerank": "hydrate", "finish": "finish"},
+)
+graph.add_edge("rewrite", "embed")     # THE CYCLE</code></pre>
+      <p>Two properties make a cycle safe, and both are worth naming:</p>
+      <ul>
+        <li><strong>The counter lives in state, and the check is in a node</strong> — so termination does not depend on the model deciding to stop, which is the usual way an agent loop runs away.</li>
+        <li><strong>Every path reaches a terminal node</strong>, so bookkeeping always runs, even on the paths that found nothing.</li>
+      </ul>
+      <div class="box mine">
+        <span class="box-t">In this codebase — two independent limits</span>
+        <p>
+          <code>max_rewrites = 2</code> is the business rule. LangGraph's
+          <code>recursion_limit = 40</code> is the safety net <em>for the business rule
+          being wrong</em> — counted in supersteps, set above the worst legitimate path so a
+          genuine run never trips it while a topology bug still fails loudly.
+        </p>
+        <p>
+          A detail worth stating: the cycle returns to <code>embed</code>, not to
+          <code>guard</code>. Re-guarding a model-generated rewrite would redact labels the
+          model was already given, turning <code>[EMAIL]</code> into
+          <code>[[EMAIL]]</code> on the second pass.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q9-4">
+    <div class="qa-head"><span class="qa-n">9.4</span>
+      <h3>What happens at compile time, and how do you invoke a graph?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>
+        <code>compile()</code> validates the topology — unreachable nodes, edges to
+        nothing, missing entry point — and builds an executor. It is worth doing once and
+        caching, since nothing request-specific is baked in.
+      </p>
+<pre><code>@lru_cache(maxsize=1)
+def similarity_graph():
+    ...
+    return graph.compile(name="similarity", checkpointer=False)
+
+result = await similarity_graph().ainvoke(
+    state,
+    context=deps,                              # runtime dependencies, not state
+    config={"recursion_limit": 40},
+)</code></pre>
+      <p>
+        Note the separation: <strong>state</strong> is data flowing through the graph;
+        <strong>context</strong> is injected dependencies — ports, limits, a model registry.
+        Putting a database session in state would make it something reducers merge and
+        checkpointers try to serialise.
+      </p>
+      <div class="box breaks">
+        <span class="box-t">A real bug: checkpointer inheritance</span>
+        <p>
+          <code>checkpointer=False</code> is not the same as the default <code>None</code>.
+          A graph invoked <em>inside another graph's node</em> inherits the parent's
+          checkpointer. When a tool ran the retrieval graph from inside a chat graph that
+          persists to Postgres, the parent's saver tried to serialise the child's state —
+          which held <code>dict[UUID, …]</code> — and msgpack rejects non-string keys:
+        </p>
+<pre><code>TypeError: Dict key must a type serializable with OPT_NON_STR_KEYS</code></pre>
+        <p>
+          The tool caught it and the assistant said it could not search, so nothing crashed
+          — the feature was simply unavailable, silently, while working perfectly
+          elsewhere. <code>False</code> declines the inheritance explicitly.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q9-5">
+    <div class="qa-head"><span class="qa-n">9.5</span>
+      <h3>What does a checkpointer do?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>
+        Persists graph state per <strong>thread</strong> after every superstep. That buys
+        three things: multi-turn memory without passing history, resume-after-crash, and
+        human-in-the-loop pauses that survive a restart.
+      </p>
+<pre><code>graph = builder.compile(checkpointer=PostgresSaver(conn))
+
+# Turn 1 -- only the new message is supplied; prior state is loaded by thread id
+graph.invoke({"messages": [msg]}, config={"configurable": {"thread_id": conv_id}})</code></pre>
+      <p>
+        The design consequence is that <strong>nothing in the process has to still be
+        alive</strong> — which is what makes a conversation survive a deploy.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this codebase — three sharp edges</span>
+        <ul>
+          <li><code>AsyncPostgresSaver</code> cannot run on the Windows ProactorEventLoop, so the sync saver is wrapped with <code>asyncio.to_thread</code>.</li>
+          <li>That wrapper must <em>subclass</em> <code>BaseCheckpointSaver</code>, because LangGraph <code>isinstance</code>-checks the checkpointer rather than duck-typing it.</li>
+          <li><code>PostgresSaver</code> needs <code>row_factory=dict_row</code> — caught by a type checker before it could lose a conversation.</li>
+        </ul>
+        <p>
+          It also writes to its own <code>langgraph</code> schema, excluded from migration
+          autogeneration so a migration cannot drop the checkpoint tables.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q9-6">
+    <div class="qa-head"><span class="qa-n">9.6</span>
+      <h3>Explain how information moves through an agent workflow.</h3></div>
+    <div class="tags"><span class="tag t-trap">explicitly asked</span></div>
+    <div class="qa-body">
+      <p>Four mechanisms, and naming all four is the complete answer.</p>
+      <div class="dia">
+<pre>  1. STATE          the shared dict every node reads and writes
+                    node returns a PARTIAL dict; framework merges it
+
+  2. REDUCERS       how two writes to one key combine
+                    overwrite | append | merge-by-source | reset-on-sentinel
+
+  3. EDGES          control flow -- who runs next
+                    fixed edge | conditional edge | fan-out | fan-in
+
+  4. CONTEXT        injected dependencies, NOT state
+                    ports, registries, limits -- never merged, never persisted
+
+
+  one superstep:
+      ┌──────────────────────────────────────────────┐
+      │ read state ──► node A ──► partial dict ──┐   │
+      │ read state ──► node B ──► partial dict ──┼─► reduce ─► new state
+      └──────────────────────────────────────────────┘
+                 A and B run CONCURRENTLY;
+                 the reducer is what makes that safe</pre>
+      </div>
+      <p>
+        Fan-out and fan-in need no barrier code: a node with two incoming edges waits for
+        both branches automatically. That is one of the genuine advantages over a
+        hand-written loop.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this codebase, concretely</span>
+        <p>
+          <code>embed</code> writes <code>query_vector</code>. Two retriever nodes in the
+          same superstep each write a <code>RankedList</code> into <code>rankings</code>,
+          merged by a source-keyed reducer. <code>fuse</code> has two incoming edges so it
+          waits for both, then writes <code>candidates</code>. <code>grade</code> reads
+          those and writes <code>grade</code>, which a conditional edge reads to choose
+          between rewriting, re-ranking, or stopping. Every node also appends one line to
+          <code>trace</code>, which is what makes the whole path visible afterwards.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q9-7">
+    <div class="qa-head"><span class="qa-n">9.7</span>
+      <h3>How do you handle errors inside a graph?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>Decide per node whether a failure is <em>fatal</em> or <em>degrading</em>, and make degradation explicit rather than accidental.</p>
+<pre><code>async def retrieve_semantic(state, deps):
+    vector = state.get("query_vector")
+    if not vector:
+        # Degrade, don't raise: the other retriever still works, and a
+        # partial result beats no result on a page a human is reading.
+        return {"rankings": [RankedList(source=SEMANTIC, ticket_ids=())],
+                "trace": ["retrieve:semantic:no-vector"]}
+    ...</code></pre>
+      <p>Four rules that hold up in production:</p>
+      <ul>
+        <li><strong>Degrade where a partial answer is useful</strong>, and record that you degraded — the trace entry is what makes it discoverable later.</li>
+        <li><strong>Route failures to the terminal node</strong> rather than throwing out of the graph, so bookkeeping still runs.</li>
+        <li><strong>Retry only idempotent nodes</strong>, and only transient errors — never a validation failure.</li>
+        <li><strong>Surface degradation to the caller.</strong> A response that silently came from half the pipeline is a lie of omission.</li>
+      </ul>
+      <div class="box mine">
+        <span class="box-t">In this codebase</span>
+        <p>
+          The API response carries a <code>degraded</code> flag, computed from the trace,
+          so the UI can say "one search was unavailable" instead of quietly showing worse
+          results. Re-ranking failure returns a trace entry rather than an exception, and
+          the fused order stands — correct degradation, since the fused results are what
+          shipped before re-ranking existed.
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- =========================================================== SECTION 10 -->
+<section class="sec" id="s10">
+  <div class="sec-head">
+    <span class="sec-n">Section 10</span>
+    <h2>Agent architecture &amp; design patterns</h2>
+  </div>
+  <p class="sec-intro">
+    Naming patterns is easy. The question that separates candidates is what each pattern
+    costs in latency, money and reliability.
+  </p>
+
+  <article class="qa" id="q10-1">
+    <div class="qa-head"><span class="qa-n">10.1</span>
+      <h3>Walk through the common agent patterns.</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th>Pattern</th><th>Solves</th><th>LLM calls</th><th>Weakness</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Sequential</strong></td><td>A known, fixed pipeline</td><td>One per stage, predictable</td><td>Cannot adapt at all</td></tr>
+            <tr><td><strong>Parallel</strong></td><td>Independent subtasks</td><td>N concurrent</td><td>Merging results is the hard part</td></tr>
+            <tr><td><strong>Router</strong></td><td>Many specialists, one query</td><td>1 + the chosen branch</td><td>Misroute is unrecoverable</td></tr>
+            <tr><td><strong>ReAct</strong></td><td>Open-ended tool use</td><td>Unbounded — needs caps</td><td>Cost and latency unpredictable</td></tr>
+            <tr><td><strong>Supervisor</strong></td><td>Coordinating specialists</td><td>2 per step (supervisor + worker)</td><td>Supervisor is a bottleneck and a cost centre</td></tr>
+            <tr><td><strong>Planner–executor</strong></td><td>Multi-step work worth reviewing</td><td>1 plan + N steps</td><td>A bad plan fails wholesale</td></tr>
+            <tr><td><strong>Reflection</strong></td><td>Quality above one-shot</td><td>2–3× baseline</td><td>Diminishing returns; can talk itself out of a right answer</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Read that "LLM calls" column as the real selection criterion. Pattern choice is
+        mostly a decision about how much you are willing to pay per request and how
+        predictable that payment must be.
+      </p>
+    </div>
+  </article>
+
+  <article class="qa" id="q10-2">
+    <div class="qa-head"><span class="qa-n">10.2</span>
+      <h3>Explain ReAct.</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p><strong>Reason + Act, interleaved.</strong> The model thinks, acts, observes, and repeats — deciding each step from what it has just learned.</p>
+      <div class="dia">
+<pre>  Thought   I should find out how many Payroll tickets are open
+  Action    count_tickets(dimension="team", status=["open"])
+  Observation  {"UI": 2, "Performance": 1}
+  Thought   That answers it -- no Payroll bucket means zero
+  Answer    Payroll has no open tickets.</pre>
+      </div>
+      <p>
+        Strength: it adapts. Weakness: <strong>cost and latency are unknowable in
+        advance</strong>, and errors compound — a bad observation on turn two poisons every
+        later step.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this codebase — one addition worth mentioning</span>
+        <p>
+          A deterministic <code>prime</code> node runs before the model gets a turn,
+          fetching the ticket by code so the first observation always exists. It was added
+          because <strong>the agent wrote a fluent, confident, entirely invented report
+          from an empty observation list.</strong> The failure was not being wrong; it was
+          being wrong <em>from nothing</em>. Priming makes that impossible.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q10-3">
+    <div class="qa-head"><span class="qa-n">10.3</span>
+      <h3>Router versus supervisor — what is the difference?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <div class="dia">
+<pre>  ROUTER -- decides ONCE, then steps out
+
+     query ──► router ──► specialist ──► answer
+
+  SUPERVISOR -- stays in the loop, coordinates
+
+     query ──► supervisor ──► worker A ──┐
+                    ▲                    │
+                    └────────────────────┘
+                    ▼
+               supervisor ──► worker B ──┐
+                    ▲                    │
+                    └────────────────────┘
+                    ▼
+                  answer</pre>
+      </div>
+      <div class="tw">
+        <table>
+          <thead><tr><th></th><th>Router</th><th>Supervisor</th></tr></thead>
+          <tbody>
+            <tr><td>Decisions</td><td>One</td><td>One per step</td></tr>
+            <tr><td>Cost</td><td>1 + branch</td><td>2 per step</td></tr>
+            <tr><td>Handles multi-domain queries</td><td>No</td><td>Yes</td></tr>
+            <tr><td>Debuggability</td><td>Easy</td><td>Hard — failures are non-local</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Use a router when the query has one obvious owner. Use a supervisor when work
+        genuinely needs coordination — and accept that you have roughly doubled the calls
+        and made failures much harder to attribute.
+      </p>
+      <div class="box breaks">
+        <span class="box-t">The supervisor smell</span>
+        <p>
+          If the supervisor always calls the same workers in the same order, you have paid
+          for LLM-driven orchestration and built a sequential pipeline. Delete the
+          supervisor and hard-code the sequence.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q10-4">
+    <div class="qa-head"><span class="qa-n">10.4</span>
+      <h3>When is planner–executor the right shape?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>Three conditions, and it is the right choice when all three hold:</p>
+      <ul>
+        <li>The task decomposes into steps that are visible up front.</li>
+        <li>Steps can run in parallel, or their cost is worth pricing before committing.</li>
+        <li><strong>A human should be able to approve the plan before anything executes.</strong></li>
+      </ul>
+<pre><code>class Plan(BaseModel):
+    steps: list[Step]
+    estimated_cost: float
+
+plan = await model.generate_structured(PLANNER_PROMPT, ctx, Plan)
+
+if plan.estimated_cost > BUDGET or plan.touches_writes:
+    await request_human_approval(plan)      # reviewable ARTEFACT
+
+for step in plan.steps:
+    result = await execute(step)
+    if result.failed and step.critical:
+        plan = await replan(plan, failure=result)   # or escalate</code></pre>
+      <p>
+        The plan being a data structure is the real benefit: it can be logged, diffed,
+        approved, costed and replayed. An interleaved agent offers no equivalent artefact
+        — by the time you can review it, it has already acted.
+      </p>
+      <p>
+        The weakness is brittleness. A plan built on a wrong assumption fails wholesale, so
+        any serious planner–executor needs a replanning path, which reintroduces some of
+        the unpredictability you chose the pattern to avoid.
+      </p>
+    </div>
+  </article>
+
+  <article class="qa" id="q10-5">
+    <div class="qa-head"><span class="qa-n">10.5</span>
+      <h3>Reflection and Reflexion — do they work?</h3></div>
+    <div class="tags"><span class="tag t-trap">be sceptical</span></div>
+    <div class="qa-body">
+      <p>
+        <strong>Reflection:</strong> generate, critique, revise. <strong>Reflexion:</strong>
+        add memory of past failures so later attempts avoid them.
+      </p>
+<pre><code>answer = await generate(query, context)
+for _ in range(MAX_REVISIONS):
+    critique = await critic(query, context, answer)
+    if critique.acceptable:
+        break
+    answer = await revise(answer, critique)</code></pre>
+      <p>Be honest about when it helps, because interviewers have seen it oversold:</p>
+      <ul>
+        <li><strong>Works</strong> when the critique has an <em>external signal</em> — tests that run, a schema that validates, a citation that either resolves or does not.</li>
+        <li><strong>Works poorly</strong> on pure self-critique with no ground truth. A model that could tell its answer was wrong would often have produced the right one; self-reflection can also talk a correct answer into a worse one.</li>
+      </ul>
+      <div class="box mine">
+        <span class="box-t">In this codebase — reflection with an external signal</span>
+        <p>
+          The corrective-RAG loop is reflection where the critique is <strong>not</strong> a
+          model: <code>grade</code> inspects candidate counts and cross-retriever agreement,
+          then routes to a rewrite. Deterministic, free, and explainable in a log line —
+          asking a model "are these results good?" would cost a call to answer a question
+          two counts already answer.
+        </p>
+        <p>
+          The output guardrail is the other instance: citations are checked against what
+          was actually retrieved, which is an objective test rather than an opinion.
+        </p>
+      </div>
+      <div class="box said">
+        <span class="box-t">The line to use</span>
+        <p>
+          "Reflection is worth it when the critic knows something the generator did not —
+          a test result, a retrieval set, a schema. Self-critique without new information
+          mostly costs 3× and buys variance."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q10-6">
+    <div class="qa-head"><span class="qa-n">10.6</span>
+      <h3>How does pattern choice affect latency, cost and reliability?</h3></div>
+    <div class="tags"><span class="tag t-trap">explicitly asked</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th>Pattern</th><th>Latency</th><th>Cost</th><th>Reliability</th><th>Predictable?</th></tr></thead>
+          <tbody>
+            <tr><td>Sequential</td><td>Sum of stages</td><td>Fixed</td><td>High</td><td>Yes</td></tr>
+            <tr><td>Parallel</td><td>Slowest branch</td><td>Fixed, N×</td><td>High</td><td>Yes</td></tr>
+            <tr><td>Router</td><td>1 + branch</td><td>Low</td><td>High, if routing is right</td><td>Yes</td></tr>
+            <tr><td>ReAct</td><td><strong>Unbounded</strong></td><td><strong>Unbounded</strong></td><td>Medium</td><td><strong>No</strong></td></tr>
+            <tr><td>Supervisor</td><td>High</td><td>2× per step</td><td>Medium</td><td>No</td></tr>
+            <tr><td>Planner–executor</td><td>Plan + steps</td><td>Estimable</td><td>Medium</td><td>Partly</td></tr>
+            <tr><td>Reflection</td><td>2–3×</td><td>2–3×</td><td>Higher quality, more variance</td><td>Roughly</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>Predictability is the column that decides production suitability.</strong>
+        An unbounded pattern behind a user-facing request is a latency incident waiting for
+        a busy day — which is why ReAct belongs in a worker, on demand, with hard caps, not
+        on a page render.
+      </p>
+      <div class="box said">
+        <span class="box-t">How to evaluate the choice</span>
+        <p>
+          "Same golden tasks, both architectures, and measure four things: task success
+          rate, p95 latency, cost per successful task, and failure mode distribution. Cost
+          <em>per success</em> is the one that matters — a cheaper pattern that fails twice
+          as often is not cheaper."
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- =========================================================== SECTION 11 -->
+<section class="sec" id="s11">
+  <div class="sec-head">
+    <span class="sec-n">Section 11</span>
+    <h2>Production agent evaluation</h2>
+  </div>
+  <p class="sec-intro">
+    Offline benchmarks say whether an agent can succeed. These metrics say whether it is
+    succeeding, for whom, and at what price.
+  </p>
+
+  <article class="qa" id="q11-1">
+    <div class="qa-head"><span class="qa-n">11.1</span>
+      <h3>What do you measure for an agent in production?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th>Metric</th><th>Definition</th><th>Why it matters</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Task success rate</strong></td><td>Runs achieving the goal</td><td>The headline. Needs a definition of "success" per task type</td></tr>
+            <tr><td>Completion rate</td><td>Runs finishing without erroring</td><td>Completing and succeeding are different — track both</td></tr>
+            <tr><td><strong>Tool-call success rate</strong></td><td>Calls returning usable results</td><td>Best early warning: it degrades before answers visibly do</td></tr>
+            <tr><td>Turns per task</td><td>Steps to completion</td><td>Rising = the agent is flailing</td></tr>
+            <tr><td>Latency p50 / p95 / p99</td><td>End to end</td><td>The tail is what users experience</td></tr>
+            <tr><td>Tokens and cost per run</td><td>Split in / out, by role</td><td>Output tokens dominate cost and latency</td></tr>
+            <tr><td>Escalation rate</td><td>Handed to a human</td><td>The business number</td></tr>
+            <tr><td><strong>Cost per success</strong></td><td>Total spend ÷ successes</td><td>The only cost metric that cannot be gamed</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="box said">
+        <span class="box-t">The point to make</span>
+        <p>
+          "Cost per <em>call</em> rewards making calls cheaper. Cost per <em>successful
+          task</em> rewards making them useful — and a cheaper model that fails more often
+          moves it the wrong way. That is the number I'd put on a dashboard."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q11-2">
+    <div class="qa-head"><span class="qa-n">11.2</span>
+      <h3>How do you define and measure task success?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>Four sources, in descending order of trustworthiness:</p>
+      <ol>
+        <li><strong>Deterministic checks.</strong> Did the ticket get closed? Did the invoice match? Best when the task has an observable outcome.</li>
+        <li><strong>Human verdicts.</strong> Accept / reject, thumbs, edit distance between proposal and what was actually sent.</li>
+        <li><strong>Downstream signals.</strong> Did the user rephrase immediately? Did they escalate anyway? A rephrase within thirty seconds is a strong implicit failure.</li>
+        <li><strong>LLM judging.</strong> Cheapest to add, least reliable — a judge scored one identical sample 0.25, 0.25, 1.00 at temperature 0.</li>
+      </ol>
+      <div class="box mine">
+        <span class="box-t">In this codebase</span>
+        <p>
+          Human verdicts, stored with the relation, confidence and model that produced them
+          — which is what makes calibration answerable later ("are 0.9-confidence duplicates
+          accepted more often than 0.6?"). Re-running the pipeline deletes only pending
+          rows, so decided data survives a model change, and a pair a human already rejected
+          is never re-suggested.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q11-3">
+    <div class="qa-head"><span class="qa-n">11.3</span>
+      <h3>Why track tool-call success rate separately?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>
+        Because it is the earliest signal, and because it distinguishes failure classes
+        that need different fixes.
+      </p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Failure</th><th>Means</th><th>Fix</th></tr></thead>
+          <tbody>
+            <tr><td>Invalid arguments</td><td>Schema and model disagree</td><td>Coerce, or improve the description</td></tr>
+            <tr><td>Wrong tool chosen</td><td>Descriptions are ambiguous</td><td>Rewrite descriptions; check they are actually sent</td></tr>
+            <tr><td>Empty results</td><td>Retrieval or filter problem</td><td>Look upstream, not at the agent</td></tr>
+            <tr><td>Tool exception</td><td>A real bug</td><td>Fix the tool</td></tr>
+            <tr><td>Repeated identical calls</td><td>Agent is stuck</td><td>Repeat detection; look at what it is missing</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="box mine">
+        <span class="box-t">In this codebase — two found this way</span>
+        <p>
+          <strong>Argument mismatch.</strong> Asked "which tickets are open", the model sent
+          <code>status: "open"</code> where the schema demanded <code>list[str]</code>. The
+          assistant honestly reported "the search query had an invalid format" — a true
+          sentence, useless to the asker. Fixed by coercing a bare string to a
+          single-element list, so a natural model output stops being an error.
+        </p>
+        <p>
+          <strong>A refusal with zero tool calls.</strong> Asked who was assigned to a
+          team's tickets, it answered "I don't have access to assignment data" without
+          calling anything — while the tool filters by assignee and returns the name. A
+          <em>false</em> refusal is worse than a wrong answer, because it teaches people not
+          to ask. Fixed in the prompt; the answer now names the assignees.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q11-4">
+    <div class="qa-head"><span class="qa-n">11.4</span>
+      <h3>How do you account for tokens and cost?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>Record one row per call, with enough dimensions to answer "why did the bill move".</p>
+<pre><code>class AiUsage:
+    tenant_id, feature, role, model
+    input_tokens, output_tokens, cached_tokens
+    estimated_cost, latency_ms, succeeded</code></pre>
+      <p>
+        <strong>Feature and role are the important columns.</strong> Model alone cannot tell
+        you whether re-ranking or chat drove a spike, and without role you cannot enforce a
+        per-role budget.
+      </p>
+      <div class="box breaks">
+        <span class="box-t">Two accounting bugs worth knowing</span>
+        <p>
+          <strong>Pricing by role instead of by the model that answered.</strong> When a
+          fallback dropped to a local model, the run was still billed at the hosted rate —
+          inventing money. Cost per accepted suggestion is only meaningful if the costs in
+          it are real.
+        </p>
+        <p>
+          <strong>Counting daily budgets per model instead of per role.</strong> Re-ranking
+          and query-rewriting shared a model, so re-ranking silently exhausted rewriting's
+          budget and rewrites stopped happening — with no error anywhere.
+        </p>
+      </div>
+      <div class="box mine">
+        <span class="box-t">A real report from this system</span>
+<pre><code>feature                model                     calls  in     out    cost     avg ms
+chat.decide            gemini-3.5-flash-lite     108    99599  2191   0.03054  3997
+similar_issues.rerank  gemini-flash-lite-latest   60    39386  28503  0.00939  4026
+similar_issues.rerank  qwen3:8b                   15    11134   7294  0.00504  24697
+510 call(s), 42 failed, 0.10164 total</code></pre>
+        <p>
+          Two things fall out immediately: the local fallback is <strong>6× slower</strong>
+          on the latency-sensitive call, and 42 of 510 calls failed — which is the fallback
+          chain working, not an outage.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q11-5">
+    <div class="qa-head"><span class="qa-n">11.5</span>
+      <h3>An agent produced a wrong answer. Walk me through debugging it.</h3></div>
+    <div class="tags"><span class="tag t-trap">the real test</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        <strong>Reconstruct the trajectory before reading the output.</strong> A model's
+        output is not debuggable; its trajectory is.
+      </p>
+      <div class="dia">
+<pre>  1. Get the run's step log -- every tool call, in order, with arguments
+  2. Did it call the right tools?
+        no  ──► SELECTION   descriptions ambiguous, or never sent
+        yes
+  3. Were the arguments right?
+        no  ──► SCHEMA      model and schema disagree; coerce or clarify
+        yes
+  4. Did the tools return what they should?
+        no  ──► DATA        retrieval, filter or permission problem
+        yes
+  5. Was the observation in the prompt it actually received?
+        no  ──► ASSEMBLY    truncation, turn-scoping, a template bug
+        yes
+  6. ──────► REASONING      now look at the prompt and the model</pre>
+      </div>
+      <p>Steps 1–5 are mechanical and usually where the bug is. Step 6 is where people start, and it is the most expensive place to start.</p>
+      <div class="box mine">
+        <span class="box-t">In this codebase — why the step log exists</span>
+        <p>
+          Every agent run persists its steps, and the docstring states the reason plainly:
+          <em>without it, "why did the analysis miss the obvious duplicate?" is
+          unanswerable — with it you can see that the agent searched once with a poor query
+          and never retried, or called the same tool five times with near-identical
+          arguments.</em>
+        </p>
+        <p>
+          The retrieval path has the same idea in one line, returned with every response:
+        </p>
+<pre><code>guard:ok | references:none | identifiers:none | embed
+| retrieve:lexical:11 | retrieve:semantic:11
+| fuse:11/22 | fuse:cascade:lead=semantic
+| grade:good | hydrate:11 | rerank:skipped | finish</code></pre>
+        <p>
+          That answers "did both retrievers run", "how many survived de-duplication", "did
+          the rewrite fire" and "was re-ranking skipped" without attaching a debugger.
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- =========================================================== SECTION 12 -->
+<section class="sec" id="s12">
+  <div class="sec-head">
+    <span class="sec-n">Section 12</span>
+    <h2>Enterprise GenAI architecture</h2>
+  </div>
+  <p class="sec-intro">
+    The question is always some version of "draw the whole thing". What distinguishes a
+    senior answer is the non-AI parts: auth, caching, failure, and what happens when the
+    provider is down.
+  </p>
+
+  <article class="qa" id="q12-1">
+    <div class="qa-head"><span class="qa-n">12.1</span>
+      <h3>Describe the end-to-end architecture of a production GenAI application.</h3></div>
+    <div class="tags"><span class="tag t-trap">the big one</span></div>
+    <div class="qa-body">
+      <div class="dia">
+<pre>  client
+    │  authenticated request
+    ▼
+  ┌──────────────────────────────────────────────────────────┐
+  │  API GATEWAY        authN, rate limit, request id         │
+  └──────────────────────────┬───────────────────────────────┘
+                             ▼
+  ┌──────────────────────────────────────────────────────────┐
+  │  APPLICATION                                             │
+  │   authZ ─► input guardrail ─► cache? ─► intent ─► route  │
+  └──────────────────────────┬───────────────────────────────┘
+                             ▼
+  ┌──────────────────────────────────────────────────────────┐
+  │  RETRIEVAL      hybrid ─► fuse ─► filter ─► re-rank      │
+  │                 scoped by the CALLER's permissions        │
+  └──────────────────────────┬───────────────────────────────┘
+                             ▼
+  ┌──────────────────────────────────────────────────────────┐
+  │  MODEL LAYER    registry ─► budget ─► call ─► fallback   │
+  └──────────────────────────┬───────────────────────────────┘
+                             ▼
+  ┌──────────────────────────────────────────────────────────┐
+  │  OUTPUT GUARDRAIL   grounding · citations · PII · policy │
+  └──────────────────────────┬───────────────────────────────┘
+                             ▼
+                          response
+                             │
+  ┌──────────────────────────┴───────────────────────────────┐
+  │  CROSS-CUTTING: tracing · usage · evaluation · feedback  │
+  └──────────────────────────────────────────────────────────┘
+
+  OFFLINE, separately:  ingest ─► chunk ─► embed ─► index ─► reconcile</pre>
+      </div>
+      <p>Four things a junior answer usually omits, and each is worth naming explicitly:</p>
+      <ul>
+        <li><strong>Authorization happens before retrieval, not after.</strong> Filtering results the user should never have seen means they were already loaded into memory and possibly into a prompt.</li>
+        <li><strong>The model layer is a layer.</strong> Provider choice, fallback, budgets and cost accounting belong in one place, not scattered at call sites.</li>
+        <li><strong>The offline pipeline is a separate system</strong> with its own failure modes, schedule and monitoring.</li>
+        <li><strong>Feedback capture is part of the architecture</strong>, not an afterthought — it is the only non-proxy quality signal you will ever get.</li>
+      </ul>
+    </div>
+  </article>
+
+  <article class="qa" id="q12-2">
+    <div class="qa-head"><span class="qa-n">12.2</span>
+      <h3>How do authentication and authorization work in a RAG system?</h3></div>
+    <div class="tags"><span class="tag t-trap">security</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        <strong>The model is never an authorization boundary.</strong> If a document
+        reaches the prompt, assume the user has seen it — prompt instructions not to reveal
+        something are not access control.
+      </p>
+      <p>So enforcement has to happen before retrieval returns:</p>
+      <ul>
+        <li><strong>Pre-filter by the caller's permissions</strong> at query time, using their identity, not the service's.</li>
+        <li><strong>Index the ACL as metadata</strong> so it can be filtered on, and re-index when permissions change — a stale ACL in the index is a leak with a delay.</li>
+        <li><strong>Partition hard boundaries</strong> (tenant) rather than filtering them.</li>
+      </ul>
+      <div class="box mine">
+        <span class="box-t">In this codebase</span>
+        <p>
+          Postgres enforces tenant isolation with row-level security and
+          <code>FORCE ROW LEVEL SECURITY</code> across 13 tables, under a role that cannot
+          bypass it — so a forgotten tenant clause is caught by the database rather than by
+          review. The vector store has no equivalent, so isolation there is one namespace
+          per tenant, derived from the authenticated tenant id and never from client input.
+        </p>
+        <p>
+          The agent's tools take the caller's session, so every tool inherits the same
+          scoping automatically — the model cannot reach data the caller could not.
+        </p>
+      </div>
+      <div class="box breaks">
+        <span class="box-t">The subtle one</span>
+        <p>
+          Caching across users. A cached answer keyed only on the question text will serve
+          user B content retrieved under user A's permissions. Cache keys must include the
+          permission scope, or the cache becomes a leak.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q12-3">
+    <div class="qa-head"><span class="qa-n">12.3</span>
+      <h3>What guardrails do you put on input and output?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th>Side</th><th>Check</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td rowspan="4"><strong>Input</strong></td><td>Length bound</td><td>Truncate or reject</td></tr>
+            <tr><td>PII and credentials</td><td>Redact before the call</td></tr>
+            <tr><td>Injection markers</td><td><strong>Log, usually do not block</strong></td></tr>
+            <tr><td>Rate and budget</td><td>Reject with a clear reason</td></tr>
+            <tr><td rowspan="4"><strong>Output</strong></td><td>Citation grounding</td><td>Strip or mark unverifiable references</td></tr>
+            <tr><td>Confidence floor</td><td>Drop weak claims</td></tr>
+            <tr><td>Authority claims</td><td>Rewrite — "I have closed this" when it cannot</td></tr>
+            <tr><td>PII leakage</td><td>Redact</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>Injection markers are logged, not blocked</strong>, and that is a deliberate
+        call worth defending: a genuine bug report legitimately contains the words "ignore
+        previous instructions". Blocking on keywords produces false positives against real
+        users while barely inconveniencing a real attacker.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this codebase — defence in three places, none of them the prompt</span>
+        <ul>
+          <li>Input guardrail bounds to 8000 characters and redacts before anything is sent.</li>
+          <li><strong>No write tool exists</strong> — so a successful injection still cannot change data. Structural, not behavioural.</li>
+          <li>Output guardrail validates every citation against what was actually retrieved.</li>
+        </ul>
+        <p>
+          The prompt's injection notice raises the cost of an attack. The architecture is
+          what makes a successful one survivable.
+        </p>
+      </div>
+      <div class="box breaks">
+        <span class="box-t">A redaction gap worth telling</span>
+        <p>
+          The credential pattern matched <code>"token: Bearer …"</code> and happily left a
+          bare <code>sk-live-…</code> in the text, because it only looked for labelled
+          secrets. Fixed with a scheme-aware pattern <em>plus</em> unlabelled
+          secret-shaped patterns. Redaction rules need to match the shape of the secret,
+          not the word next to it.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q12-4">
+    <div class="qa-head"><span class="qa-n">12.4</span>
+      <h3>Where does intent classification fit?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>Early, and it earns its place three ways:</p>
+      <ul>
+        <li><strong>Routing</strong> — send the query to the right retriever, index or agent.</li>
+        <li><strong>Short-circuiting</strong> — a greeting or an out-of-scope question needs no retrieval at all, which is the cheapest possible win.</li>
+        <li><strong>Choosing the strategy</strong> — a factual lookup, a comparison and a summarisation want different retrieval depth and different prompts.</li>
+      </ul>
+<pre><code>class Intent(StrEnum):
+    LOOKUP     = "lookup"        # specific document -> shallow retrieval
+    ANALYTICAL = "analytical"    # aggregate -> tools, not RAG
+    COMPARISON = "comparison"    # several docs -> deeper retrieval
+    CHITCHAT   = "chitchat"      # no retrieval at all
+    OUT_OF_SCOPE = "out_of_scope"</code></pre>
+      <p>
+        <code>ANALYTICAL</code> is the one people miss. "How many tickets are open per team"
+        is not a retrieval question — no amount of semantic search answers it correctly.
+        It needs an aggregate query. Routing it into RAG produces a confident wrong number
+        built from whatever five documents came back.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this codebase</span>
+        <p>
+          Intent is implicit in tool selection rather than a separate classifier: the
+          assistant has <code>search_tickets</code> for lookup and
+          <code>count_tickets</code> for aggregates, and choosing between them <em>is</em>
+          the intent decision. That works at seven tools; past roughly fifteen an explicit
+          classifier in front becomes the better structure.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q12-5">
+    <div class="qa-head"><span class="qa-n">12.5</span>
+      <h3>What can you cache in a GenAI system?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th>Layer</th><th>Key</th><th>Hit rate</th><th>Risk</th></tr></thead>
+          <tbody>
+            <tr><td>Embeddings</td><td>Hash of text + model</td><td>High on re-index</td><td>None — deterministic</td></tr>
+            <tr><td>Retrieval results</td><td>Query + filters + corpus version</td><td>Medium</td><td>Staleness</td></tr>
+            <tr><td>Exact answer</td><td>Normalised query + scope</td><td>Low–medium</td><td>Staleness; cross-user leakage</td></tr>
+            <tr><td><strong>Semantic cache</strong></td><td>Nearest cached query above a threshold</td><td>Higher</td><td><strong>Wrong answer to a similar-but-different question</strong></td></tr>
+            <tr><td>Provider prompt cache</td><td>Shared prompt prefix</td><td>Very high</td><td>None — provider-side</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>Semantic caching is the seductive one.</strong> "Reset my password" and
+        "reset my PIN" can sit above a 0.95 cosine threshold and are different questions.
+        Set the threshold high, scope it per tenant, and treat a wrong cache hit as a
+        correctness bug rather than a performance regression.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this codebase — keyed on version, not time</span>
+<pre><code>CacheKey.similar_tickets(tenant_id, ticket_id, ticket.version)</code></pre>
+        <p>
+          The optimistic-locking counter already increments on every content change, so an
+          edited ticket gets a new key automatically and a stale suggestion can never be
+          served. A TTL alone would leave a window where the panel describes text that no
+          longer exists.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q12-6">
+    <div class="qa-head"><span class="qa-n">12.6</span>
+      <h3>What is the security threat model for a RAG application?</h3></div>
+    <div class="tags"><span class="tag t-trap">enterprise</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th>Threat</th><th>Vector</th><th>Mitigation</th></tr></thead>
+          <tbody>
+            <tr><td>Direct prompt injection</td><td>User input</td><td>Bound, screen, and rely on tool limits — not prompt wording</td></tr>
+            <tr><td><strong>Indirect injection</strong></td><td>Instructions hidden in an <em>ingested document</em></td><td>Treat all retrieved text as data; no write tools; validate output</td></tr>
+            <tr><td>Data exfiltration</td><td>Model persuaded to emit secrets or other tenants' data</td><td>Pre-filter by permission; output scanning; tenant partitioning</td></tr>
+            <tr><td>Poisoning</td><td>Attacker controls ingested content</td><td>Provenance, ingestion review, source allow-lists</td></tr>
+            <tr><td>Cost / DoS</td><td>Expensive queries at volume</td><td>Rate limits, budgets, hard caps per role</td></tr>
+            <tr><td>PII leakage</td><td>Into prompts, logs or third-party traces</td><td>Redact before the call; be deliberate about what tracing sends</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>Indirect injection is the one specific to RAG</strong> and the one most
+        often missed. A malicious instruction inside a document your pipeline ingested is
+        indistinguishable from legitimate content by the time it reaches the model — which
+        is precisely why the durable defence is that the agent has nothing dangerous to
+        call.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this codebase</span>
+        <p>
+          Red-team checks are split into <strong>structural</strong> and
+          <strong>behavioural</strong>, and the split is the point: structural checks assert
+          properties of the system (no write tool is registered, every tool takes a scoped
+          session) and are deterministic and free; behavioural checks probe the model and
+          are advisory. A structural guarantee cannot regress silently the way a prompt can.
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- =========================================================== SECTION 13 -->
+<section class="sec" id="s13">
+  <div class="sec-head">
+    <span class="sec-n">Section 13</span>
+    <h2>Prompt engineering &amp; prompt management</h2>
+  </div>
+  <p class="sec-intro">
+    Engineering questions here are less about clever wording and more about lifecycle:
+    where prompts live, how they are versioned, and how a change is proved safe.
+  </p>
+
+  <article class="qa" id="q13-1">
+    <div class="qa-head"><span class="qa-n">13.1</span>
+      <h3>How should prompts be stored and managed?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>Three options, and the trade is who can change them and how fast.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Approach</th><th>For</th><th>Against</th></tr></thead>
+          <tbody>
+            <tr><td><strong>In code, version-controlled</strong></td><td>Reviewed, diffed, atomic with the code that uses them; rollback is a revert</td><td>Needs a deploy to change</td></tr>
+            <tr><td>Database / config service</td><td>Change without deploy; non-engineers can edit</td><td>Untested text reaches production; needs its own review and audit</td></tr>
+            <tr><td>Prompt platform (Langfuse, PromptLayer)</td><td>Versioning, A/B, metrics attached</td><td>Another dependency; prompts drift from the code that assumes them</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>Default to in-code and version-controlled.</strong> A prompt is code — it
+        determines behaviour, and it should go through the same review and release path.
+        Move to a platform when non-engineers genuinely need to iterate, and accept that
+        you then need approval workflow and rollback for text.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this codebase</span>
+        <p>
+          A <code>prompts/</code> package, one file per role, plus a shared module for the
+          fragment all three use. Two things that came out of separating them: the diff for
+          "we reworded the re-rank instruction" is now separate from "we changed the
+          re-rank routing", and unifying the shared fragment revealed one prompt carried a
+          <em>weaker</em> version of the injection notice than the other two — deduplicating
+          it hardened that prompt rather than merely tidying it.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q13-2">
+    <div class="qa-head"><span class="qa-n">13.2</span>
+      <h3>How do you version a prompt?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>
+        A hand-maintained <code>VERSION = 3</code> is wrong the moment somebody edits the
+        text and forgets to bump it — and that is exactly when it matters, because a result
+        has just been attributed to a prompt that is no longer the one that produced it.
+      </p>
+      <p><strong>Derive the version from the content instead:</strong></p>
+<pre><code>def prompt_version(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:6]
+
+PROMPT_VERSIONS = {
+    "analysis": prompt_version(ANALYSIS_SYSTEM),   # 1470a7
+    "chat":     prompt_version(CHAT_SYSTEM),       # e5ae3d
+    "rerank":   prompt_version(RERANK_SYSTEM),     # 63d063
+}</code></pre>
+      <p>
+        Edit a word and the version changes; change nothing and it does not. There is no
+        bump to forget. The trade is that the version is not human-orderable —
+        <code>a3f19c</code> does not announce itself as newer than <code>7b204e</code> —
+        which is fine, because the question being asked is never "which is newer" but "was
+        this the same prompt". Chronology already lives in git.
+      </p>
+      <p>
+        Stamp that version onto every evaluation run and every logged call. Without it, a
+        metric that moved between two runs has two candidate explanations and no way to
+        separate them.
+      </p>
+    </div>
+  </article>
+
+  <article class="qa" id="q13-3">
+    <div class="qa-head"><span class="qa-n">13.3</span>
+      <h3>How do you test a prompt change before shipping it?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <ol>
+        <li><strong>A fixed evaluation set</strong> — 30–100 representative inputs with expected properties, not exact strings.</li>
+        <li><strong>Assert properties, not text.</strong> Valid schema, citations resolve, refuses when it should, no forbidden claim.</li>
+        <li><strong>Run both versions on the same inputs</strong> and diff.</li>
+        <li><strong>Check the regressions, not the average.</strong> A change that improves the mean while breaking three previously-correct cases is usually a bad trade.</li>
+        <li><strong>Canary</strong> on a fraction of live traffic with the acceptance metric watched.</li>
+      </ol>
+<pre><code>def test_refuses_when_no_evidence(prompt_version):
+    answer = run(prompt_version, question="What is the CEO's salary?", context=[])
+    assert not REFERENCE_PATTERN.findall(answer)      # invented nothing
+    assert any(p in answer.lower() for p in ("cannot", "no data", "not available"))</code></pre>
+      <div class="box breaks">
+        <span class="box-t">Why exact-string assertions fail</span>
+        <p>
+          Model output varies run to run even at temperature 0. Tests that compare strings
+          become flaky, get muted, and then stop protecting anything. Assert the properties
+          you actually care about.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q13-4">
+    <div class="qa-head"><span class="qa-n">13.4</span>
+      <h3>How do prompts move across environments?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <div class="dia">
+<pre>  dev            edit prompt, run eval set locally
+   │             gate: no regression on the golden cases
+   ▼
+  staging        deployed with the code; full eval suite in CI
+   │             gate: faithfulness / task success within tolerance
+   ▼
+  canary         5-10% of production traffic
+   │             gate: acceptance rate and error rate hold for N hours
+   ▼
+  production     full rollout; version stamped on every logged call
+                 rollback = revert the commit</pre>
+      </div>
+      <p>
+        The version stamp is what makes the last step honest: when quality moves next week,
+        you can say which prompt was live. And because the prompt ships with the code,
+        rollback is an ordinary revert rather than a separate procedure someone has to
+        remember.
+      </p>
+      <p>
+        <strong>The model is part of the prompt's environment.</strong> A prompt tuned
+        against one model can degrade on another, so pin the model per environment or you
+        are testing two variables at once.
+      </p>
+    </div>
+  </article>
+
+  <article class="qa" id="q13-5">
+    <div class="qa-head"><span class="qa-n">13.5</span>
+      <h3>Which prompt techniques actually earn their tokens?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th>Technique</th><th>Worth it when</th><th>Cost</th></tr></thead>
+          <tbody>
+            <tr><td>Clear role and task</td><td>Always</td><td>Negligible</td></tr>
+            <tr><td>Few-shot examples</td><td>Format matters, or the task is unusual</td><td>Input tokens on every call</td></tr>
+            <tr><td><strong>Structured output</strong></td><td>Almost always — parsing becomes total</td><td>Slight capability constraint</td></tr>
+            <tr><td>Chain-of-thought</td><td>Multi-step reasoning with a free-text answer</td><td>Large — output tokens dominate latency</td></tr>
+            <tr><td>Explicit refusal permission</td><td>Always in RAG</td><td>One line, big hallucination reduction</td></tr>
+            <tr><td>Ordered strategy</td><td>Agents with several tools</td><td>A few lines</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>Chain-of-thought is the one to be careful with</strong> when output is
+        schema-constrained: the reasoning is generated, paid for in latency, and then
+        discarded. A local model emitted <strong>217 output tokens for "Say OK"</strong>
+        against 9 from a hosted one, which was enough to push re-ranking past its deadline.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this codebase — two lines that changed behaviour</span>
+        <p>
+          <strong>Ordered strategy.</strong> The agent prompt ranks its tools rather than
+          listing them — read the ticket, then look for neighbours, then check history,
+          then read comments only if something is unexplained. Unordered, the model fans out
+          across every tool on turn one.
+        </p>
+        <p>
+          <strong>Forbidding a false refusal.</strong> "Never say you lack access to ticket
+          data" was added after the model declined to answer who was assigned to a team's
+          tickets — with zero tool calls — while a tool filtered by assignee and returned
+          the name. One rule; the answer now names the people.
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- =========================================================== SECTION 14 -->
+<section class="sec" id="s14">
+  <div class="sec-head">
+    <span class="sec-n">Section 14</span>
+    <h2>Observability</h2>
+  </div>
+  <p class="sec-intro">
+    A non-deterministic system fails quietly. Observability is what turns "it feels worse
+    this week" into a specific stage with a number attached.
+  </p>
+
+  <article class="qa" id="q14-1">
+    <div class="qa-head"><span class="qa-n">14.1</span>
+      <h3>What do you instrument in an LLM application?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th>Layer</th><th>Capture</th></tr></thead>
+          <tbody>
+            <tr><td>Request</td><td>Trace id, user, tenant, feature, latency, outcome</td></tr>
+            <tr><td>Retrieval</td><td>Query, candidate count per retriever, fusion mode, scores, whether the rewrite fired</td></tr>
+            <tr><td>Model call</td><td>Model, role, prompt version, in/out tokens, latency, success, fallback used</td></tr>
+            <tr><td>Tools</td><td>Name, arguments, duration, success, error class</td></tr>
+            <tr><td>Guardrails</td><td>Which fired, what was redacted, ungrounded citation count</td></tr>
+            <tr><td>Outcome</td><td>Accepted, rejected, escalated, retried</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The one people skip is <strong>guardrail firings</strong>. A rising ungrounded
+        citation count is the earliest signal of model or prompt drift, and it costs
+        nothing to record.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this codebase — four layers, no vendor required</span>
+        <ul>
+          <li><strong>Structured logs</strong> — every node decision, grade reason, guardrail hit, fallback.</li>
+          <li><strong>A usage table</strong> — one row per call: feature, role, model, tokens, cost, latency, success.</li>
+          <li><strong>The trace array</strong>, returned in the API response and shown in the UI behind a "how was this found?" toggle.</li>
+          <li><strong>An agent step log</strong> — every tool call in order. The trajectory, not just the output.</li>
+        </ul>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q14-2">
+    <div class="qa-head"><span class="qa-n">14.2</span>
+      <h3>What does tracing give you that logs do not?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>
+        <strong>The tree.</strong> Which node ran, in what order, nested, with timings and
+        the exact prompt and response at each model boundary. For a graph with a
+        conditional cycle, "did the rewrite fire and what did it change the query to" is one
+        click instead of correlating log lines by request id.
+      </p>
+<pre><code># LangSmith: environment variables, no per-call-site code
+os.environ["LANGSMITH_TRACING"] = "true"
+os.environ["LANGSMITH_API_KEY"] = api_key
+os.environ["LANGSMITH_PROJECT"] = "os-tracker"
+
+# Tag runs, or you cannot filter them later
+config = {"metadata": {"tenant_id": tid, "prompt_version": v}, "tags": ["prod"]}</code></pre>
+      <div class="box breaks">
+        <span class="box-t">Two things to say before enabling it</span>
+        <p>
+          <strong>Traces contain prompts, and prompts contain customer data.</strong> That
+          is a deliberate decision, not a default — which is why self-hosted options exist.
+        </p>
+        <p>
+          <strong>Coverage is partial.</strong> Only calls made through the instrumented
+          library appear. In this codebase the local model talks raw HTTP by design, so its
+          calls show as graph timings but not as LLM spans with prompt text — worth knowing
+          before you conclude a model "made no calls".
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q14-3">
+    <div class="qa-head"><span class="qa-n">14.3</span>
+      <h3>What is the observability tool landscape?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th>Tool</th><th>Type</th><th>Best for</th></tr></thead>
+          <tbody>
+            <tr><td><strong>LangSmith</strong></td><td>Managed, LangChain-native</td><td>Trace trees, datasets, evaluation runs</td></tr>
+            <tr><td><strong>Langfuse</strong></td><td>Open source, self-hostable</td><td>Same shape, but prompts never leave your network</td></tr>
+            <tr><td><strong>MLflow</strong></td><td>Open source</td><td>Experiment tracking — metrics compared across runs</td></tr>
+            <tr><td>Phoenix (Arize)</td><td>Open source, OTel-based</td><td>Local tracing without a hosted dependency</td></tr>
+            <tr><td><strong>Dynatrace / Azure Monitor</strong></td><td>APM</td><td>The rest of the system: infrastructure, dependencies, alerting</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        These are not alternatives — they answer different questions. An LLM tracer answers
+        "what did the model see"; an APM answers "is the service healthy". Enterprises run
+        both, and the useful integration is emitting the same trace id into each so you can
+        pivot between them.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this codebase — two of them, for different jobs</span>
+        <p>
+          LangSmith for trace trees, enabled by one environment variable and off by default
+          because traces carry ticket text. MLflow for evaluation metrics, logging every
+          RAGAS run with the answering model, judge model and prompt version as parameters —
+          so a run judged by the local model can never be silently compared against one
+          judged by a hosted model.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q14-4">
+    <div class="qa-head"><span class="qa-n">14.4</span>
+      <h3>How do you monitor retrieval quality in production, with no labels?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span><span class="tag t-trap">good question</span></div>
+    <div class="qa-body">
+      <p>Proxy signals, watched as distributions rather than thresholds:</p>
+      <ul>
+        <li><strong>Zero-result rate</strong> — rising means the corpus, the query mix or the index changed.</li>
+        <li><strong>Score distribution</strong> — a falling median top-1 similarity is drift, often the earliest signal you get.</li>
+        <li><strong>Position of clicks or accepts</strong> — if users consistently pick result 4, your ranking is wrong even when recall is fine.</li>
+        <li><strong>Rewrite / escalation rate</strong> — how often the corrective loop fires.</li>
+        <li><strong>Immediate rephrase</strong> — a strong implicit "that was not it".</li>
+        <li><strong>A canary set</strong> — a few dozen fixed queries with known answers, run on a schedule against production.</li>
+      </ul>
+      <div class="box said">
+        <span class="box-t">The canary is the one to mention</span>
+        <p>
+          "Proxy metrics tell you something changed; a canary set tells you what.
+          Fifty queries with known answers, run hourly against production, is cheap and it
+          converts 'quality feels worse' into 'recall on identifier queries dropped from
+          1.00 to 0.6 at 14:00', which is actionable."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q14-5">
+    <div class="qa-head"><span class="qa-n">14.5</span>
+      <h3>How do you alert on a non-deterministic system?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>Alert on things that are deterministic <em>about</em> the non-deterministic system.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Alert on</th><th>Not on</th></tr></thead>
+          <tbody>
+            <tr><td>Error and timeout rate</td><td>A single bad answer</td></tr>
+            <tr><td>p95 latency</td><td>One slow request</td></tr>
+            <tr><td>Cost per hour vs budget</td><td>One expensive call</td></tr>
+            <tr><td>Tool-call failure rate</td><td>One failed tool call</td></tr>
+            <tr><td>Ungrounded-citation rate</td><td>One hallucination</td></tr>
+            <tr><td>Fallback rate</td><td>One fallback</td></tr>
+            <tr><td>Zero-result rate</td><td>One empty search</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Everything on the left is a <strong>rate over a window</strong>, because individual
+        events are expected. The pattern is to alert on the derivative — a rate that moved,
+        not a rate that is nonzero.
+      </p>
+      <div class="box breaks">
+        <span class="box-t">The alert people forget</span>
+        <p>
+          <strong>Fallback rate.</strong> If your chain quietly degrades from a hosted model
+          to a local one, everything still returns 200 and quality drops. In one usage
+          report here, 42 of 510 calls failed and the chain absorbed all of them — visible
+          in the table, invisible to any error-rate alert.
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- =========================================================== SECTION 15 -->
+<section class="sec" id="s15">
+  <div class="sec-head">
+    <span class="sec-n">Section 15</span>
+    <h2>Azure AI &amp; cloud</h2>
+  </div>
+  <p class="sec-intro">
+    Read 15.1 before the rest. The technical content here is sound, but how you frame it
+    matters more than what you know.
+  </p>
+
+  <article class="qa" id="q15-1">
+    <div class="qa-head"><span class="qa-n">15.1</span>
+      <h3>What can you honestly claim about Azure?</h3></div>
+    <div class="tags"><span class="tag t-trap">read this first</span></div>
+    <div class="qa-body">
+      <div class="box breaks">
+        <span class="box-t">Be straight about this</span>
+        <p>
+          <strong>This project has no Azure integration.</strong> There is a
+          <code>StorageBackend = Literal["local", "azure_blob"]</code> type and a comment
+          saying the switch would be configuration — a designed-for seam, not an
+          implementation. Only local disk exists.
+        </p>
+        <p>
+          Claiming Azure experience collapses on the first follow-up: "how did you handle
+          content filter 400s", "which deployment tier", "how did you do private
+          endpoints". Those answers come from operating it, not reading about it.
+        </p>
+      </div>
+      <p><strong>What to say instead</strong> — this is a strong answer, not a weak one:</p>
+      <div class="box said">
+        <span class="box-t">The framing that works</span>
+        <p>
+          "I haven't run this on Azure. I've built the equivalent architecture on Postgres,
+          a managed vector store and two model providers, and I know what each Azure service
+          maps to — Azure OpenAI for the model layer, AI Search for hybrid retrieval and
+          semantic ranking, Blob for documents, AKS for the workers. The parts I'd expect
+          to actually cost me time are the ones that are Azure-specific rather than
+          architectural: content filter behaviour, quota and TPM management, and networking
+          for private endpoints."
+        </p>
+      </div>
+      <p>
+        That answer demonstrates you understand the architecture <em>and</em> know which
+        parts you have not hit yet. Interviewers hire that far more readily than a
+        confident claim that unravels.
+      </p>
+    </div>
+  </article>
+
+  <article class="qa" id="q15-2">
+    <div class="qa-head"><span class="qa-n">15.2</span>
+      <h3>Sketch a production GenAI architecture on Azure.</h3></div>
+    <div class="tags"><span class="tag t-core">conceptual</span></div>
+    <div class="qa-body">
+      <div class="dia">
+<pre>  Entra ID ──► App Gateway / Front Door ──► APIM (rate limit, keys)
+                                              │
+                                              ▼
+                             ┌────────────────────────────────┐
+                             │  AKS                           │
+                             │   api pods  ·  worker pods     │
+                             │   HPA on queue depth           │
+                             └───────┬──────────────┬─────────┘
+                                     │              │
+              ┌──────────────────────┘              └──────────────┐
+              ▼                                                    ▼
+   ┌────────────────────┐   ┌──────────────────┐   ┌──────────────────────┐
+   │ Azure OpenAI       │   │ Azure AI Search  │   │ PostgreSQL Flexible  │
+   │ chat + embeddings  │   │ hybrid + semantic│   │ app data, outbox     │
+   │ PTU or pay-go      │   │ ranker           │   │                      │
+   └────────────────────┘   └──────────────────┘   └──────────────────────┘
+              │                       ▲
+              │                       │ indexer
+              │              ┌──────────────────┐
+              │              │ Blob Storage     │  source documents
+              │              └──────────────────┘
+              ▼
+   ┌──────────────────────────────────────────────────────────────┐
+   │ Azure Monitor / App Insights   traces, metrics, cost, alerts │
+   └──────────────────────────────────────────────────────────────┘
+
+   Key Vault for secrets · Managed Identity, not keys, between services
+   ACR for images · Private Endpoints so traffic stays off the internet</pre>
+      </div>
+      <p>Three Azure-specific points worth making unprompted:</p>
+      <ul>
+        <li><strong>Managed Identity over API keys.</strong> Pods authenticate to Azure OpenAI and Search with workload identity — no secret to rotate or leak.</li>
+        <li><strong>PTU versus pay-as-you-go.</strong> Provisioned throughput gives predictable latency and no noisy-neighbour throttling; pay-go is cheaper until you have steady load.</li>
+        <li><strong>Private endpoints.</strong> In regulated environments the whole point is that traffic to the model never traverses the public internet.</li>
+      </ul>
+    </div>
+  </article>
+
+  <article class="qa" id="q15-3">
+    <div class="qa-head"><span class="qa-n">15.3</span>
+      <h3>What is specific about Azure OpenAI compared with the OpenAI API?</h3></div>
+    <div class="tags"><span class="tag t-core">conceptual</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th></th><th>Azure OpenAI</th><th>OpenAI direct</th></tr></thead>
+          <tbody>
+            <tr><td>You address</td><td>A <strong>deployment name</strong> you created</td><td>A model name</td></tr>
+            <tr><td>Auth</td><td>Managed Identity or key</td><td>API key</td></tr>
+            <tr><td>Region</td><td>You choose — data residency</td><td>Not controlled</td></tr>
+            <tr><td>Quota</td><td>TPM allocated per deployment</td><td>Account-level tiers</td></tr>
+            <tr><td>Content filter</td><td><strong>On by default</strong>, configurable</td><td>Moderation is separate</td></tr>
+            <tr><td>Networking</td><td>Private endpoints, VNet</td><td>Public</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Two operational realities worth naming, because they are what actually bites:</p>
+      <ul>
+        <li><strong>The content filter returns a 400.</strong> Legitimate content — security bug reports, medical text — can be filtered. Your client must handle it as a distinct error class, not as a generic failure, or you will be debugging phantom outages.</li>
+        <li><strong>TPM quota is per deployment and per region.</strong> Capacity planning means allocating deployments deliberately, and 429s under load are a quota problem, not a code problem.</li>
+      </ul>
+<pre><code>client = AzureOpenAI(
+    azure_endpoint="https://<resource>.openai.azure.com/",
+    azure_ad_token_provider=token_provider,     # Managed Identity
+    api_version="2024-10-21",
+)
+resp = client.chat.completions.create(
+    model="gpt-4o-prod",                        # DEPLOYMENT name, not model name
+    messages=messages,
+)</code></pre>
+    </div>
+  </article>
+
+  <article class="qa" id="q15-4">
+    <div class="qa-head"><span class="qa-n">15.4</span>
+      <h3>What does Azure AI Search give you that a plain vector store does not?</h3></div>
+    <div class="tags"><span class="tag t-core">conceptual</span></div>
+    <div class="qa-body">
+      <p>It is a search engine that also does vectors, rather than a vector database — and that difference is the reason to choose it.</p>
+      <ul>
+        <li><strong>Hybrid natively.</strong> BM25 and vector in one query, fused with RRF, without you building the fusion.</li>
+        <li><strong>A semantic ranker</strong> — a cross-encoder re-ranking stage as part of the query, so no separate re-ranking service.</li>
+        <li><strong>Indexers</strong> that pull from Blob, SQL or Cosmos on a schedule, with skillsets for cracking documents, OCR and entity extraction.</li>
+        <li><strong>Security trimming</strong> — filter by the caller's group membership, which is exactly the ACL problem from 12.2.</li>
+        <li><strong>Faceting and filtering</strong> that a pure vector store does not offer.</li>
+      </ul>
+<pre><code>results = client.search(
+    search_text=query,                              # BM25 half
+    vector_queries=[VectorizedQuery(vector=v, k_nearest_neighbors=50,
+                                    fields="content_vector")],
+    query_type="semantic",                          # the semantic re-ranker
+    semantic_configuration_name="default",
+    filter=f"group_ids/any(g: search.in(g, '{user_groups}'))",   # security trim
+    top=10,
+)</code></pre>
+      <div class="box said">
+        <span class="box-t">The honest comparison</span>
+        <p>
+          "It collapses three components — keyword search, vector search and re-ranking —
+          into one service, which is a genuine reduction in moving parts. The trade is
+          control: I measured that generic RRF lost to a cascade on my corpus, and a managed
+          fusion is not something you can replace when your data disagrees with the default."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q15-5">
+    <div class="qa-head"><span class="qa-n">15.5</span>
+      <h3>How would you port what you built onto Azure?</h3></div>
+    <div class="tags"><span class="tag t-deep">good answer to have ready</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th>Component here</th><th>Azure equivalent</th><th>Difficulty</th></tr></thead>
+          <tbody>
+            <tr><td>Gemini / Ollama behind a port</td><td>Azure OpenAI deployment</td><td><strong>Low</strong> — a new adapter behind the existing interface</td></tr>
+            <tr><td>Local embeddings</td><td><code>text-embedding-3-large</code></td><td>Low, but forces a full re-embed</td></tr>
+            <tr><td>Pinecone + Postgres FTS</td><td>Azure AI Search (both halves)</td><td>Medium — fusion becomes theirs, not mine</td></tr>
+            <tr><td>PostgreSQL</td><td>PostgreSQL Flexible Server</td><td>Low — RLS works the same</td></tr>
+            <tr><td>Outbox worker</td><td>Same worker in AKS, or Container Apps jobs</td><td>Low</td></tr>
+            <tr><td>Attachments on local disk</td><td>Blob Storage</td><td>Low — the seam already exists</td></tr>
+            <tr><td>LangSmith / MLflow</td><td>Azure Monitor + Azure ML</td><td>Medium</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The point to draw out: <strong>the model layer is a one-adapter change because it
+        was written against a port.</strong> The retrieval layer is the harder migration,
+        because moving to AI Search means adopting its fusion and its ranker rather than
+        the ones you measured.
+      </p>
+      <div class="box said">
+        <span class="box-t">Turn the gap into evidence</span>
+        <p>
+          "The reason a provider swap is small is that nothing above the adapter knows which
+          provider answered — I've already done that migration once, from one vector store
+          to another, and it was one new file and four config lines because of the port. I'd
+          expect Azure OpenAI to be the same shape."
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- =========================================================== SECTION 16 -->
+<section class="sec" id="s16">
+  <div class="sec-head">
+    <span class="sec-n">Section 16</span>
+    <h2>Python &amp; backend engineering</h2>
+  </div>
+  <p class="sec-intro">
+    Expect a coding exercise as well as discussion. The AI-specific angle is async, and
+    where it does and does not help.
+  </p>
+
+  <article class="qa" id="q16-1">
+    <div class="qa-head"><span class="qa-n">16.1</span>
+      <h3>Explain async/await, and where it helps in an AI backend.</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>
+        One thread, cooperative scheduling. <code>await</code> yields control while waiting
+        on I/O so other work runs. It buys concurrency, not parallelism — Python still
+        executes one bytecode at a time.
+      </p>
+      <p>
+        AI backends are almost pure I/O wait: model calls take seconds, vector search
+        hundreds of milliseconds. That is exactly the workload async is for.
+      </p>
+<pre><code># Sequential: 3 x 200ms = 600ms
+sem = await store.search(...)
+lex = await lexical.search(...)
+
+# Concurrent: max(200ms, 200ms) = 200ms
+sem, lex = await asyncio.gather(store.search(...), lexical.search(...))</code></pre>
+      <div class="box breaks">
+        <span class="box-t">The mistake that undoes all of it</span>
+        <p>
+          One blocking call in an async handler stalls the entire event loop — every
+          concurrent request, not just that one. A synchronous SDK, a CPU-bound loop, or
+          <code>time.sleep</code> will do it. Push those to a thread:
+        </p>
+<pre><code># The Pinecone SDK is synchronous; a bare call would block every request
+raw = await asyncio.to_thread(lambda: index.query(vector=v, top_k=k))</code></pre>
+      </div>
+      <div class="box mine">
+        <span class="box-t">In this codebase</span>
+        <p>
+          Both vector-store and checkpointer adapters wrap synchronous SDKs in
+          <code>asyncio.to_thread</code> — deliberately one concurrency model in the
+          codebase rather than two. The two retrievers run concurrently because LangGraph
+          places them in the same superstep, which is the framework doing the
+          <code>gather</code> for you.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q16-2">
+    <div class="qa-head"><span class="qa-n">16.2</span>
+      <h3>How does FastAPI dependency injection work, and why use it?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>
+        Declare what a handler needs as a parameter; FastAPI resolves it, caches it per
+        request, and handles teardown. The benefit is that cross-cutting concerns become
+        <em>impossible to forget</em> rather than merely conventional.
+      </p>
+<pre><code>async def get_scoped_db(ctx: CurrentUser):
+    """A session already scoped to the authenticated tenant."""
+    async with SessionFactory() as session:
+        await apply_tenant_scope(session, ctx.tenant_id)   # SET LOCAL app.tenant_id
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+        else:
+            await session.commit()
+
+ScopedDb = Annotated[AsyncSession, Depends(get_scoped_db)]
+
+@router.get("/tickets/{ref}/similar")
+async def similar(ref: str, ctx: CanRead, db: ScopedDb) -> SimilarOut:
+    ...</code></pre>
+      <p>
+        <strong>A route using <code>ScopedDb</code> cannot issue an unscoped query.</strong>
+        The tenant scope is applied before the transaction opens, as a property of asking
+        for a session at all. Permissions work the same way — declared in the type, so a new
+        route cannot omit the check.
+      </p>
+      <div class="box breaks">
+        <span class="box-t">A trap specific to this pattern</span>
+        <p>
+          <code>SET LOCAL</code> is transaction-scoped. Commit mid-request and the tenant
+          scope silently vanishes — which showed up here as two unrelated-looking symptoms
+          (tools reporting "not found", and inserts failing RLS) from one cause. The fix is
+          a helper that re-applies scope after every commit.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q16-3">
+    <div class="qa-head"><span class="qa-n">16.3</span>
+      <h3>How do you structure exception handling in an API?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>
+        Domain exceptions in the domain, translated to HTTP once at the boundary. Handlers
+        should not build error responses.
+      </p>
+<pre><code>class AppError(Exception): ...
+class NotFoundError(AppError): ...
+class PermissionDeniedError(AppError): ...
+class RateLimitError(AppError): ...
+class ServiceUnavailableError(AppError): ...
+
+@app.exception_handler(AppError)
+async def handle_app_error(request: Request, exc: AppError):
+    status = STATUS_BY_TYPE.get(type(exc), 500)
+    return JSONResponse(status_code=status, content={
+        "type": type(exc).__name__,
+        "detail": str(exc),
+        "request_id": request.state.request_id,     # correlates to the trace
+    })</code></pre>
+      <p>Three rules that matter more than the structure:</p>
+      <ul>
+        <li><strong>Never leak internals.</strong> A stack trace or SQL fragment in a response is an information disclosure.</li>
+        <li><strong>Distinguish retryable from terminal.</strong> 429 and 503 tell a client to back off; 400 tells it not to bother.</li>
+        <li><strong>Include a request id</strong> so a user's complaint maps to a specific trace.</li>
+      </ul>
+      <div class="box mine">
+        <span class="box-t">In this codebase — degrade, do not fail</span>
+        <p>
+          AI failures are treated as degradation rather than errors. If the vector store is
+          unreachable, the retriever returns an empty ranking, the keyword half still works,
+          and the response carries a <code>degraded</code> flag so the UI can say so. A
+          ticket page must render even when the AI layer is down — and the readiness probe
+          deliberately does <em>not</em> mark the service unready for an AI dependency,
+          because no AI call sits on a write path.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q16-4">
+    <div class="qa-head"><span class="qa-n">16.4</span>
+      <h3>How do you structure an integration with an LLM provider?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>Behind a port, with the provider client confined to an adapter.</p>
+<pre><code>class ChatModel(Protocol):
+    async def generate_structured(
+        self, system: str, messages: list[dict], schema: type[T]
+    ) -> T: ...
+
+class GeminiChat:   ...   # vendor SDK lives HERE and nowhere else
+class OllamaChat:   ...   # raw HTTP; same interface</code></pre>
+      <p>Four things the port makes possible, all of which are hard to retrofit:</p>
+      <ul>
+        <li><strong>Testing with a fake</strong> — the whole pipeline runs with no network.</li>
+        <li><strong>Fallback</strong> — a registry can try providers in order because they are interchangeable.</li>
+        <li><strong>One place for accounting</strong> — tokens, cost and latency recorded once.</li>
+        <li><strong>Swapping providers</strong> is a new file, not a refactor.</li>
+      </ul>
+      <div class="box mine">
+        <span class="box-t">In this codebase — a registry keyed by role, not by model</span>
+        <p>
+          Code refers to <code>ModelRole.RERANK</code>, never to a model name, so changing
+          which model serves a role is configuration. Each role has an ordered fallback
+          chain, and the <code>EVALUATOR</code> role deliberately has <strong>none</strong>
+          — a judge that silently changes mid-run produces numbers that cannot be compared,
+          so it should fail instead.
+        </p>
+        <p>
+          One accounting detail worth mentioning in an interview: cost is priced by
+          <em>the model that actually answered</em>, not by the role's rate. Charging the
+          hosted rate for a local fallback invents money, and cost-per-success is only
+          meaningful if the costs in it are real.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q16-5">
+    <div class="qa-head"><span class="qa-n">16.5</span>
+      <h3>What coding problems should you expect?</h3></div>
+    <div class="tags"><span class="tag t-core">practice</span></div>
+    <div class="qa-body">
+      <p>
+        Medium difficulty, usually string, list or dictionary manipulation — often dressed
+        in RAG clothing. Three that come up repeatedly:
+      </p>
+      <p class="codelabel">Sliding window with overlap — chunking in disguise</p>
+<pre><code>def chunk(text: str, size: int, overlap: int) -> list[str]:
+    if overlap >= size:
+        raise ValueError("overlap must be smaller than size")
+    step = size - overlap
+    return [text[i:i + size] for i in range(0, len(text), step)]</code></pre>
+      <p class="codelabel">Merge ranked lists — fusion in disguise</p>
+<pre><code>def rrf(lists: list[list[str]], k: int = 60) -> list[str]:
+    scores: dict[str, float] = defaultdict(float)
+    for ranked in lists:
+        for rank, doc in enumerate(ranked, start=1):
+            scores[doc] += 1 / (k + rank)
+    return sorted(scores, key=scores.get, reverse=True)</code></pre>
+      <p class="codelabel">Top-k without sorting everything — O(n log k)</p>
+<pre><code>import heapq
+
+def top_k(scores: dict[str, float], k: int) -> list[str]:
+    return heapq.nlargest(k, scores, key=scores.get)</code></pre>
+      <div class="box said">
+        <span class="box-t">How to score well</span>
+        <p>
+          State the complexity unprompted, name the edge cases before you are asked
+          (<code>overlap >= size</code>, empty input, k larger than the collection), and say
+          what you would do differently at scale. That reads as engineering rather than
+          puzzle-solving.
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- =========================================================== SECTION 17 -->
+<section class="sec" id="s17">
+  <div class="sec-head">
+    <span class="sec-n">Section 17</span>
+    <h2>Docker, Kubernetes &amp; CI/CD</h2>
+  </div>
+  <p class="sec-intro">
+    As with Azure — read 17.1 first. The content is correct; the framing is what keeps
+    you out of trouble.
+  </p>
+
+  <article class="qa" id="q17-1">
+    <div class="qa-head"><span class="qa-n">17.1</span>
+      <h3>What can you honestly claim here?</h3></div>
+    <div class="tags"><span class="tag t-trap">read this first</span></div>
+    <div class="qa-body">
+      <div class="box breaks">
+        <span class="box-t">The position</span>
+        <p>
+          <strong>This project has no Dockerfile, no Kubernetes manifests and no CI
+          pipeline.</strong> It runs locally with a virtualenv and Postgres. There is no
+          containerisation to describe.
+        </p>
+      </div>
+      <div class="box said">
+        <span class="box-t">What to say</span>
+        <p>
+          "This one I ran locally — no containers, no pipeline. I know the shape of what it
+          needs: a multi-stage image, the worker as a separate deployment from the API
+          because they scale on different signals, migrations as a job rather than in the
+          entrypoint, and a pipeline that gates on the retrieval eval as well as the tests.
+          I'd expect the parts costing me time to be operational — image size with ML
+          dependencies, and probes that account for a slow model warm-up."
+        </p>
+      </div>
+      <p>
+        Naming <em>specific</em> decisions — worker split, migration job, eval gate — shows
+        you have thought it through even without having run it. That is much better than
+        either bluffing or saying "I haven't done DevOps".
+      </p>
+    </div>
+  </article>
+
+  <article class="qa" id="q17-2">
+    <div class="qa-head"><span class="qa-n">17.2</span>
+      <h3>How would you containerise this application?</h3></div>
+    <div class="tags"><span class="tag t-core">conceptual</span></div>
+    <div class="qa-body">
+<pre><code># ---- build stage: compile wheels, keep toolchain out of the runtime
+FROM python:3.12-slim AS build
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential
+COPY pyproject.toml ./
+RUN pip wheel --no-cache-dir --wheel-dir /wheels .
+
+# ---- runtime: small, non-root, no compiler
+FROM python:3.12-slim
+RUN useradd --create-home --uid 10001 app
+WORKDIR /app
+COPY --from=build /wheels /wheels
+RUN pip install --no-cache-dir /wheels/*.whl && rm -rf /wheels
+COPY --chown=app:app . .
+USER app
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]</code></pre>
+      <p>Four decisions worth defending:</p>
+      <ul>
+        <li><strong>Multi-stage</strong> — the compiler is a build dependency, not a runtime one, and shipping it enlarges both the image and the attack surface.</li>
+        <li><strong>Non-root</strong> — table stakes, and Kubernetes can enforce it.</li>
+        <li><strong>Dependencies before source</strong> so the expensive layer caches across code changes.</li>
+        <li><strong>Migrations are not in the entrypoint.</strong> Three replicas starting at once would run them three times concurrently. Migrations are a Job that completes before the rollout.</li>
+      </ul>
+      <div class="box breaks">
+        <span class="box-t">The AI-specific problem</span>
+        <p>
+          ML dependencies are enormous — torch and CUDA alone can exceed 5 GB. If you serve
+          models in-cluster, use a slim base with a CPU-only wheel index where you can, and
+          keep model weights in a volume or object storage rather than baking them into the
+          image, or every deploy pushes gigabytes.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q17-3">
+    <div class="qa-head"><span class="qa-n">17.3</span>
+      <h3>What is specific about running AI workloads on Kubernetes?</h3></div>
+    <div class="tags"><span class="tag t-deep">conceptual</span></div>
+    <div class="qa-body">
+      <ul>
+        <li><strong>Separate deployments for API and workers.</strong> They scale on different signals — the API on request rate, the worker on queue depth — and a slow embedding job must never make the API unready.</li>
+        <li><strong>Probes must account for warm-up.</strong> A model load can take tens of seconds; use a <code>startupProbe</code> so a slow start is not mistaken for a crash loop.</li>
+        <li><strong>Readiness must not depend on optional dependencies.</strong> If the vector store being down marks pods unready, an AI outage becomes a total outage.</li>
+        <li><strong>Long-lived requests</strong> need termination grace periods that let an in-flight agent run finish rather than being killed mid-write.</li>
+        <li><strong>GPU scheduling</strong>, if you self-host models: node selectors, taints, and the reality that GPU nodes are expensive and should not sit idle.</li>
+      </ul>
+<pre><code>startupProbe:                 # tolerate a slow model load
+  httpGet: { path: /health/live, port: 8000 }
+  failureThreshold: 30
+  periodSeconds: 5
+
+readinessProbe:               # database only -- NOT the AI dependencies
+  httpGet: { path: /health/ready, port: 8000 }
+
+terminationGracePeriodSeconds: 120   # let an in-flight run finish</code></pre>
+      <div class="box mine">
+        <span class="box-t">One thing this codebase already gets right</span>
+        <p>
+          Health reporting separates the AI dependencies from readiness deliberately —
+          "neither Ollama nor the vector store being down should make the service unready,
+          because no AI call sits on a write path." That is exactly the property the probe
+          configuration above depends on.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q17-4">
+    <div class="qa-head"><span class="qa-n">17.4</span>
+      <h3>What does a CI/CD pipeline for a GenAI application look like?</h3></div>
+    <div class="tags"><span class="tag t-deep">conceptual</span></div>
+    <div class="qa-body">
+      <div class="dia">
+<pre>  commit
+    │
+    ▼  LINT + TYPE         ruff, mypy strict        seconds
+    │
+    ▼  UNIT TESTS          no network, no model     seconds
+    │
+    ▼  RETRIEVAL EVAL      recall@k, MRR on a golden set
+    │                      ZERO LLM calls -- this is the AI gate
+    │                      fail the build on regression
+    ▼  BUILD IMAGE         multi-stage, tag = commit sha
+    │
+    ▼  PUSH TO REGISTRY    ACR / ECR / GHCR
+    │
+    ▼  DEPLOY STAGING      migrations as a Job first
+    │
+    ▼  SMOKE + FULL EVAL   generation metrics, costs money, runs here not on commit
+    │
+    ▼  CANARY              10% traffic, watch acceptance and error rate
+    │
+    ▼  PRODUCTION          image tag is the sha; rollback = redeploy previous</pre>
+      </div>
+      <p>
+        <strong>The AI-specific stage is the retrieval eval, and its value is that it is
+        free.</strong> Recall@k and MRR need no model calls, so they can gate every commit
+        the way unit tests do. Generation metrics cost money and belong in staging, on a
+        schedule, not on every push.
+      </p>
+      <div class="box said">
+        <span class="box-t">The line that shows you have thought about it</span>
+        <p>
+          "The hard part isn't the pipeline, it's deciding what should fail a build in a
+          non-deterministic system. My answer is: anything deterministic. Retrieval metrics,
+          structural guardrail checks, schema validation — those are reproducible and can
+          gate. Generation quality is a trend you watch in staging, not a gate, because a
+          flaky gate gets disabled and then protects nothing."
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- =========================================================== SECTION 18 -->
+<section class="sec" id="s18">
+  <div class="sec-head">
+    <span class="sec-n">Section 18</span>
+    <h2>Production software engineering</h2>
+  </div>
+  <p class="sec-intro">
+    The section that is not about AI, and often where a senior hire is actually decided.
+  </p>
+
+  <article class="qa" id="q18-1">
+    <div class="qa-head"><span class="qa-n">18.1</span>
+      <h3>How do you go from a vague requirement to a technical design?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>Take "we want AI to help with support tickets" — deliberately vague, like a real one.</p>
+      <ol>
+        <li><strong>Find the actual pain.</strong> Not "add AI" but "agents re-investigate bugs that were already solved last month".</li>
+        <li><strong>Define success measurably.</strong> Reduce duplicate investigation. Measured as: suggestions accepted, and time-to-first-response on duplicates.</li>
+        <li><strong>Constrain the scope.</strong> On the ticket detail page, not the create form — at creation there is nothing to compare yet, and a panel reacting to every keystroke is expensive and distracting.</li>
+        <li><strong>Name what must not happen.</strong> No write access. Severity stays human-entered. The model is never an authorization boundary.</li>
+        <li><strong>Choose the simplest thing that could work</strong>, and write down what would make you revisit it.</li>
+      </ol>
+      <div class="box said">
+        <span class="box-t">The senior instinct</span>
+        <p>
+          "Step 4 is the one people skip. Writing down the non-goals early is what stops
+          scope creep later — 'the agent should just also close the ticket' is much easier
+          to refuse when 'no write tools' was a documented decision rather than an opinion."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q18-2">
+    <div class="qa-head"><span class="qa-n">18.2</span>
+      <h3>How do you document architectural decisions?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>
+        <strong>Decision records</strong>, in the repository, versioned with the code. The
+        format matters less than including the alternatives and what would reverse the
+        decision.
+      </p>
+<pre><code>## D-14  Cascade fusion instead of Reciprocal Rank Fusion
+
+Status      Accepted
+Context     Two retrievers with incomparable score scales.
+Decision    Ship a cascade: leader's order, other's finds appended.
+Rejected    Equal-weight RRF -- measured BELOW its own best input on both
+            query families (0.986 vs 1.000 R@5; 0.792 vs 1.000 R@20).
+            The failure is structural: safety requires w <= 1/(K+2) = 0.016,
+            at which point the secondary only orders the tail.
+Revisit if  The exact-identifier probe is removed. Unaided, RRF beats the
+            cascade on identifier queries -- the cascade only wins because
+            that family is answered before ranking runs.</code></pre>
+      <p>
+        The <strong>"revisit if"</strong> line is the one that earns its place. It converts
+        a decision from folklore into something a future engineer can re-open with
+        confidence, and it is the difference between documentation and archaeology.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this codebase</span>
+        <p>
+          Decisions live in numbered docs alongside the code, and the reasoning is also in
+          the module docstrings — the fusion module carries the derivation of the safe
+          weight bound, so anyone tempted to "restore RRF" meets the arithmetic before they
+          meet the code.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q18-3">
+    <div class="qa-head"><span class="qa-n">18.3</span>
+      <h3>When do you draw a sequence diagram, and what goes in it?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>
+        When the interesting thing is <strong>ordering and boundaries</strong> — especially
+        across processes, where a race or a transaction boundary is the actual subject.
+      </p>
+      <div class="dia">
+<pre>  CS agent      API           Postgres        Worker        Vector store
+     │           │               │              │                │
+     ├─ create ─►│               │              │                │
+     │           ├─ BEGIN ──────►│              │                │
+     │           ├─ INSERT ticket│              │                │
+     │           ├─ INSERT job   │              │                │
+     │           ├─ COMMIT ─────►│              │                │
+     │◄─ 201 ────┤               │              │                │
+     │           │               │◄─ claim ─────┤  SKIP LOCKED   │
+     │           │               ├─ ticket ────►│                │
+     │           │               │              ├─ embed ───────►│
+     │           │               │◄─ record ────┤                │
+</pre>
+      </div>
+      <p>
+        What this diagram communicates that prose does not: the response returns
+        <em>before</em> any embedding happens, and the ticket and the job commit in one
+        transaction. Both are the design, and both are invisible in a component diagram.
+      </p>
+      <p>
+        On UML generally: use the two or three diagram types that carry information —
+        sequence for ordering, component for boundaries, state for lifecycles. Full formal
+        UML is rarely worth the effort, and nobody reads it.
+      </p>
+    </div>
+  </article>
+
+  <article class="qa" id="q18-4">
+    <div class="qa-head"><span class="qa-n">18.4</span>
+      <h3>Monolith or microservices for a GenAI application?</h3></div>
+    <div class="tags"><span class="tag t-trap">judgement</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        <strong>A modular monolith, until a specific force makes you split.</strong>
+        Distribution is a cost you pay for a benefit you should be able to name.
+      </p>
+      <p>Legitimate forces to split:</p>
+      <ul>
+        <li><strong>Different scaling shapes</strong> — a GPU inference service and a CRUD API want different hardware and different replica counts.</li>
+        <li><strong>Different release cadence</strong>, owned by different teams.</li>
+        <li><strong>Isolation</strong> — a failure domain you want bounded.</li>
+      </ul>
+      <p>The costs, which are usually understated:</p>
+      <ul>
+        <li>Network calls where method calls used to be — latency, retries, partial failure.</li>
+        <li>Distributed transactions become sagas.</li>
+        <li>Debugging needs distributed tracing to reach parity with a stack trace.</li>
+      </ul>
+      <div class="box mine">
+        <span class="box-t">In this codebase — modular, one deployable</span>
+        <p>
+          Modules communicate through services and domain events, and dependencies point one
+          way: <code>intelligence</code> knows about <code>tickets</code>,
+          <code>tickets</code> knows nothing about <code>intelligence</code>. It emits an
+          event; the AI layer subscribes at startup.
+        </p>
+        <p>
+          That direction is what would make extraction cheap if it were ever needed — the
+          seam already exists, and it is enforced rather than intended. The worker is
+          already a separate process for exactly the "different scaling shape" reason.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <article class="qa" id="q18-5">
+    <div class="qa-head"><span class="qa-n">18.5</span>
+      <h3>What do you look for reviewing AI/RAG code specifically?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>Beyond ordinary review, the failures particular to this domain — all of which are silent:</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Check</th><th>Because</th></tr></thead>
+          <tbody>
+            <tr><td>Query and document embedded consistently</td><td>Asymmetric models fail with no error, only worse recall</td></tr>
+            <tr><td>Similarity direction converted once</td><td>distance vs similarity inverts every ranking, plausibly</td></tr>
+            <tr><td>Tenant scoping on every retrieval path</td><td>A missed filter is a leak, not a bug</td></tr>
+            <tr><td>Every model call has a timeout and a budget</td><td>An unbounded call is an unbounded bill</td></tr>
+            <tr><td>Failure degrades rather than throws</td><td>An AI outage must not be a site outage</td></tr>
+            <tr><td>New response fields survive the cache round-trip</td><td>A field written but not read returns null only on the second request</td></tr>
+            <tr><td>Prompt changes carry an eval run</td><td>Otherwise you shipped a behaviour change with no evidence</td></tr>
+            <tr><td>Tool results describe their own shape</td><td>A model fills an absence with invention</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="box mine">
+        <span class="box-t">Three of those are on the list because they happened here</span>
+        <p>
+          A cache field written but never read — visible only on the <em>second</em> request
+          for a ticket, and only with Redis configured, so every gate passed with it broken.
+          A similarity score dropped by a router that maps field by field. And an aggregate
+          tool returning counts with no references, which the model filled in by inventing
+          three ticket numbers.
+        </p>
+        <p>
+          All three were silent. None produced a type error or a crash. That is the
+          signature of this domain, and it is why the review checklist looks different from
+          an ordinary one.
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
 <p style="max-width:74ch;margin:64px 0 0;padding-top:22px;border-top:1px solid var(--line);color:var(--text-3);font-size:14.5px">
   Every measurement quoted here is from a running system: 100 tickets, hybrid retrieval
   over Pinecone and Postgres full-text search, 1024-dimension local embeddings, evaluated
@@ -2252,6 +5843,58 @@ else:
     apply(order[(order.indexOf(current) + 1) % order.length]);
   });
   apply(current);
+})();
+</script>
+<script>
+// Mobile navigation. The panel is the same index element the desktop rail uses, so
+// the scroll-spy above continues to drive it -- there is no second copy of
+// the index to keep in sync.
+(function () {
+  var body   = document.body;
+  var toggle = document.getElementById("navToggle");
+  var close  = document.getElementById("navClose");
+  var panel  = document.getElementById("indexNav");
+  if (!toggle || !panel) return;
+
+  function setOpen(open) {
+    body.classList.toggle("nav-open", open);
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) panel.scrollTop = 0;
+  }
+
+  toggle.addEventListener("click", function () {
+    setOpen(!body.classList.contains("nav-open"));
+  });
+  if (close) close.addEventListener("click", function () { setOpen(false); });
+
+  // Choosing a question should navigate AND dismiss.
+  panel.addEventListener("click", function (event) {
+    if (event.target.closest("a")) setOpen(false);
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && body.classList.contains("nav-open")) setOpen(false);
+  });
+})();
+
+// Show the current section in the sticky bar, so the bar is orientation and
+// not just a button.
+(function () {
+  var where = document.getElementById("mobileWhere");
+  var heads = Array.prototype.slice.call(document.querySelectorAll(".sec-head h2"));
+  if (!where || !heads.length || !("IntersectionObserver" in window)) return;
+
+  var seen = new Set();
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) seen.add(e.target);
+      else seen.delete(e.target);
+    });
+    var current = heads.filter(function (h) { return seen.has(h); })[0];
+    if (current) where.textContent = current.textContent.trim();
+  }, { rootMargin: "0px 0px -75% 0px" });
+
+  heads.forEach(function (h) { io.observe(h); });
 })();
 </script>
 </body>
