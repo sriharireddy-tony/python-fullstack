@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Longest Substring Without Repeating Characters</title>
+<meta name="description" content="The sliding window, taught from scratch: a stretchy window that grows on the right and shrinks on the left.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Strings &middot; Problem 01</p>
+  <h1>Longest Substring Without Repeating Characters</h1>
+  <p class="standfirst">This is where you learn the <strong>sliding window</strong> &mdash; a stretchy
+  range that grows on the right and shrinks on the left. Once you can see it, roughly a dozen other
+  interview problems become the same problem.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Given a string, find the longest run of characters, side by side, in which no character repeats.
+  Return its length.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Answer</th><th>The winning run</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">"abcabcbb"</td><td class="mono">3</td><td class="mono">"abc"</td></tr>
+        <tr><td class="mono">"bbbbb"</td><td class="mono">1</td><td class="mono">"b"</td></tr>
+        <tr><td class="mono">"pwwkew"</td><td class="mono">3</td><td class="mono">"wke"</td></tr>
+        <tr><td class="mono">""</td><td class="mono">0</td><td>nothing</td></tr>
+        <tr><td class="mono">"dvdf"</td><td class="mono">3</td><td class="mono">"vdf"</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Substring, not subsequence</span>
+    <p>In <code>"pwwkew"</code> the answer is <code>"wke"</code> and <strong>not</strong>
+    <code>"pwke"</code>. <code>"pwke"</code> has four distinct characters, but they are not side by
+    side &mdash; you had to jump over a <code>w</code>. That makes it a subsequence, which this
+    problem does not allow. Say &ldquo;contiguous&rdquo; to yourself before you start.</p>
+  </div>
+
+  <p>Watch the last row, <code>"dvdf"</code>. It looks harmless and it is the input that breaks most
+  first attempts. Come back to it after Step 9.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <p>Try every possible substring, check whether it has duplicates, keep the longest clean one.
+  Two loops to pick the start and end, and a set to check for repeats.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; brute force</span></div>
+<pre><code>function lengthOfLongestBrute(s) {
+  let best = 0;
+
+  for (let start = 0; start &lt; s.length; start++) {
+    const seen = new Set();
+
+    for (let end = start; end &lt; s.length; end++) {
+      if (seen.has(s[end])) {
+        break;              // this substring is spoiled -- no point extending it
+      }
+      seen.add(s[end]);
+
+      const length = end - start + 1;
+      if (length &gt; best) best = length;
+    }
+  }
+
+  return best;
+}
+
+console.log(lengthOfLongestBrute('abcabcbb'));   // 3
+console.log(lengthOfLongestBrute('bbbbb'));      // 1
+console.log(lengthOfLongestBrute('pwwkew'));     // 3
+console.log(lengthOfLongestBrute('dvdf'));       // 3
+console.log(lengthOfLongestBrute(''));           // 0</code></pre>
+  </div>
+
+  <p>Note <code>end - start + 1</code>. The length of a range that includes both ends is
+  &ldquo;last minus first, plus one&rdquo;. From index 2 to index 4 is 3 characters, not 2. Forgetting
+  the <code>+ 1</code> is the most common off-by-one in the whole of this subject.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>O(n&sup2;) in the worst case: for each of n starting points, walk forward. And again the waste is
+  the interesting part. Take <code>"abcdefX"</code> where <code>X</code> is a repeat of <code>a</code>:</p>
+
+  <div class="trace">
+<pre>start at 0:  a b c d e f  -- reads 6 characters, hits the repeat, gives up
+start at 1:    b c d e f  -- reads 5 characters. But we ALREADY KNEW
+                             b c d e f had no duplicates in it.
+start at 2:      c d e f  -- ditto
+start at 3:        d e f  -- ditto
+</pre>
+  </div>
+
+  <p>Every restart re-verifies a stretch it has already verified. The window we found is thrown away
+  and rebuilt from one place further along. That is the work we are going to eliminate.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// A long string with only a few distinct characters forces
+// lots of restarts in the brute force.
+const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+let s = '';
+for (let i = 0; i &lt; 20000; i++) s += alphabet[i % 26];
+
+function brute(s) {
+  let best = 0;
+  for (let i = 0; i &lt; s.length; i++) {
+    const seen = new Set();
+    for (let j = i; j &lt; s.length; j++) {
+      if (seen.has(s[j])) break;
+      seen.add(s[j]);
+      if (j - i + 1 &gt; best) best = j - i + 1;
+    }
+  }
+  return best;
+}
+
+function window(s) {
+  const last = new Map();
+  let left = 0, best = 0;
+  for (let right = 0; right &lt; s.length; right++) {
+    const c = s[right];
+    if (last.has(c) &amp;&amp; last.get(c) &gt;= left) left = last.get(c) + 1;
+    last.set(c, right);
+    if (right - left + 1 &gt; best) best = right - left + 1;
+  }
+  return best;
+}
+
+let t = performance.now();
+const a = brute(s);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const b = window(s);
+const fastMs = performance.now() - t;
+
+console.log('brute force   :', a, 'in', bruteMs.toFixed(1) + ' ms');
+console.log('sliding window:', b, 'in', fastMs.toFixed(2) + ' ms');
+console.log('speed-up:', Math.round(bruteMs / Math.max(fastMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; the sliding window</h2>
+
+  <p>Instead of throwing the window away and rebuilding it, <strong>keep one window and adjust its
+  two ends</strong>. Picture two fingers on the string:</p>
+
+  <div class="trace">
+<pre>        a  b  c  a  b  c  b  b
+        ^        ^
+      left     right
+
+   the window is everything from left to right, inclusive
+</pre>
+  </div>
+
+  <p>The rule for moving them:</p>
+
+  <ul>
+    <li><strong>right</strong> always moves forward, one step per loop iteration. It is reading new
+    characters into the window.</li>
+    <li><strong>left</strong> only moves when the window becomes invalid &mdash; that is, when the
+    character <code>right</code> just read is already inside the window. Then <code>left</code> jumps
+    forward far enough to kick the earlier copy out.</li>
+  </ul>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Neither finger ever moves backwards. Each of them travels the length of the string
+    <strong>once</strong>. Two fingers each walking n steps is 2n steps in total &mdash; which is
+    O(n), not O(n&sup2;), even though the code has a loop inside a loop shape.</p>
+  </div>
+
+  <h3>How far does <code>left</code> jump?</h3>
+
+  <p>This is the only genuinely subtle part. When <code>right</code> lands on a character we have seen
+  before at index <code>p</code>, we need that copy gone. So <code>left</code> must move to
+  <code>p + 1</code> &mdash; one past the old copy.</p>
+
+  <p>But only if <code>p</code> is actually <em>inside</em> the current window. And that is exactly the
+  trap in <code>"dvdf"</code>:</p>
+
+  <div class="trace">
+<pre>  d  v  d  f
+  0  1  2  3
+
+At right = 2 we see 'd', last seen at index 0.
+   left jumps to 0 + 1 = 1.        window is now "vd"
+
+At right = 3 we see 'f' -- never seen. Window grows to "vdf", length 3.  CORRECT
+
+Now imagine we had NOT checked whether the old copy was still in the window.
+Suppose later we meet 'd' again at index 9, with left already at 5.
+The map still says "d was at 2". Jumping left to 3 would move it BACKWARDS,
+re-admitting characters we had already thrown out, and the answer inflates.
+
+That is why the condition is:
+        if (lastSeen.has(c) AND lastSeen.get(c) >= left)
+</pre>
+  </div>
+
+  <p>The <code>&gt;= left</code> guard says: <em>only react to a duplicate that is still inside my
+  window.</em> A duplicate that fell out of the window long ago is not a duplicate any more.
+  Leave that guard out and the code passes <code>"abcabcbb"</code> and fails on inputs like
+  <code>"abba"</code>.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace the window</h2>
+
+  <p><code>s = "abcabcbb"</code>. The map holds <em>the last index each character was seen at</em>.</p>
+
+  <div class="trace">
+<pre>left = 0   best = 0   lastSeen = {}
+
+right=0  'a'  not in window        lastSeen={a:0}   window "a"     len 1   best=1
+right=1  'b'  not in window        lastSeen={a:0,b:1}  window "ab"  len 2  best=2
+right=2  'c'  not in window        lastSeen={a:0,b:1,c:2}  window "abc" len 3  best=3
+right=3  'a'  seen at 0, and 0 >= left(0)  ->  left = 1
+                                   lastSeen={a:3,...}  window "bca" len 3  best=3
+right=4  'b'  seen at 1, and 1 >= left(1)  ->  left = 2
+                                   lastSeen={b:4,...}  window "cab" len 3  best=3
+right=5  'c'  seen at 2, and 2 >= left(2)  ->  left = 3
+                                   lastSeen={c:5,...}  window "abc" len 3  best=3
+right=6  'b'  seen at 4, and 4 >= left(3)  ->  left = 5
+                                   lastSeen={b:6,...}  window "cb"  len 2  best=3
+right=7  'b'  seen at 6, and 6 >= left(5)  ->  left = 7
+                                   lastSeen={b:7,...}  window "b"   len 1  best=3
+
+answer: 3
+</pre>
+  </div>
+
+  <p>Watch <code>left</code> across those eight rows: 0, 0, 0, 1, 2, 3, 5, 7. It only ever goes up.
+  That is the proof that this is O(n).</p>
+
+  <p>Now the tricky one, <code>s = "abba"</code>, which is the input the <code>&gt;= left</code> guard
+  exists for:</p>
+
+  <div class="trace">
+<pre>left = 0   best = 0   lastSeen = {}
+
+right=0  'a'  new                       lastSeen={a:0}      window "a"   best=1
+right=1  'b'  new                       lastSeen={a:0,b:1}  window "ab"  best=2
+right=2  'b'  seen at 1, 1 >= left(0)   ->  left = 2
+                                        lastSeen={a:0,b:2}  window "b"   best=2
+right=3  'a'  seen at 0 ... but 0 >= left(2)?  NO.
+              The old 'a' is already outside the window. Do NOT move left.
+                                        lastSeen={a:3,b:2}  window "ba"  best=2
+
+answer: 2       (without the guard, left would jump BACK to 1 and the
+                 window would be "bba" -- length 3, and wrong)
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function longestExplained(s) {
+  const lastSeen = new Map();
+  let left = 0, best = 0;
+
+  console.log('s = "' + s + '"');
+  console.log('');
+
+  for (let right = 0; right &lt; s.length; right++) {
+    const c = s[right];
+
+    if (lastSeen.has(c) &amp;&amp; lastSeen.get(c) &gt;= left) {
+      const old = lastSeen.get(c);
+      left = old + 1;
+      console.log('right=' + right + " '" + c + "'  duplicate inside window (at " + old +
+                  ') -> left jumps to ' + left);
+    } else if (lastSeen.has(c)) {
+      console.log('right=' + right + " '" + c + "'  seen at " + lastSeen.get(c) +
+                  ', but that is left of the window -- ignore it');
+    } else {
+      console.log('right=' + right + " '" + c + "'  new character");
+    }
+
+    lastSeen.set(c, right);
+
+    const len = right - left + 1;
+    if (len &gt; best) best = len;
+
+    console.log('           window "' + s.slice(left, right + 1) + '"  len=' + len + '  best=' + best);
+  }
+
+  console.log('');
+  return best;
+}
+
+console.log('ANSWER:', longestExplained('abcabcbb'));
+console.log('=======================================');
+console.log('ANSWER:', longestExplained('abba'));
+console.log('=======================================');
+console.log('ANSWER:', longestExplained('dvdf'));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <p>No <code>Set</code>, no <code>Map</code>, no <code>slice</code>. A plain object as the lookup
+  table, and <code>charAt</code>-style indexing.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; plain object, jumping left</span></div>
+<pre><code>function longestManual(s) {
+  const lastSeen = {};    // character -> the last index it appeared at
+  let left = 0;
+  let best = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    const c = s[right];
+
+    // has this character been seen, AND is that copy still in the window?
+    if (Object.prototype.hasOwnProperty.call(lastSeen, c) &amp;&amp; lastSeen[c] &gt;= left) {
+      left = lastSeen[c] + 1;      // jump past the old copy
+    }
+
+    lastSeen[c] = right;           // record where this copy is
+
+    const length = right - left + 1;
+    if (length &gt; best) {
+      best = length;
+    }
+  }
+
+  return best;
+}
+
+console.log(longestManual('abcabcbb'));   // 3
+console.log(longestManual('bbbbb'));      // 1
+console.log(longestManual('pwwkew'));     // 3
+console.log(longestManual('dvdf'));       // 3
+console.log(longestManual('abba'));       // 2
+console.log(longestManual(''));           // 0
+console.log(longestManual('au'));         // 2</code></pre>
+  </div>
+
+  <h3>The other shape: shrink one step at a time</h3>
+
+  <p>There is a second way to write every sliding window, and it is worth knowing both. Instead of
+  <em>jumping</em> <code>left</code> straight to its new home, you can <em>walk</em> it forward one
+  character at a time until the window is valid again. It needs a count of what is in the window
+  rather than last-seen indexes.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; shrink with a while loop</span></div>
+<pre><code>function longestShrink(s) {
+  const inWindow = {};   // character -> is it currently inside the window?
+  let left = 0;
+  let best = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    const c = s[right];
+
+    // while the new character is already in the window, drop characters
+    // from the left until it is not
+    while (inWindow[c] === true) {
+      inWindow[s[left]] = false;
+      left++;
+    }
+
+    inWindow[c] = true;
+
+    const length = right - left + 1;
+    if (length &gt; best) best = length;
+  }
+
+  return best;
+}
+
+console.log(longestShrink('abcabcbb'));   // 3
+console.log(longestShrink('pwwkew'));     // 3
+console.log(longestShrink('dvdf'));       // 3
+console.log(longestShrink('abba'));       // 2
+
+// "A while loop inside a for loop -- surely that is O(n squared)?"
+// No. The while loop can only ever move `left` forward, and `left`
+// can only travel the length of the string once in total across
+// the WHOLE run. Total work is at most 2n. This is the single most
+// important thing to understand about sliding windows.</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">Which shape should you use?</span>
+    <p>The <strong>jump</strong> version (1a) is shorter and is what most people write for this exact
+    problem. The <strong>shrink</strong> version (1b) generalises much better: the moment the rule
+    becomes &ldquo;at most K distinct characters&rdquo; or &ldquo;sum at most X&rdquo;, jumping is no longer
+    possible and you must walk. Learn 1b properly &mdash; it is the shape you will reuse.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2a &mdash; Map</span></div>
+<pre><code>function lengthOfLongestSubstring(s) {
+  const lastSeen = new Map();
+  let left = 0;
+  let best = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    const c = s[right];
+
+    if (lastSeen.has(c) &amp;&amp; lastSeen.get(c) &gt;= left) {
+      left = lastSeen.get(c) + 1;
+    }
+
+    lastSeen.set(c, right);
+    best = Math.max(best, right - left + 1);
+  }
+
+  return best;
+}
+
+console.log(lengthOfLongestSubstring('abcabcbb'));   // 3
+console.log(lengthOfLongestSubstring('bbbbb'));      // 1
+console.log(lengthOfLongestSubstring('pwwkew'));     // 3
+console.log(lengthOfLongestSubstring('dvdf'));       // 3
+console.log(lengthOfLongestSubstring(' '));          // 1  a space is a character
+console.log(lengthOfLongestSubstring('!@#!'));       // 3</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2b &mdash; Set, shrink shape</span></div>
+<pre><code>function lengthOfLongestSet(s) {
+  const window = new Set();
+  let left = 0, best = 0;
+
+  for (const c of s) {              // for...of walks the characters
+    while (window.has(c)) {
+      window.delete(s[left]);
+      left++;
+    }
+    window.add(c);
+    best = Math.max(best, window.size);   // the Set's own size IS the length
+  }
+
+  return best;
+}
+
+console.log(lengthOfLongestSet('abcabcbb'));   // 3
+console.log(lengthOfLongestSet('pwwkew'));     // 3
+console.log(lengthOfLongestSet('abba'));       // 2
+
+// Neat detail: because the Set contains exactly the window's
+// characters and they are all distinct, `window.size` is the window
+// length. No arithmetic, no off-by-one to get wrong.</code></pre>
+  </div>
+
+  <h3>Returning the substring, not just its length</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">variation &mdash; return the actual text</span></div>
+<pre><code>function longestSubstring(s) {
+  const lastSeen = new Map();
+  let left = 0, best = 0, bestStart = 0;
+
+  for (let right = 0; right &lt; s.length; right++) {
+    const c = s[right];
+    if (lastSeen.has(c) &amp;&amp; lastSeen.get(c) &gt;= left) left = lastSeen.get(c) + 1;
+    lastSeen.set(c, right);
+
+    if (right - left + 1 &gt; best) {
+      best = right - left + 1;
+      bestStart = left;             // freeze where the winner starts
+    }
+  }
+
+  return s.slice(bestStart, bestStart + best);
+}
+
+console.log(longestSubstring('abcabcbb'));   // "abc"
+console.log(longestSubstring('pwwkew'));     // "wke"
+console.log(longestSubstring('dvdf'));       // "vdf"
+console.log(longestSubstring('abba'));       // "ab"</code></pre>
+  </div>
+
+  <p>Same trick as in Kadane&rsquo;s: record the winning start only at the moment a new best is
+  confirmed, never on every move of <code>left</code>.</p>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>In words</th></tr></thead>
+      <tbody>
+        <tr><td>Brute force</td><td class="mono">O(n&sup2;)</td><td class="mono">O(min(n, k))</td><td>Every start, walked forward until it breaks.</td></tr>
+        <tr><td><strong>Sliding window</strong></td><td class="mono">O(n)</td><td class="mono">O(min(n, k))</td><td>Each pointer crosses the string once.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Why O(n) despite the nested loop.</strong> This is the sentence to have ready. The inner
+  <code>while</code> does not restart for each <code>right</code> &mdash; it continues from wherever
+  <code>left</code> already was. Across the entire run, <code>left</code> advances at most n times
+  and <code>right</code> advances exactly n times. Total 2n moves, so O(n). Counting the loops
+  visually and saying &ldquo;two loops means n&sup2;&rdquo; is the mistake this problem is designed to
+  expose.</p>
+
+  <p><strong>Space O(min(n, k))</strong>, where k is the alphabet size. The map can never hold more
+  distinct characters than exist in the string, and never more than the alphabet allows. For plain
+  ASCII that is at most 128 entries no matter how long the input is &mdash; effectively O(1).</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;I keep a window of distinct characters and a map from character to its last index.
+    The right pointer always advances; when it reads a character whose last position is inside the
+    window, I move the left pointer past that position. Both pointers only move forward, so it is
+    O(n) time and O(min(n, alphabet)) space. The subtlety is checking that the previous occurrence is
+    still inside the window &mdash; otherwise the left pointer can move backwards on inputs like
+    <code>abba</code>.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Letting <code>left</code> move backwards</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; missing the <code>&gt;= left</code> guard</span></div>
+<pre><code>function broken(s) {
+  const lastSeen = new Map();
+  let left = 0, best = 0;
+  for (let right = 0; right &lt; s.length; right++) {
+    const c = s[right];
+    if (lastSeen.has(c)) left = lastSeen.get(c) + 1;   // no window check -- bug
+    lastSeen.set(c, right);
+    best = Math.max(best, right - left + 1);
+  }
+  return best;
+}
+
+console.log(broken('abcabcbb'));   // 3   fine
+console.log(broken('pwwkew'));     // 3   fine
+console.log(broken('abba'));       // 3   WRONG, should be 2
+console.log(broken('tmmzuxt'));    // 6   WRONG, should be 5
+
+// On "abba": at right=3 we see 'a', last at index 0, so left jumps
+// BACK from 2 to 1 -- silently re-admitting the 'b' we had removed.
+// The window becomes "bba", which contains a duplicate.</code></pre>
+  </div>
+
+  <h3>2. Resetting the window on a duplicate</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; starts over instead of shrinking</span></div>
+<pre><code>function broken(s) {
+  let best = 0, current = 0;
+  const seen = new Set();
+  for (const c of s) {
+    if (seen.has(c)) {
+      seen.clear();       // throwing the whole window away -- bug
+      current = 0;
+    }
+    seen.add(c);
+    current++;
+    best = Math.max(best, current);
+  }
+  return best;
+}
+
+console.log(broken('abcabcbb'));   // 3   right, but only by luck
+console.log(broken('dvdf'));       // 2   WRONG, should be 3
+
+// Clearing everything discards characters that were still valid.
+// On "dvdf", the repeated 'd' at index 2 throws away the 'v' as well
+// -- but 'v' was never a duplicate. The answer "vdf" is now
+// unreachable because we deleted part of it.
+// A duplicate does not invalidate the whole window -- only the
+// part up to and including the earlier copy.</code></pre>
+  </div>
+
+  <h3>3. The <code>+ 1</code> in the length</h3>
+
+  <p><code>right - left</code> is the <em>gap</em> between the pointers; <code>right - left + 1</code> is
+  the <em>count</em> of characters. If your answers are consistently one too small, this is why.
+  A quick check: when <code>left === right</code> the window holds exactly one character, and
+  <code>right - left + 1</code> gives 1 while <code>right - left</code> gives 0.</p>
+
+  <h3>4. Assuming lowercase letters only</h3>
+
+  <p>The input can contain spaces, digits, punctuation, uppercase. <code>" "</code> answers 1.
+  A fixed-size array of 26 counters breaks on all of these &mdash; use a map, or size the array for
+  the full character set if you must use one.</p>
+
+  <h3>5. Non-ASCII characters and <code>s[i]</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">worth knowing</span></div>
+<pre><code>const emoji = 'ab😀c';
+
+console.log('length via .length :', emoji.length);        // 5, not 4
+console.log('emoji[2] :', JSON.stringify(emoji[2]));      // half of the emoji
+console.log('spread   :', [...emoji]);                    // ['a','b','😀','c']
+
+// JavaScript strings are UTF-16 code units. Characters outside the
+// basic range (emoji, some scripts) take TWO slots, so s[i] can hand
+// you half a character.
+//
+// For interview inputs this never comes up. For real production code
+// that touches user text, iterate with [...s] or for...of, both of
+// which walk whole characters.
+console.log('safe length:', [...emoji].length);           // 4</code></pre>
+  </div>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write version 1b (the shrink shape) from memory.</strong> Then explain out loud why a
+    <code>while</code> inside a <code>for</code> is still O(n). If you can do that, you own the
+    pattern.</li>
+    <li><strong>Longest substring with at most K distinct characters.</strong> The window rule becomes
+    &ldquo;shrink while the map has more than K keys&rdquo;. You need counts now, not just presence,
+    so you can tell when a character has fully left the window.</li>
+    <li><strong>Longest substring with at most two distinct characters.</strong> The same problem with
+    K fixed at 2. Do this one first if the general version feels heavy.</li>
+    <li><strong>Minimum window substring.</strong> The hard sibling: find the shortest window of
+    <code>s</code> that contains every character of <code>t</code>. Same two pointers, opposite goal
+    &mdash; grow until valid, then shrink while still valid.</li>
+    <li><strong>Longest repeating character replacement.</strong> You may change up to K characters.
+    It is in this collection under sliding window &mdash; try it before reading it.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p>The <strong>sliding window</strong> applies whenever a problem asks for the best
+    <em>contiguous</em> stretch that satisfies some rule, and the rule gets <em>worse</em> as the
+    window grows. Grow on the right unconditionally; shrink on the left only while the rule is
+    broken. Whenever you catch yourself writing a nested loop over substrings, ask whether the
+    window from the previous step could have been repaired instead of rebuilt.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="../arrays/05-rotate-array.html">&larr; Rotate Array</a>
+  <a href="02-group-anagrams.html">Next: Group Anagrams &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

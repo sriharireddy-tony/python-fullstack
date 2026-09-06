@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Best Time to Buy and Sell Stock</title>
+<meta name="description" content="One pass, two variables. The stock profit problem taught from the nested-loop answer to the running-minimum trick.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Arrays &middot; Problem 02</p>
+  <h1>Best Time to Buy and Sell Stock</h1>
+  <p class="standfirst">Two variables and one loop. This problem teaches the habit that separates
+  slow code from fast code: instead of searching backwards for something you need,
+  <em>carry it forward with you</em>.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>You are given the price of one share on each day, in order. You may <strong>buy once</strong> and
+  <strong>sell once</strong>, and you must buy before you sell. Return the largest profit you could
+  have made. If every possible trade loses money, return <code>0</code> &mdash; you simply do not trade.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Prices</th><th>Answer</th><th>Because</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[7, 1, 5, 3, 6, 4]</td><td class="mono">5</td><td>buy on day 1 at 1, sell on day 4 at 6</td></tr>
+        <tr><td class="mono">[7, 6, 4, 3, 1]</td><td class="mono">0</td><td>prices only fall &mdash; never buy</td></tr>
+        <tr><td class="mono">[2, 4, 1]</td><td class="mono">2</td><td>buy at 2, sell at 4. The 1 at the end is too late to help.</td></tr>
+        <tr><td class="mono">[3, 3, 3]</td><td class="mono">0</td><td>no movement, no profit</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The rule everyone breaks</span>
+    <p><strong>Buy must come before sell.</strong> So this is <em>not</em> &ldquo;maximum minus minimum&rdquo;.
+    In <code>[2, 4, 1]</code> the maximum is 4 and the minimum is 1, giving 3 &mdash; but the 1 happens
+    on the last day, after the 4. You cannot travel back in time to sell. The correct answer is 2.
+    Any solution that reaches for <code>Math.max(...prices) - Math.min(...prices)</code> is wrong,
+    and it is wrong on exactly this kind of input.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <p>What would you do by hand? Probably: <em>&ldquo;pick a day to buy, then look at every later day,
+  work out the profit, and keep the best one I have seen.&rdquo;</em></p>
+
+  <p>That is two nested loops again, and the <code>j = i + 1</code> is now carrying the actual business
+  rule &mdash; you can only sell on a day that comes after the day you bought.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; brute force</span></div>
+<pre><code>function maxProfitBrute(prices) {
+  let best = 0;                     // 0, not -Infinity: doing nothing is allowed
+
+  for (let buy = 0; buy &lt; prices.length; buy++) {
+    for (let sell = buy + 1; sell &lt; prices.length; sell++) {
+
+      const profit = prices[sell] - prices[buy];
+
+      if (profit &gt; best) {
+        best = profit;
+      }
+    }
+  }
+
+  return best;
+}
+
+console.log(maxProfitBrute([7, 1, 5, 3, 6, 4]));   // 5
+console.log(maxProfitBrute([7, 6, 4, 3, 1]));      // 0
+console.log(maxProfitBrute([2, 4, 1]));            // 2
+console.log(maxProfitBrute([]));                   // 0</code></pre>
+  </div>
+
+  <p>Notice <code>best</code> starts at <code>0</code>, not at <code>-Infinity</code>. That single choice
+  is what encodes &ldquo;you are allowed to not trade at all&rdquo;. Start it at <code>-Infinity</code> and
+  <code>[7, 6, 4, 3, 1]</code> returns <code>-1</code>, which is a loss you were never forced to take.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>Same shape as Two Sum: <code>n &times; (n &minus; 1) / 2</code> pairs, so O(n&sup2;). With one year of
+  daily prices (250 days) that is about 31,000 subtractions &mdash; nothing. With five years of
+  minute-by-minute data (about 500,000 points) it is 125&nbsp;billion, and your process dies.</p>
+
+  <p>Press Run. This is 30,000 days of prices where the best trade is deliberately buried:</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// A sawtooth price series, then one big spike near the end,
+// so neither solution can get lucky and finish early.
+const N = 30000;
+const prices = [];
+for (let i = 0; i &lt; N; i++) prices.push(500 + (i % 50));
+prices[10] = 1;          // a very cheap day, early
+prices[N - 5] = 9999;    // a very expensive day, late
+
+function brute(p) {
+  let best = 0;
+  for (let i = 0; i &lt; p.length; i++)
+    for (let j = i + 1; j &lt; p.length; j++)
+      if (p[j] - p[i] &gt; best) best = p[j] - p[i];
+  return best;
+}
+
+function onePass(p) {
+  let cheapest = Infinity, best = 0;
+  for (let i = 0; i &lt; p.length; i++) {
+    if (p[i] &lt; cheapest) cheapest = p[i];
+    else if (p[i] - cheapest &gt; best) best = p[i] - cheapest;
+  }
+  return best;
+}
+
+let t = performance.now();
+const a = brute(prices);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const b = onePass(prices);
+const fastMs = performance.now() - t;
+
+console.log('brute force :', a, 'in', bruteMs.toFixed(1) + ' ms');
+console.log('one pass    :', b, 'in', fastMs.toFixed(1) + ' ms');
+console.log('same answer:', a === b);</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; and where it comes from</h2>
+
+  <p>Ask the Step&nbsp;4 question again: <strong>what am I doing over and over?</strong></p>
+
+  <p>Stand on day 4, where the price is 6. The brute force is asking &ldquo;what if I had bought on
+  day 0? day 1? day 2? day 3?&rdquo; &mdash; four subtractions. But think about what I actually want.
+  I am selling at 6. Out of all the days before now, I do not care about most of them. I only care
+  about <strong>the cheapest one</strong>, because that is the buy that makes today&rsquo;s sale most
+  profitable.</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>To decide today&rsquo;s best sale, the only thing I need to know about the entire past is
+    <strong>the smallest price so far</strong>. That is one number. And I can keep it up to date as I
+    walk forward, for free.</p>
+  </div>
+
+  <p>So the algorithm becomes a walk from left to right holding two facts:</p>
+
+  <ul>
+    <li><code>cheapest</code> &mdash; the lowest price seen up to and including today.</li>
+    <li><code>best</code> &mdash; the biggest profit found so far.</li>
+  </ul>
+
+  <p>And on each day you ask exactly two questions:</p>
+
+  <ol>
+    <li><em>Is today cheaper than anything I have seen?</em> Then today is my new best buying day.</li>
+    <li><em>Otherwise, if I sold today at the cheapest price I have seen, would that beat my best?</em>
+    Then record it.</li>
+  </ol>
+
+  <p>The reason this is airtight on the buy-before-sell rule: <code>cheapest</code> can only ever
+  contain a price from today or earlier, because we have not looked at tomorrow yet. The order of
+  the loop enforces the business rule for us. That is worth pausing on &mdash; it is why the
+  &ldquo;max minus min&rdquo; shortcut fails and this does not.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>prices = [7, 1, 5, 3, 6, 4]</code>. Cover the code and follow along.</p>
+
+  <div class="trace">
+<pre>start:  cheapest = Infinity    best = 0
+
+day 0   price 7
+        7 &lt; Infinity?  yes  ->  cheapest = 7
+        cheapest = 7    best = 0
+
+day 1   price 1
+        1 &lt; 7?  yes  ->  cheapest = 1
+        cheapest = 1    best = 0
+
+day 2   price 5
+        5 &lt; 1?  no
+        would-be profit = 5 - 1 = 4   >  best 0  ->  best = 4
+        cheapest = 1    best = 4
+
+day 3   price 3
+        3 &lt; 1?  no
+        would-be profit = 3 - 1 = 2   >  best 4?  no, keep 4
+        cheapest = 1    best = 4
+
+day 4   price 6
+        6 &lt; 1?  no
+        would-be profit = 6 - 1 = 5   >  best 4  ->  best = 5
+        cheapest = 1    best = 5
+
+day 5   price 4
+        4 &lt; 1?  no
+        would-be profit = 4 - 1 = 3   >  best 5?  no
+        cheapest = 1    best = 5
+
+answer: 5
+</pre>
+  </div>
+
+  <p>Now the losing case, <code>prices = [7, 6, 4, 3, 1]</code>:</p>
+
+  <div class="trace">
+<pre>start:  cheapest = Infinity    best = 0
+
+day 0   price 7    7 &lt; Infinity  ->  cheapest = 7
+day 1   price 6    6 &lt; 7         ->  cheapest = 6
+day 2   price 4    4 &lt; 6         ->  cheapest = 4
+day 3   price 3    3 &lt; 4         ->  cheapest = 3
+day 4   price 1    1 &lt; 3         ->  cheapest = 1
+
+best was never touched.   answer: 0
+</pre>
+  </div>
+
+  <p>Every single day took the first branch, so the profit branch never ran and <code>best</code>
+  stayed at its starting <code>0</code>. The &ldquo;do not trade&rdquo; rule falls out of the code for
+  free &mdash; there is no special case for it anywhere.</p>
+
+  <p>And the trap case, <code>prices = [2, 4, 1]</code>:</p>
+
+  <div class="trace">
+<pre>day 0   price 2    cheapest = 2                       best = 0
+day 1   price 4    4 - 2 = 2  >  0                    best = 2
+day 2   price 1    1 &lt; 2  ->  cheapest = 1            best = 2
+
+answer: 2       (not 3 -- the cheap day came too late to sell into the 4)
+</pre>
+  </div>
+
+  <p>Run the narrating version and check it against those three traces:</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function maxProfitExplained(prices) {
+  let cheapest = Infinity;
+  let best = 0;
+
+  console.log('prices =', prices);
+  console.log('');
+
+  for (let day = 0; day &lt; prices.length; day++) {
+    const price = prices[day];
+
+    if (price &lt; cheapest) {
+      cheapest = price;
+      console.log('day ' + day + '  price ' + price +
+                  '  -> new cheapest buy day. cheapest=' + cheapest + ' best=' + best);
+    } else {
+      const profit = price - cheapest;
+      if (profit &gt; best) {
+        best = profit;
+        console.log('day ' + day + '  price ' + price +
+                    '  -> sell here for ' + profit + '. NEW BEST. cheapest=' + cheapest + ' best=' + best);
+      } else {
+        console.log('day ' + day + '  price ' + price +
+                    '  -> would only make ' + profit + ', keep ' + best);
+      }
+    }
+  }
+
+  console.log('');
+  return best;
+}
+
+console.log('ANSWER:', maxProfitExplained([7, 1, 5, 3, 6, 4]));
+console.log('==============================');
+console.log('ANSWER:', maxProfitExplained([2, 4, 1]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <p>Loops, comparisons and two variables. Not a single method call &mdash; and there is nothing
+  missing, because there is nothing a built-in could add here.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; loops only</span></div>
+<pre><code>function maxProfitManual(prices) {
+  // guard: fewer than 2 days means no trade is possible at all
+  if (prices.length &lt; 2) return 0;
+
+  let cheapest = prices[0];   // the best buy price seen so far
+  let best = 0;               // the best profit found so far
+
+  // start at day 1 -- you cannot sell on the day you first look at
+  for (let i = 1; i &lt; prices.length; i++) {
+    const price = prices[i];
+
+    if (price &lt; cheapest) {
+      cheapest = price;                 // better buying opportunity
+    } else {
+      const profit = price - cheapest;  // what selling today would earn
+      if (profit &gt; best) {
+        best = profit;
+      }
+    }
+  }
+
+  return best;
+}
+
+console.log(maxProfitManual([7, 1, 5, 3, 6, 4]));   // 5
+console.log(maxProfitManual([7, 6, 4, 3, 1]));      // 0
+console.log(maxProfitManual([2, 4, 1]));            // 2
+console.log(maxProfitManual([3, 3, 3]));            // 0
+console.log(maxProfitManual([5]));                  // 0
+console.log(maxProfitManual([]));                   // 0</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">Why <code>else</code> and not two separate <code>if</code>s?</span>
+    <p>If today is the cheapest price so far, then <code>price - cheapest</code> is <code>0</code>
+    &mdash; you would be buying and selling on the same day. That can never beat <code>best</code>
+    (which starts at 0), so checking it is harmless but pointless. The <code>else</code> skips it.
+    Using two separate <code>if</code>s gives the same answer and is not a bug; the <code>else</code> is
+    just honest about the fact that only one of the two things can be true.</p>
+  </div>
+
+  <h3>Also return <em>when</em> to buy and sell</h3>
+
+  <p>Interviewers love this follow-up, and it is a small change: track the day alongside the price.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">variation &mdash; report the actual days</span></div>
+<pre><code>function bestTrade(prices) {
+  if (prices.length &lt; 2) return { profit: 0, buy: -1, sell: -1 };
+
+  let cheapest = prices[0];
+  let cheapestDay = 0;
+
+  let best = 0;
+  let buyDay = -1;
+  let sellDay = -1;
+
+  for (let i = 1; i &lt; prices.length; i++) {
+    if (prices[i] &lt; cheapest) {
+      cheapest = prices[i];
+      cheapestDay = i;              // remember WHERE the cheap day was
+    } else if (prices[i] - cheapest &gt; best) {
+      best = prices[i] - cheapest;
+      buyDay = cheapestDay;         // ...so we can report it now
+      sellDay = i;
+    }
+  }
+
+  return { profit: best, buy: buyDay, sell: sellDay };
+}
+
+console.log(bestTrade([7, 1, 5, 3, 6, 4]));   // { profit: 5, buy: 1, sell: 4 }
+console.log(bestTrade([7, 6, 4, 3, 1]));      // { profit: 0, buy: -1, sell: -1 }</code></pre>
+  </div>
+
+  <p>The subtle part: <code>buyDay</code> is only written inside the <em>profit</em> branch, not the
+  cheap-day branch. If you updated it every time you found a new cheapest day, a later cheap day
+  that never got sold into would overwrite the buy day of your actual best trade.</p>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <p>Honest answer first: <strong>this problem barely benefits from built-ins.</strong> The loop version
+  is already the idiomatic one. But there are two built-in shapes worth knowing, and one worth
+  avoiding.</p>
+
+  <h3>Using <code>Math.min</code> and <code>Math.max</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2a &mdash; Math.min / Math.max</span></div>
+<pre><code>function maxProfit(prices) {
+  let cheapest = Infinity;
+  let best = 0;
+
+  for (const price of prices) {
+    cheapest = Math.min(cheapest, price);        // update the running minimum
+    best     = Math.max(best, price - cheapest); // update the running best
+  }
+
+  return best;
+}
+
+console.log(maxProfit([7, 1, 5, 3, 6, 4]));   // 5
+console.log(maxProfit([7, 6, 4, 3, 1]));      // 0
+console.log(maxProfit([2, 4, 1]));            // 2
+console.log(maxProfit([]));                   // 0  (loop never runs)</code></pre>
+  </div>
+
+  <p>Six lines, no branches, no guard needed for an empty array. Note the order: <code>cheapest</code>
+  is updated <em>before</em> the profit line, so on a brand-new lowest day the profit works out as
+  <code>price - price = 0</code>, which <code>Math.max</code> harmlessly ignores. This is the version
+  to write in an interview.</p>
+
+  <h3>Using <code>reduce</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 2b &mdash; reduce, for the pattern</span></div>
+<pre><code>function maxProfitReduce(prices) {
+  const result = prices.reduce(
+    (state, price) => {
+      const cheapest = Math.min(state.cheapest, price);
+      return {
+        cheapest,
+        best: Math.max(state.best, price - cheapest)
+      };
+    },
+    { cheapest: Infinity, best: 0 }   // the starting state
+  );
+
+  return result.best;
+}
+
+console.log(maxProfitReduce([7, 1, 5, 3, 6, 4]));   // 5
+console.log(maxProfitReduce([2, 4, 1]));            // 2
+
+// Worth knowing, but be honest about the trade:
+// it allocates a fresh object on every single element, so it is
+// slower and harder to read than the plain loop. Know the pattern;
+// reach for the loop.</code></pre>
+  </div>
+
+  <h3>The built-in version that is wrong</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; max minus min</span></div>
+<pre><code>function wrong(prices) {
+  if (prices.length === 0) return 0;
+  return Math.max(0, Math.max(...prices) - Math.min(...prices));
+}
+
+console.log(wrong([7, 1, 5, 3, 6, 4]));   // 6   WRONG, should be 5
+console.log(wrong([7, 6, 4, 3, 1]));      // 6   WRONG, should be 0
+console.log(wrong([2, 4, 1]));            // 3   WRONG, should be 2
+
+// Wrong on all three. Take the first: the highest price 7 is on day 0
+// and the lowest price 1 is on day 1, so it "sells" a day before it
+// "buys". It throws away the one thing that matters: the order of the days.
+// Also, Math.max(...prices) spreads the whole array into function
+// arguments -- with ~100k+ elements that throws RangeError:
+// Maximum call stack size exceeded.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>In words</th></tr></thead>
+      <tbody>
+        <tr><td>Brute force</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td><td>Every buy day against every later sell day.</td></tr>
+        <tr><td><strong>One pass</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td><td>Each day looked at once; two variables kept, whatever the input size.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>This one is <strong>better than Two Sum</strong> in a way worth noticing. Two Sum bought its
+  speed with memory &mdash; O(n) time but O(n) space. Here you get O(n) time at <strong>O(1)
+  space</strong>: two numbers, forever, whether the array holds ten prices or ten million.</p>
+
+  <p>The reason is that the past compresses. In Two Sum you might need any earlier value, so you had
+  to keep them all. Here every earlier day collapses into a single fact &mdash; the minimum &mdash;
+  and the rest can be forgotten. Whenever you can find that one summarising fact, you get the free
+  version of the trade.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Brute force is O(n&sup2;). But to evaluate selling on day&nbsp;i, the only thing I need
+    from the past is the minimum price before i &mdash; so I keep a running minimum and a running
+    best profit as I sweep left to right. O(n) time, O(1) space. The left-to-right order is what
+    guarantees I never sell before I buy.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Starting <code>best</code> at <code>-Infinity</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken</span></div>
+<pre><code>function broken(prices) {
+  let cheapest = Infinity, best = -Infinity;   // bug is here
+  for (const p of prices) {
+    cheapest = Math.min(cheapest, p);
+    best = Math.max(best, p - cheapest);
+  }
+  return best;
+}
+
+console.log(broken([7, 6, 4, 3, 1]));   // 0 ... which happens to be right
+console.log(broken([5]));               // 0 ... also right
+console.log(broken([]));                // -Infinity  &lt;- crashes the caller
+
+// The real damage shows on an empty array. Start at 0: it means
+// "the profit from not trading", which is always an option.</code></pre>
+  </div>
+
+  <h3>2. Updating the minimum after using it</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; wrong order</span></div>
+<pre><code>function broken(prices) {
+  let cheapest = Infinity, best = 0;
+  for (const p of prices) {
+    best = Math.max(best, p - cheapest);   // used BEFORE updating
+    cheapest = Math.min(cheapest, p);
+  }
+  return best;
+}
+
+console.log(broken([7, 1, 5, 3, 6, 4]));   // 5   still right here
+console.log(broken([2, 4, 1]));            // 2   still right here
+
+// On day 0, cheapest is still Infinity, so p - cheapest is -Infinity.
+// Math.max ignores it, so you get away with it -- this time.
+// It is fragile reasoning though. Update the running minimum FIRST,
+// then use it. The invariant should be true when you read it.</code></pre>
+  </div>
+
+  <h3>3. Allowing buy and sell on the same day</h3>
+
+  <p>If your inner loop starts at <code>sell = buy</code> instead of <code>buy + 1</code>, you allow a
+  zero-profit same-day trade. Harmless for the answer (0 never beats 0), but it shows you did not
+  think about the constraint &mdash; and in the &ldquo;report the days&rdquo; variation it produces
+  nonsense like <code>{ buy: 3, sell: 3 }</code>.</p>
+
+  <h3>4. Not handling short arrays</h3>
+
+  <p><code>[]</code> and <code>[5]</code> both have to return <code>0</code>. The <code>Math.min</code>
+  version handles them without a guard because the loop simply never finds a second day; the manual
+  version needs the explicit <code>if (prices.length &lt; 2) return 0;</code>. Whichever you write, say
+  out loud which inputs it covers.</p>
+
+  <h3>5. Confusing this with the &ldquo;buy and sell many times&rdquo; version</h3>
+
+  <p>They are different problems with very different answers, and interviewers ask the second one
+  immediately after the first. It is in the next section.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">The follow-up</span>
+  <h2>Part II &mdash; unlimited transactions</h2>
+
+  <p>Same prices, but now you may buy and sell as many times as you like &mdash; as long as you sell
+  before you buy again (no holding two shares at once). What is the maximum profit?</p>
+
+  <p>People expect this to be much harder. It is dramatically easier, and the reason is a genuinely
+  lovely bit of reasoning.</p>
+
+  <p>Take <code>[1, 5, 3, 6]</code>. Buying at 1 and selling at 6 would earn 5 &mdash; but you are not
+  restricted to one trade any more. Buy at 1, sell at 5 (+4). Buy at 3, sell at 6 (+3). Total 7.</p>
+
+  <p>Now look at where that 7 comes from. The price went 1&rarr;5 (+4), then 5&rarr;3 (&minus;2), then
+  3&rarr;6 (+3). The profit is <strong>every upward step, added together</strong>, and the downward
+  steps are simply the days you were not holding anything. So:</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>With unlimited trades, the answer is the sum of every day-to-day <em>increase</em>.
+    You do not need to identify peaks and valleys at all &mdash; walking every rise
+    is exactly the same total as jumping from each valley to its next peak.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Part II &mdash; both versions</span></div>
+<pre><code>// Version 1 -- no built-ins
+function maxProfitManyManual(prices) {
+  let total = 0;
+  for (let i = 1; i &lt; prices.length; i++) {
+    if (prices[i] &gt; prices[i - 1]) {
+      total += prices[i] - prices[i - 1];   // pocket every rise
+    }
+  }
+  return total;
+}
+
+// Version 2 -- with reduce
+function maxProfitMany(prices) {
+  return prices.reduce(
+    (sum, price, i) =&gt; i === 0 ? 0 : sum + Math.max(0, price - prices[i - 1]),
+    0
+  );
+}
+
+console.log(maxProfitManyManual([7, 1, 5, 3, 6, 4]));  // 7   (4 + 3)
+console.log(maxProfitMany([7, 1, 5, 3, 6, 4]));        // 7
+console.log(maxProfitManyManual([1, 2, 3, 4, 5]));     // 4   one long climb
+console.log(maxProfitManyManual([7, 6, 4, 3, 1]));     // 0   nothing ever rises</code></pre>
+  </div>
+
+  <p>Look at <code>[1, 2, 3, 4, 5]</code>. Adding every rise gives 1+1+1+1 = 4, which is exactly the
+  same as one trade from 1 to 5. Buying and selling on consecutive days costs nothing in this
+  problem, so the two strategies are worth the same &mdash; that is the proof that summing the rises
+  is not just a hack.</p>
+
+  <p>Both are O(n) time and O(1) space. The Part&nbsp;I answer is always less than or equal to the
+  Part&nbsp;II answer, which is a handy self-check when you test them side by side.</p>
+</section>
+
+<!-- =================================================================== 11 -->
+<section class="step">
+  <span class="step-n">Practice</span>
+  <h2>Before you move on</h2>
+
+  <ol>
+    <li><strong>Rewrite the six-line <code>Math.min</code> version from memory.</strong> Then say out
+    loud why the order of those two lines matters.</li>
+    <li><strong>Maximum loss.</strong> Find the worst trade you could have made. One character changes.</li>
+    <li><strong>Part II with a fee.</strong> Each completed trade costs a flat 2. Now consecutive
+    small rises are <em>not</em> free, so summing every rise stops working. What has to change?</li>
+    <li><strong>At most two transactions.</strong> The genuinely hard version. Hint: for every split
+    point, the answer is the best single trade on the left plus the best single trade on the right
+    &mdash; and both of those can be precomputed in one pass each. You will meet this
+    prefix/suffix idea again.</li>
+    <li><strong>Cooldown.</strong> After you sell, you must skip one day before buying again.
+    Try to trace it by hand on <code>[1, 2, 3, 0, 2]</code> before writing any code.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p>The pattern here is called a <strong>running aggregate</strong>: sweep once, carrying the one
+    summary of the past that your decision actually depends on. Two Sum kept a whole notebook because
+    it needed any earlier value; this problem kept a single number because it only needed the
+    minimum. Before you write a nested loop, always ask: <em>what is the smallest thing I could carry
+    forward that would let me answer this in one pass?</em></p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="01-two-sum.html">&larr; Two Sum</a>
+  <a href="03-maximum-subarray-kadane.html">Next: Maximum Subarray &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

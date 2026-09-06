@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Merge Intervals</title>
+<meta name="description" content="Sort by start, then sweep once, extending or starting a new interval. The calendar problem every backend developer eventually writes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Arrays &middot; Problem 07</p>
+  <h1>Merge Intervals</h1>
+  <p class="standfirst">The most <em>practical</em> problem on this list. Calendar bookings, meeting
+  rooms, log windows, rate-limit buckets, video timelines &mdash; every one of them eventually needs
+  this exact function. And the whole thing turns on one setup move: <strong>sort by start time</strong>.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>You are given a list of intervals &mdash; pairs of <code>[start, end]</code>. Merge every group
+  that overlaps into one, and return the result.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Answer</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[[1,3],[2,6],[8,10],[15,18]]</td><td class="mono">[[1,6],[8,10],[15,18]]</td><td>[1,3] and [2,6] overlap</td></tr>
+        <tr><td class="mono">[[1,4],[4,5]]</td><td class="mono">[[1,5]]</td><td>touching at 4 counts as overlapping</td></tr>
+        <tr><td class="mono">[[1,4],[0,4]]</td><td class="mono">[[0,4]]</td><td>input is not sorted</td></tr>
+        <tr><td class="mono">[[1,4],[2,3]]</td><td class="mono">[[1,4]]</td><td>one interval swallows the other</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Picture it as a timeline. Two bookings overlap if one starts before the other ends:</p>
+
+  <div class="trace">
+<pre>       1     2     3     4     5     6  ...  8     9    10
+[1,3]  |===========|
+[2,6]        |=======================|
+[8,10]                                     |===========|
+
+merged:
+[1,6]  |=======================================|
+[8,10]                                     |===========|
+</pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Ask this before you write code</span>
+    <p>Does <code>[1,4]</code> and <code>[4,5]</code> count as overlapping? It depends whether the
+    interval is <em>closed</em> (includes its end) or <em>half-open</em> (excludes it). For meeting
+    rooms, a meeting ending at 4 and another starting at 4 do <strong>not</strong> conflict. For the
+    classic version of this problem, they <strong>do</strong> merge. The difference is a single
+    character: <code>&lt;=</code> versus <code>&lt;</code>. Ask, then write the version you were asked
+    for. This page uses the classic <code>&lt;=</code>.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <p>Without sorting, an overlapping pair could be anywhere. So you compare everything to everything,
+  merge a pair when you find one, and start over &mdash; because merging can create a <em>new</em>
+  overlap that did not exist before.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; brute force, repeat until stable</span></div>
+<pre><code>function mergeBrute(intervals) {
+  const list = intervals.map(iv =&gt; [iv[0], iv[1]]);   // copy
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+
+    outer:
+    for (let i = 0; i &lt; list.length; i++) {
+      for (let j = i + 1; j &lt; list.length; j++) {
+
+        // do intervals i and j touch or overlap?
+        if (list[i][0] &lt;= list[j][1] &amp;&amp; list[j][0] &lt;= list[i][1]) {
+          list[i] = [Math.min(list[i][0], list[j][0]),
+                     Math.max(list[i][1], list[j][1])];
+          list.splice(j, 1);        // remove the one we absorbed
+          changed = true;           // something merged -- go round again
+          break outer;
+        }
+      }
+    }
+  }
+
+  return list.sort((a, b) =&gt; a[0] - b[0]);
+}
+
+console.log(mergeBrute([[1,3],[2,6],[8,10],[15,18]]));   // [[1,6],[8,10],[15,18]]
+console.log(mergeBrute([[1,4],[4,5]]));                  // [[1,5]]
+console.log(mergeBrute([[1,4],[0,4]]));                  // [[0,4]]
+console.log(mergeBrute([[1,4],[2,3]]));                  // [[1,4]]</code></pre>
+  </div>
+
+  <p>The overlap test <code>a.start &lt;= b.end &amp;&amp; b.start &lt;= a.end</code> is worth memorising on
+  its own &mdash; it is the general &ldquo;do these two ranges touch?&rdquo; check and you will use it
+  outside this problem. Think of it as: <em>neither one finishes entirely before the other
+  begins.</em></p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>Each full scan is O(n&sup2;), and one merge can force another full scan, so the worst case is
+  <strong>O(n&sup3;)</strong>. Chain intervals like <code>[[1,2],[2,3],[3,4],[4,5]...]</code> and it
+  rescans after every single merge.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>// A long chain: each interval touches the next, so the brute force
+// merges one pair, restarts, merges one pair, restarts...
+const N = 900;
+const chain = [];
+for (let i = 0; i &lt; N; i++) chain.push([i, i + 1]);
+
+function brute(intervals) {
+  const list = intervals.map(iv =&gt; [iv[0], iv[1]]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    outer:
+    for (let i = 0; i &lt; list.length; i++)
+      for (let j = i + 1; j &lt; list.length; j++)
+        if (list[i][0] &lt;= list[j][1] &amp;&amp; list[j][0] &lt;= list[i][1]) {
+          list[i] = [Math.min(list[i][0], list[j][0]), Math.max(list[i][1], list[j][1])];
+          list.splice(j, 1);
+          changed = true;
+          break outer;
+        }
+  }
+  return list;
+}
+
+function sweep(intervals) {
+  const s = [...intervals].sort((a, b) =&gt; a[0] - b[0]);
+  const out = [];
+  for (const [start, end] of s) {
+    const last = out[out.length - 1];
+    if (last &amp;&amp; start &lt;= last[1]) last[1] = Math.max(last[1], end);
+    else out.push([start, end]);
+  }
+  return out;
+}
+
+let t = performance.now();
+const a = brute(chain);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const b = sweep(chain);
+const fastMs = performance.now() - t;
+
+console.log('brute  :', JSON.stringify(a), 'in', bruteMs.toFixed(1) + ' ms');
+console.log('sweep  :', JSON.stringify(b), 'in', fastMs.toFixed(2) + ' ms');
+console.log('speed-up:', Math.round(bruteMs / Math.max(fastMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; sort, then sweep once</h2>
+
+  <p>Everything hard about this problem comes from the intervals arriving in a random order. So fix
+  that first.</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Sort by <strong>start time</strong>. Now, walking left to right, an interval can only ever
+    overlap with <strong>the one you are currently building</strong> &mdash; never with anything
+    further back.</p>
+  </div>
+
+  <p>Why is that true? Because the list is sorted by start, so the next interval starts at or after
+  the current one. If it does not reach back far enough to touch the interval you are holding, it
+  certainly cannot touch anything older, which ended even earlier. Every comparison against the rest
+  of the list becomes unnecessary.</p>
+
+  <p>So the whole algorithm is:</p>
+
+  <ol>
+    <li>Sort by start.</li>
+    <li>Put the first interval in the output.</li>
+    <li>For each remaining interval: if it starts at or before the end of the last output interval,
+    <strong>extend</strong> that one. Otherwise, <strong>push</strong> a new one.</li>
+  </ol>
+
+  <p>Two branches. That is the entire solution.</p>
+
+  <div class="note warn">
+    <span class="t">The line that trips people up</span>
+    <p>When extending, the new end is <code>Math.max(last.end, current.end)</code>, <strong>not</strong>
+    <code>current.end</code>. Consider <code>[[1,10],[2,3]]</code>: the second interval sits entirely
+    inside the first. Blindly assigning <code>current.end</code> would shrink <code>[1,10]</code> to
+    <code>[1,3]</code> and throw away real coverage. Always take the larger end.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>[[1,3],[2,6],[8,10],[15,18]]</code> &mdash; already sorted by start, which is common enough
+  that you must not rely on it.</p>
+
+  <div class="trace">
+<pre>out = []
+
+[1,3]   out is empty  ->  push          out = [[1,3]]
+
+[2,6]   last is [1,3].  Does 2 <= 3?  YES  ->  extend
+        new end = max(3, 6) = 6                out = [[1,6]]
+
+[8,10]  last is [1,6].  Does 8 <= 6?  NO   ->  push
+                                               out = [[1,6],[8,10]]
+
+[15,18] last is [8,10]. Does 15 <= 10? NO  ->  push
+                                               out = [[1,6],[8,10],[15,18]]
+
+answer: [[1,6],[8,10],[15,18]]
+</pre>
+  </div>
+
+  <p>Now the one that catches the <code>Math.max</code> bug, <code>[[1,10],[2,3],[4,20]]</code>:</p>
+
+  <div class="trace">
+<pre>out = []
+
+[1,10]  push                              out = [[1,10]]
+
+[2,3]   2 <= 10?  YES -> extend
+        new end = max(10, 3) = 10         out = [[1,10]]
+        (nothing visibly changed -- correct, it was already covered)
+
+[4,20]  4 <= 10?  YES -> extend
+        new end = max(10, 20) = 20        out = [[1,20]]
+
+answer: [[1,20]]
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function mergeExplained(intervals) {
+  const s = [...intervals].sort((a, b) =&gt; a[0] - b[0]);
+  console.log('sorted by start:', JSON.stringify(s));
+  console.log('');
+
+  const out = [];
+
+  for (const [start, end] of s) {
+    const last = out[out.length - 1];
+
+    if (!last) {
+      out.push([start, end]);
+      console.log('[' + start + ',' + end + ']   first one -> push        out = ' + JSON.stringify(out));
+    } else if (start &lt;= last[1]) {
+      const before = last[1];
+      last[1] = Math.max(last[1], end);
+      console.log('[' + start + ',' + end + ']   ' + start + ' &lt;= ' + before +
+                  ' -> extend to ' + last[1] + '   out = ' + JSON.stringify(out));
+    } else {
+      out.push([start, end]);
+      console.log('[' + start + ',' + end + ']   ' + start + ' &gt; ' + last[1] +
+                  ' -> push new       out = ' + JSON.stringify(out));
+    }
+  }
+
+  console.log('');
+  return out;
+}
+
+console.log('ANSWER:', JSON.stringify(mergeExplained([[1,3],[2,6],[8,10],[15,18]])));
+console.log('==========================================');
+console.log('ANSWER:', JSON.stringify(mergeExplained([[1,10],[2,3],[4,20]])));
+console.log('==========================================');
+console.log('ANSWER:', JSON.stringify(mergeExplained([[5,7],[1,4],[6,9],[2,3]])));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <p>Hand-written sort, hand-written min and max, hand-written push.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; loops only</span></div>
+<pre><code>function mergeManual(intervals) {
+  if (intervals.length === 0) return [];
+
+  // copy so we never reorder the caller's array
+  const list = [];
+  for (let i = 0; i &lt; intervals.length; i++) {
+    list[i] = [intervals[i][0], intervals[i][1]];
+  }
+
+  // insertion sort by start time
+  for (let i = 1; i &lt; list.length; i++) {
+    const item = list[i];
+    let j = i - 1;
+    while (j &gt;= 0 &amp;&amp; list[j][0] &gt; item[0]) {
+      list[j + 1] = list[j];
+      j--;
+    }
+    list[j + 1] = item;
+  }
+
+  const out = [];
+  out[0] = list[0];
+
+  for (let i = 1; i &lt; list.length; i++) {
+    const current = list[i];
+    const last = out[out.length - 1];
+
+    if (current[0] &lt;= last[1]) {
+      // overlap: stretch the end, but only if it actually reaches further
+      if (current[1] &gt; last[1]) {
+        last[1] = current[1];
+      }
+    } else {
+      out[out.length] = current;      // no overlap: begin a new interval
+    }
+  }
+
+  return out;
+}
+
+console.log(JSON.stringify(mergeManual([[1,3],[2,6],[8,10],[15,18]])));  // [[1,6],[8,10],[15,18]]
+console.log(JSON.stringify(mergeManual([[1,4],[4,5]])));                 // [[1,5]]
+console.log(JSON.stringify(mergeManual([[1,4],[0,4]])));                 // [[0,4]]
+console.log(JSON.stringify(mergeManual([[1,10],[2,3]])));                // [[1,10]]
+console.log(JSON.stringify(mergeManual([[1,4]])));                       // [[1,4]]
+console.log(JSON.stringify(mergeManual([])));                            // []</code></pre>
+  </div>
+
+  <p>Notice <code>if (current[1] &gt; last[1]) last[1] = current[1];</code> &mdash; that is
+  <code>Math.max</code> written out by hand, and writing it this way makes the
+  &ldquo;interval fully inside another&rdquo; case impossible to overlook.</p>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the one to write in an interview</span></div>
+<pre><code>function merge(intervals) {
+  if (intervals.length === 0) return [];
+
+  const sorted = [...intervals].sort((a, b) =&gt; a[0] - b[0]);
+  const out = [sorted[0].slice()];      // slice: do not alias the input
+
+  for (let i = 1; i &lt; sorted.length; i++) {
+    const [start, end] = sorted[i];
+    const last = out[out.length - 1];
+
+    if (start &lt;= last[1]) {
+      last[1] = Math.max(last[1], end);   // overlap -> extend
+    } else {
+      out.push([start, end]);             // gap -> new interval
+    }
+  }
+
+  return out;
+}
+
+console.log(JSON.stringify(merge([[1,3],[2,6],[8,10],[15,18]])));  // [[1,6],[8,10],[15,18]]
+console.log(JSON.stringify(merge([[1,4],[4,5]])));                 // [[1,5]]
+console.log(JSON.stringify(merge([[1,4],[2,3]])));                 // [[1,4]]
+console.log(JSON.stringify(merge([[2,3],[4,5],[6,7],[1,10]])));    // [[1,10]]
+console.log(JSON.stringify(merge([[1,4],[5,6]])));                 // [[1,4],[5,6]]  no merge</code></pre>
+  </div>
+
+  <p>The <code>.slice()</code> on the first interval matters more than it looks. Without it,
+  <code>out[0]</code> is <em>the same array object</em> as <code>sorted[0]</code>, and
+  <code>last[1] = ...</code> would mutate the caller&rsquo;s data. This is the kind of bug that
+  passes every test and then corrupts state in production.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">see the aliasing bug</span></div>
+<pre><code>const input = [[1,3],[2,6]];
+
+function mergeAliasing(intervals) {
+  const sorted = [...intervals].sort((a, b) =&gt; a[0] - b[0]);
+  const out = [sorted[0]];              // NO slice -- shares the object
+  for (let i = 1; i &lt; sorted.length; i++) {
+    const last = out[out.length - 1];
+    if (sorted[i][0] &lt;= last[1]) last[1] = Math.max(last[1], sorted[i][1]);
+    else out.push(sorted[i]);
+  }
+  return out;
+}
+
+console.log('before:', JSON.stringify(input));
+mergeAliasing(input);
+console.log('after :', JSON.stringify(input));   // [[1,6],[2,6]]  -- the input changed!
+
+// [...intervals] is a SHALLOW copy: a new outer array holding the
+// SAME inner arrays. To be safe, copy the pairs too:
+//   intervals.map(iv => [...iv])</code></pre>
+  </div>
+
+  <h3>Working with objects instead of pairs</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the real-world shape</span></div>
+<pre><code>// In an actual codebase intervals are objects, not pairs.
+function mergeBookings(bookings) {
+  if (bookings.length === 0) return [];
+
+  const sorted = [...bookings].sort((a, b) =&gt; a.start - b.start);
+  const out = [{ ...sorted[0] }];
+
+  for (let i = 1; i &lt; sorted.length; i++) {
+    const current = sorted[i];
+    const last = out[out.length - 1];
+
+    if (current.start &lt;= last.end) {
+      last.end = Math.max(last.end, current.end);
+      last.rooms = (last.rooms || 1) + 1;    // carry extra data along
+    } else {
+      out.push({ ...current });
+    }
+  }
+
+  return out;
+}
+
+console.log(mergeBookings([
+  { start: 9,  end: 10, rooms: 1 },
+  { start: 10, end: 12, rooms: 1 },
+  { start: 14, end: 15, rooms: 1 }
+]));
+// [{start:9, end:12, rooms:2}, {start:14, end:15, rooms:1}]</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Brute force with restarts</td><td class="mono">O(n&sup3;)</td><td class="mono">O(n)</td></tr>
+        <tr><td><strong>Sort + one sweep</strong></td><td class="mono">O(n log n)</td><td class="mono">O(n)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>This is one of the rare problems where <strong>the sort is the expensive part</strong>. The sweep
+  itself is a single O(n) pass, so the total is dominated by O(n log n). You cannot do better in
+  general &mdash; if you could merge intervals in O(n), you could sort numbers in O(n) by turning
+  each number <code>x</code> into the interval <code>[x, x]</code>, which is known to be impossible
+  for comparison-based sorting.</p>
+
+  <p>That argument is genuinely worth having ready. &ldquo;Can we do better than O(n log n)?&rdquo; is a
+  standard follow-up, and &ldquo;no, and here is the reduction that proves it&rdquo; is a much stronger
+  answer than &ldquo;I do not think so&rdquo;.</p>
+
+  <p>Space is O(n) for the output. If you are allowed to sort in place and overwrite the input, it
+  drops to O(1) extra.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Sort by start time. Then sweep once, keeping the last merged interval: if the next one
+    starts at or before that interval&rsquo;s end, extend the end to the max of the two; otherwise
+    push it as a new interval. Sorting guarantees an interval can only overlap the one I am
+    currently building. O(n log n) time, dominated by the sort, and O(n) space for the output.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Not sorting</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; assumes sorted input</span></div>
+<pre><code>function broken(intervals) {
+  const out = [intervals[0].slice()];
+  for (let i = 1; i &lt; intervals.length; i++) {
+    const [start, end] = intervals[i];
+    const last = out[out.length - 1];
+    if (start &lt;= last[1]) last[1] = Math.max(last[1], end);
+    else out.push([start, end]);
+  }
+  return out;
+}
+
+console.log(JSON.stringify(broken([[1,3],[2,6],[8,10]])));   // [[1,6],[8,10]]  fine
+console.log(JSON.stringify(broken([[8,10],[1,3],[2,6]])));
+// [[8,10],[1,3],[2,6]]   WRONG -- nothing merged at all
+
+// Same data, different order, completely different answer.
+// The sweep only works because sorting guarantees an interval can
+// only overlap the CURRENT one.</code></pre>
+  </div>
+
+  <h3>2. Assigning the end instead of taking the max</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; loses coverage</span></div>
+<pre><code>function broken(intervals) {
+  const s = [...intervals].sort((a, b) =&gt; a[0] - b[0]);
+  const out = [s[0].slice()];
+  for (let i = 1; i &lt; s.length; i++) {
+    const last = out[out.length - 1];
+    if (s[i][0] &lt;= last[1]) last[1] = s[i][1];    // no Math.max -- bug
+    else out.push(s[i].slice());
+  }
+  return out;
+}
+
+console.log(JSON.stringify(broken([[1,3],[2,6]])));      // [[1,6]]   fine
+console.log(JSON.stringify(broken([[1,10],[2,3]])));     // [[1,3]]   WRONG, should be [[1,10]]
+console.log(JSON.stringify(broken([[1,10],[2,3],[4,5]])));  // [[1,5]]  WRONG
+
+// A nested interval shrinks the one that contains it. This passes
+// most hand-written tests because people rarely think to test a
+// fully-contained interval.</code></pre>
+  </div>
+
+  <h3>3. Sorting with the default comparator</h3>
+
+  <p><code>intervals.sort()</code> stringifies each pair, so <code>[10, 12]</code> becomes
+  <code>"10,12"</code> and sorts before <code>"9,11"</code>. Always
+  <code>.sort((a, b) =&gt; a[0] - b[0])</code>.</p>
+
+  <h3>4. Sorting by end time</h3>
+
+  <p>Sorting by <em>end</em> is correct for a different problem &mdash; &ldquo;how many meetings can I
+  fit without overlaps?&rdquo;, the classic greedy interval-scheduling question. For merging, sort by
+  start. Using the wrong key gives a plausible-looking but wrong answer, so know which problem you
+  are solving.</p>
+
+  <h3>5. Forgetting the empty input</h3>
+
+  <p><code>intervals[0].slice()</code> on an empty array throws
+  <code>Cannot read properties of undefined</code>. One guard line at the top.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Insert Interval.</strong> The list is already sorted and non-overlapping; insert one
+    new interval and re-merge. It is the next page, and it can be done without sorting at all.</li>
+    <li><strong>Meeting Rooms.</strong> Given intervals, can one person attend all of them? Sort by
+    start; if any interval begins before the previous one ends, the answer is no. Two lines once
+    sorted.</li>
+    <li><strong>Meeting Rooms II.</strong> How many rooms do you need at once? The trick: separate the
+    starts and the ends into two sorted lists, then sweep both, adding a room on each start and
+    freeing one on each end. Track the maximum.</li>
+    <li><strong>Interval intersection.</strong> Given two sorted lists, return the overlaps. The
+    overlap of <code>[a1,a2]</code> and <code>[b1,b2]</code> is
+    <code>[max(a1,b1), min(a2,b2)]</code>, and it is real only when that start is at most that end.</li>
+    <li><strong>Employee free time.</strong> Merge everyone&rsquo;s busy intervals, then return the
+    <em>gaps</em>. Once you have this page&rsquo;s function, it is five more lines.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p><strong>Sorting is a setup move.</strong> It costs O(n log n) once and turns a problem where
+    anything can interact with anything into one where only <em>neighbours</em> can interact.
+    That is why sorting appears at the start of Three Sum, Merge Intervals, Group Anagrams and half a
+    dozen others. When a problem feels like it needs all-pairs comparison, ask: <em>if this were
+    sorted, would I only ever need to look at the previous item?</em></p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="06-three-sum.html">&larr; Three Sum</a>
+  <a href="08-insert-interval.html">Next: Insert Interval &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

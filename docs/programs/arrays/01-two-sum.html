@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Two Sum, Taught Slowly</title>
+<meta name="description" content="The Two Sum problem worked from the brute-force answer to the hash map, with a hand-traced dry run and runnable code.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Arrays &middot; Problem 01</p>
+  <h1>Two Sum</h1>
+  <p class="standfirst">This is the first problem in almost every interview list, and it is not there
+  because it is hard. It is there because the trick it teaches &mdash; <em>write down what you have
+  already seen so you never have to look for it again</em> &mdash; reappears in about a third of
+  every other problem you will ever be asked.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>You are given a list of numbers and one target number. Find the <strong>two positions</strong>
+  in the list whose numbers add up to the target, and return those two positions.</p>
+
+  <p>Explain it to someone who has never programmed, like this: you have a row of price tags and a
+  fifty-rupee note. Which <em>two</em> tags add up to exactly fifty?</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Target</th><th>Answer</th><th>Because</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[2, 7, 11, 15]</td><td class="mono">9</td><td class="mono">[0, 1]</td><td>2 + 7 = 9</td></tr>
+        <tr><td class="mono">[3, 2, 4]</td><td class="mono">6</td><td class="mono">[1, 2]</td><td>2 + 4 = 6</td></tr>
+        <tr><td class="mono">[3, 3]</td><td class="mono">6</td><td class="mono">[0, 1]</td><td>the same value twice is fine</td></tr>
+        <tr><td class="mono">[1, 2, 3]</td><td class="mono">99</td><td class="mono">[]</td><td>no pair works</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Three rules that the problem statement always includes, and that beginners always skip:</p>
+
+  <ul>
+    <li>Return the <strong>positions</strong> (indexes), not the values. <code>[0, 1]</code>, not <code>[2, 7]</code>.</li>
+    <li>You may not use the same element twice. Position 2 plus position 2 is cheating.</li>
+    <li>The same <em>value</em> appearing twice at two different positions is completely fine
+    &mdash; see the <code>[3, 3]</code> row above. This is where a lot of solutions quietly break.</li>
+  </ul>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <p>Before reading any clever solution, ask yourself what you would do with pen and paper.
+  Almost everyone lands on the same thing:</p>
+
+  <blockquote style="border-left:3px solid var(--line);margin:0 0 17px;padding-left:18px;color:var(--text-2)">
+  Take the first number. Try it with the second, then the third, then the fourth&hellip; if none of
+  them work, move on to the second number and try it against everything after it. Keep going.
+  </blockquote>
+
+  <p>That is a completely valid algorithm. It always finds the answer. Write it down first
+  &mdash; in a real interview, saying <em>&ldquo;the brute force is two nested loops, O(n&sup2;);
+  let me now improve it&rdquo;</em> scores far better than sitting in silence hunting for the clever
+  version.</p>
+
+  <p>Turning that sentence into code needs two loops. The outer one picks the first number.
+  The inner one picks a partner from <strong>the positions after it</strong> &mdash; and that
+  <code>j = i + 1</code> is doing real work: it stops us pairing a number with itself, and it stops
+  us checking the pair (2, 7) and then later checking (7, 2) all over again.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; brute force</span></div>
+<pre><code>function twoSumBrute(nums, target) {
+  // i walks every position: the "first" number of the pair
+  for (let i = 0; i &lt; nums.length; i++) {
+
+    // j starts one past i, so we never pair a number with itself
+    // and never re-check a pair we already tried
+    for (let j = i + 1; j &lt; nums.length; j++) {
+
+      if (nums[i] + nums[j] === target) {
+        return [i, j];          // found it, stop immediately
+      }
+    }
+  }
+  return [];                    // looked at every pair, nothing added up
+}
+
+console.log(twoSumBrute([2, 7, 11, 15], 9));   // [0, 1]
+console.log(twoSumBrute([3, 2, 4], 6));        // [1, 2]
+console.log(twoSumBrute([3, 3], 6));           // [0, 1]
+console.log(twoSumBrute([1, 2, 3], 99));       // []</code></pre>
+  </div>
+
+  <div class="note">
+    <span class="t">Read the loop out loud</span>
+    <p>&ldquo;For every position <code>i</code>, for every position <code>j</code> after it, if those two
+    numbers add to the target, return both positions.&rdquo; If you can say that sentence, you understand
+    the code. Code you cannot say out loud is code you have memorised, not learned.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>Count the comparisons instead of guessing. With 5 numbers, the outer loop runs 5 times, and
+  the inner loop runs 4, then 3, then 2, then 1, then 0 times. That is 10 comparisons.
+  In general it is <code>n &times; (n &minus; 1) / 2</code>, which grows like <strong>n&sup2;</strong>.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Array size</th><th>Comparisons</th><th>What happened</th></tr></thead>
+      <tbody>
+        <tr><td class="num">10</td><td class="num">45</td><td>instant</td></tr>
+        <tr><td class="num">100</td><td class="num">4,950</td><td>instant</td></tr>
+        <tr><td class="num">1,000</td><td class="num">499,500</td><td>still fine</td></tr>
+        <tr><td class="num">10,000</td><td class="num">49,995,000</td><td>you can feel it</td></tr>
+        <tr><td class="num">100,000</td><td class="num">4,999,950,000</td><td>five billion &mdash; your request times out</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Look at what happens between the last two rows. The data got <strong>10&times;</strong> bigger and
+  the work got <strong>100&times;</strong> bigger. That is the entire meaning of O(n&sup2;), and it is why
+  a solution that felt fine on your test data falls over in production.</p>
+
+  <p>Do not take my word for it. Press Run &mdash; this builds an array of 20,000 numbers where the
+  answer is deliberately hidden at the very end (worst case) and times both approaches:</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo &mdash; slow vs fast</span></div>
+<pre><code>// Build 20,000 numbers. The only pair that works is the last two,
+// so both solutions are forced to do their maximum work.
+const N = 20000;
+const nums = [];
+for (let i = 0; i &lt; N; i++) nums.push(i);
+const target = (N - 1) + (N - 2);   // 39997 = last + second-last
+
+function brute(nums, target) {
+  for (let i = 0; i &lt; nums.length; i++)
+    for (let j = i + 1; j &lt; nums.length; j++)
+      if (nums[i] + nums[j] === target) return [i, j];
+  return [];
+}
+
+function fast(nums, target) {
+  const seen = new Map();
+  for (let i = 0; i &lt; nums.length; i++) {
+    const need = target - nums[i];
+    if (seen.has(need)) return [seen.get(need), i];
+    seen.set(nums[i], i);
+  }
+  return [];
+}
+
+let t = performance.now();
+const a = brute(nums, target);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const b = fast(nums, target);
+const fastMs = performance.now() - t;
+
+console.log('brute force :', a, '->', bruteMs.toFixed(1) + ' ms');
+console.log('hash map    :', b, '->', fastMs.toFixed(1) + ' ms');
+console.log('the fast one is roughly', Math.round(bruteMs / Math.max(fastMs, 0.01)) + 'x faster');</code></pre>
+  </div>
+
+  <p>On my machine that printed <strong>269 ms</strong> against <strong>2 ms</strong>. Same answer,
+  same language, same computer. The only difference is that one of them stopped repeating work.</p>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; and where it comes from</h2>
+
+  <p>Here is the question that unlocks this problem, and it is worth memorising the <em>question</em>
+  rather than the answer:</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p><strong>What am I doing over and over that I could just write down instead?</strong></p>
+  </div>
+
+  <p>Look again at the brute force. When it sits on the number 2 with a target of 9, it walks the
+  rest of the array asking &ldquo;are you 7? are you 7? are you 7?&rdquo;. And it did the same kind of
+  walk for the previous number, and it will do it again for the next one. The array is being
+  re-scanned constantly.</p>
+
+  <p>Now flip the problem around. Standing on the number 2 with a target of 9, I do not actually need
+  to search. I can <em>calculate</em> exactly what partner I need:</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the whole idea in one line</span></div>
+<pre><code>need = target - current
+     = 9      - 2
+     = 7            // I am not searching. I know the answer is 7.</code></pre>
+  </div>
+
+  <p>So the question stops being &ldquo;which number pairs with me?&rdquo; and becomes
+  <strong>&ldquo;have I already walked past a 7?&rdquo;</strong> &mdash; and that is a question I can
+  answer instantly if I have been keeping notes.</p>
+
+  <p>The notebook is a <code>Map</code>: value &rarr; the position it was at. Looking something up in a
+  Map takes the same tiny amount of time whether the Map holds 10 entries or 10 million. That is
+  the trade at the heart of this problem, and at the heart of most &ldquo;make it faster&rdquo; problems:</p>
+
+  <div class="note">
+    <span class="t">The trade</span>
+    <p>Spend a little <strong>memory</strong> (a Map holding what you have seen) to stop spending a lot
+    of <strong>time</strong> (re-scanning the array). Almost every optimisation you will learn is
+    some version of this sentence.</p>
+  </div>
+
+  <h3>One detail that catches everyone</h3>
+
+  <p>Check the Map <strong>before</strong> you add the current number to it, not after. If you add
+  first, then with <code>nums = [3, 3]</code> and a target of 6 you would store 3, immediately look up
+  3, find the one you just stored, and return <code>[0, 0]</code> &mdash; the same element used twice,
+  which the problem forbids. Checking first means you can only ever match against something
+  genuinely earlier in the array.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p>This is the most important section on the page. Cover the code and follow the table with a
+  finger. <code>nums = [2, 7, 11, 15]</code>, <code>target = 9</code>.</p>
+
+  <div class="trace">
+<pre>seen = {}          (empty notebook)
+
+i = 0   nums[0] = 2
+        need = 9 - 2 = 7
+        is 7 in seen?  seen is empty  ->  no
+        write it down:  seen = { 2 -> 0 }
+
+i = 1   nums[1] = 7
+        need = 9 - 7 = 2
+        is 2 in seen?  YES, at position 0
+        answer = [ seen.get(2), i ] = [0, 1]
+        STOP
+</pre>
+  </div>
+
+  <p>Notice we never reached positions 2 or 3. Notice also the order of the returned pair:
+  <code>seen.get(need)</code> comes first because it was found earlier in the array, and <code>i</code>
+  second. Getting that backwards is a real and very common bug.</p>
+
+  <p>Now a trace where the answer is not near the front. <code>nums = [4, 1, 9, 3, 5]</code>,
+  <code>target = 8</code>:</p>
+
+  <div class="trace">
+<pre>seen = {}
+
+i = 0   value 4    need 4    seen has 4? no     ->  seen = { 4 -> 0 }
+i = 1   value 1    need 7    seen has 7? no     ->  seen = { 4 -> 0, 1 -> 1 }
+i = 2   value 9    need -1   seen has -1? no    ->  seen = { 4 -> 0, 1 -> 1, 9 -> 2 }
+i = 3   value 3    need 5    seen has 5? no     ->  seen = { 4 -> 0, 1 -> 1, 9 -> 2, 3 -> 3 }
+i = 4   value 5    need 3    seen has 3? YES at 3
+                                  answer = [3, 4]      (3 + 5 = 8)
+</pre>
+  </div>
+
+  <p>Read that trace again and notice what never happens: the array is never scanned backwards,
+  never re-read, never searched. Each number is looked at exactly once. That is O(n).</p>
+
+  <p>Here is the same trace produced by the code itself &mdash; press Run and compare it line for
+  line with the table above:</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function twoSumExplained(nums, target) {
+  const seen = new Map();
+  console.log('nums =', nums, ' target =', target);
+  console.log('');
+
+  for (let i = 0; i &lt; nums.length; i++) {
+    const value = nums[i];
+    const need  = target - value;
+
+    console.log('i = ' + i + '   value = ' + value + '   need = ' + need);
+
+    if (seen.has(need)) {
+      console.log('        found ' + need + ' at position ' + seen.get(need) + ' -> answer!');
+      console.log('');
+      return [seen.get(need), i];
+    }
+
+    console.log('        ' + need + ' not seen yet, remember ' + value + ' at ' + i);
+    seen.set(value, i);
+    console.log('        seen =', seen);
+  }
+
+  console.log('reached the end, no pair exists');
+  return [];
+}
+
+console.log('ANSWER:', twoSumExplained([4, 1, 9, 3, 5], 8));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <p>Now write it with nothing but loops, indexes and a plain object. No <code>Map</code>, no
+  <code>includes</code>, no <code>indexOf</code>. This version exists so you can see there is no magic
+  hiding anywhere.</p>
+
+  <p>A plain JavaScript object is itself a lookup table: <code>seen[7] = 1</code> stores it, and
+  <code>seen[7]</code> reads it back, both in constant time. That is genuinely all a hash map is,
+  at the level that matters for this problem.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; loops and a plain object</span></div>
+<pre><code>function twoSumManual(nums, target) {
+  // our notebook: seen[value] = the position that value was at
+  const seen = {};
+
+  for (let i = 0; i &lt; nums.length; i++) {
+    const value = nums[i];
+    const need  = target - value;
+
+    // "have I written this number down before?"
+    // Object.prototype.hasOwnProperty.call is the safe way to ask.
+    // Why not `if (seen[need])`? Because if the stored position is 0,
+    // `seen[need]` is 0, which is falsy, and we would miss a real answer.
+    if (Object.prototype.hasOwnProperty.call(seen, need)) {
+      return [seen[need], i];
+    }
+
+    seen[value] = i;   // write down where this value lives
+  }
+
+  return [];
+}
+
+console.log(twoSumManual([2, 7, 11, 15], 9));   // [0, 1]
+console.log(twoSumManual([3, 2, 4], 6));        // [1, 2]
+console.log(twoSumManual([3, 3], 6));           // [0, 1]
+console.log(twoSumManual([-3, 4, 3, 90], 0));   // [0, 2]  negatives work fine
+console.log(twoSumManual([1, 2, 3], 99));       // []</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The falsy-zero trap</span>
+    <p><code>if (seen[need])</code> looks natural and is wrong. If the number you need was stored at
+    position <strong>0</strong>, then <code>seen[need]</code> is <code>0</code>, JavaScript treats
+    <code>0</code> as false, and you silently skip a correct answer. Try
+    <code>twoSumManual([2, 7], 9)</code> with that bug in place and it returns <code>[]</code>.
+    Ask &ldquo;does the key exist?&rdquo;, never &ldquo;is the value truthy?&rdquo;.</p>
+  </div>
+
+  <h3>And the version with no lookup table at all</h3>
+
+  <p>For completeness: this is the same brute force from Step 2, written out with a manual result
+  variable instead of an early <code>return</code>, which is how you would write it if the interviewer
+  asked for <em>all</em> pairs rather than the first one.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">variation &mdash; find every pair, not just the first</span></div>
+<pre><code>function allPairs(nums, target) {
+  const result = [];
+
+  for (let i = 0; i &lt; nums.length; i++) {
+    for (let j = i + 1; j &lt; nums.length; j++) {
+      if (nums[i] + nums[j] === target) {
+        result[result.length] = [i, j];   // push(), written by hand
+      }
+    }
+  }
+
+  return result;
+}
+
+console.log(allPairs([1, 2, 3, 4, 5, 6], 7));   // [[0,5],[1,4],[2,3]]</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <p>This is the code you would actually write at work and in an interview. <code>Map</code> is the
+  purpose-built tool for &ldquo;remember a value, look it up fast&rdquo;.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; Map</span></div>
+<pre><code>function twoSum(nums, target) {
+  const seen = new Map();          // value -> index
+
+  for (let i = 0; i &lt; nums.length; i++) {
+    const need = target - nums[i];
+
+    if (seen.has(need)) {
+      return [seen.get(need), i];  // earlier index first
+    }
+
+    seen.set(nums[i], i);
+  }
+
+  return [];
+}
+
+console.log(twoSum([2, 7, 11, 15], 9));   // [0, 1]
+console.log(twoSum([3, 2, 4], 6));        // [1, 2]
+console.log(twoSum([3, 3], 6));           // [0, 1]
+console.log(twoSum([-1, -2, -3, -4], -6));// [1, 3]
+console.log(twoSum([1, 2, 3], 99));       // []</code></pre>
+  </div>
+
+  <h3>Why <code>Map</code> and not a plain object?</h3>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th></th><th class="mono">{ }</th><th class="mono">new Map()</th></tr></thead>
+      <tbody>
+        <tr><td>Key types</td><td>strings only &mdash; <code>1</code> silently becomes <code>"1"</code></td><td>any type, kept as-is</td></tr>
+        <tr><td>Inherited keys</td><td>has <code>toString</code>, <code>constructor</code>&hellip; from the prototype</td><td>starts genuinely empty</td></tr>
+        <tr><td>Size</td><td><code>Object.keys(o).length</code> &mdash; builds an array first</td><td><code>map.size</code> &mdash; free</td></tr>
+        <tr><td>Order</td><td>integer-like keys get sorted numerically</td><td>strict insertion order</td></tr>
+        <tr><td>Checking presence</td><td><code>hasOwnProperty</code> ceremony</td><td><code>map.has(k)</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>For Two Sum specifically both work, because the keys are numbers and number-to-string
+  conversion happens to be harmless here. But say <em>&ldquo;I use Map because the keys are numbers
+  and objects coerce keys to strings&rdquo;</em> in an interview and you have shown you know why the
+  language has both.</p>
+
+  <h3>The version people write that quietly fails</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Right answer, wrong complexity</span></div>
+<pre><code>function twoSumIndexOf(nums, target) {
+  for (let i = 0; i &lt; nums.length; i++) {
+    const need = target - nums[i];
+    const j = nums.indexOf(need, i + 1);   // search only after i
+    if (j !== -1) return [i, j];
+  }
+  return [];
+}
+
+console.log(twoSumIndexOf([2, 7, 11, 15], 9));   // [0, 1]  correct!
+console.log(twoSumIndexOf([3, 3], 6));           // [0, 1]  correct!
+
+// It gives the right answers. So what is wrong with it?
+// indexOf is itself a loop over the array. A loop inside a loop
+// is O(n squared) -- exactly the brute force, just harder to see.
+// It is three lines shorter and no faster at all.</code></pre>
+  </div>
+
+  <p>This is the trap the index page warns about. A built-in method is not automatically fast.
+  <code>indexOf</code>, <code>includes</code>, <code>find</code> and <code>filter</code> all walk the whole
+  array. Only <code>Map</code>, <code>Set</code> and plain-object key lookup are constant time.</p>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>In words</th></tr></thead>
+      <tbody>
+        <tr><td>Brute force</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td><td>For each number, scan the rest. No extra storage.</td></tr>
+        <tr><td>Sort + two pointers</td><td class="mono">O(n log n)</td><td class="mono">O(n)</td><td>Faster, but sorting destroys the original positions &mdash; and positions are the answer.</td></tr>
+        <tr><td><strong>Hash map</strong></td><td class="mono">O(n)</td><td class="mono">O(n)</td><td>Touch each number once, remember each number once.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Time O(n)</strong> means: the loop runs once per element, and everything inside the loop
+  &mdash; one subtraction, one <code>has</code>, one <code>set</code> &mdash; takes the same time no
+  matter how big the Map has grown. So the total work is proportional to the number of elements.
+  Ten times more data, ten times more work. Not a hundred.</p>
+
+  <p><strong>Space O(n)</strong> means: in the worst case (no pair exists) every number ends up in the
+  Map, so the memory used grows in step with the input. That is the price of the trade, and it is
+  almost always worth paying.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Brute force is O(n&sup2;) time, O(1) space. I can trade space for time: one pass with a
+    hash map storing value&nbsp;&rarr;&nbsp;index gives O(n) time and O(n) space. I check the map
+    before inserting so I never reuse the same element.&rdquo; That is roughly thirty seconds and it
+    covers everything the interviewer is listening for.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Inserting before checking</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken</span></div>
+<pre><code>function broken(nums, target) {
+  const seen = new Map();
+  for (let i = 0; i &lt; nums.length; i++) {
+    seen.set(nums[i], i);                    // inserted FIRST -- bug
+    const need = target - nums[i];
+    if (seen.has(need)) return [seen.get(need), i];
+  }
+  return [];
+}
+
+console.log(broken([3, 3], 6));      // [0, 0]  &lt;- position 0 used twice
+console.log(broken([3, 2, 4], 6));   // [0, 0]  &lt;- claims 3 + 3, but there is only one 3
+
+// Fix: move seen.set() to AFTER the check.</code></pre>
+  </div>
+
+  <p>Watch what it returns: <code>[0, 0]</code> &mdash; the <em>same position twice</em>. On the very
+  first step it writes down &ldquo;3 is at position 0&rdquo;, then immediately asks &ldquo;have I seen a
+  3?&rdquo;, finds the note it wrote a line earlier, and believes it. The second example is worse:
+  <code>[3, 2, 4]</code> has only one 3 in it, and the function still reports a pair.
+  Check first, <em>then</em> write down.</p>
+
+  <h3>2. Returning values instead of indexes</h3>
+
+  <p><code>return [nums[i], nums[j]]</code> returns <code>[2, 7]</code> when the problem asked for
+  <code>[0, 1]</code>. Re-read the question before you write the <code>return</code>. This costs people
+  real interviews.</p>
+
+  <h3>3. Overwriting a duplicate&rsquo;s position and not caring</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">worth understanding</span></div>
+<pre><code>// With [3, 3] the Map can only hold one key "3".
+// The second set() overwrites the first. Does that break us?
+
+const seen = new Map();
+seen.set(3, 0);
+seen.set(3, 1);
+console.log(seen);          // Map(1) {3 => 1}  -- position 0 is gone
+
+// It does NOT break Two Sum, because we check BEFORE we set.
+// When i = 1 we look for 3, find the entry from i = 0, and return
+// straight away -- the overwrite never happens.
+//
+// It WOULD break a problem that needs every occurrence.
+// Then you store an array of positions instead:
+
+function positionsOf(nums) {
+  const at = new Map();
+  for (let i = 0; i &lt; nums.length; i++) {
+    if (!at.has(nums[i])) at.set(nums[i], []);
+    at.get(nums[i]).push(i);
+  }
+  return at;
+}
+
+console.log(positionsOf([3, 1, 3, 3]));   // Map {3 => [0,2,3], 1 => [1]}</code></pre>
+  </div>
+
+  <h3>4. Forgetting the &ldquo;no answer&rdquo; case</h3>
+
+  <p>If no pair adds up, the loop simply ends. Without a <code>return []</code> after the loop your
+  function returns <code>undefined</code>, and the caller crashes on
+  <code>Cannot read properties of undefined</code>. Every loop that searches for something needs an
+  answer for &ldquo;I did not find it&rdquo;.</p>
+
+  <h3>5. Assuming the array is sorted</h3>
+
+  <p>It is not. Two Sum arrays are unsorted and may contain negatives, zeros and duplicates.
+  <code>[-3, 4, 3, 90]</code> with target <code>0</code> is a valid input and the answer is
+  <code>[0, 2]</code>. If a solution only works on sorted positive numbers, it does not work.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Close this page and rewrite the Map version from memory.</strong> If you cannot, you
+    have not learned it yet &mdash; reread Step 4, not Step 7.</li>
+    <li><strong>Two Sum on a sorted array.</strong> If the input is guaranteed sorted, you can solve it
+    with O(1) extra space using two pointers, one at each end: if the sum is too big move the right
+    pointer left, too small move the left pointer right. Try it &mdash; you will meet this pattern
+    again in the two-pointers topic.</li>
+    <li><strong>Return the values, not the indexes.</strong> A two-line change. Do it without
+    re-reading the solution.</li>
+    <li><strong>Count how many pairs sum to the target</strong> (not just find one). Careful with
+    duplicates: how many pairs does <code>[1, 1, 1]</code> with target <code>2</code> have?
+    The answer is 3, not 1.</li>
+    <li><strong>Three Sum.</strong> Find three numbers that add to the target. Do not look it up.
+    Just notice that if you fix one number, the rest is Two Sum on what is left &mdash; that
+    reduction is the whole point of doing this problem first.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p>The pattern you just learned has a name you will see everywhere: <strong>complement lookup</strong>,
+    or more generally <strong>one pass with a hash map</strong>. Whenever a problem makes you compare
+    every element against every other element, stop and ask the Step 4 question:
+    <em>what am I doing over and over that I could just write down instead?</em></p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="../index.html">&larr; All problems</a>
+  <a href="02-best-time-to-buy-sell-stock.html">Next: Best Time to Buy and Sell Stock &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

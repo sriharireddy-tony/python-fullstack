@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maximum Subarray and Kadane's Algorithm</title>
+<meta name="description" content="Kadane's algorithm derived from scratch: the cubic answer, the quadratic answer, then the four-line loop, with a full hand trace.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Arrays &middot; Problem 03</p>
+  <h1>Maximum Subarray &mdash; Kadane&rsquo;s Algorithm</h1>
+  <p class="standfirst">Four lines of code that almost nobody can explain. By the end of this page
+  you will not just be able to write it &mdash; you will be able to say <em>why</em> each line is there,
+  which is the only thing an interviewer is actually testing.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Given an array of numbers &mdash; some positive, some negative &mdash; find the
+  <strong>contiguous</strong> run of numbers with the largest sum, and return that sum.</p>
+
+  <p>&ldquo;Contiguous&rdquo; is the whole problem. You must take a solid block, side by side, with no
+  gaps. You cannot cherry-pick the positive numbers and skip the negative ones.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Answer</th><th>The winning block</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[-2, 1, -3, 4, -1, 2, 1, -5, 4]</td><td class="mono">6</td><td class="mono">[4, -1, 2, 1]</td></tr>
+        <tr><td class="mono">[1]</td><td class="mono">1</td><td class="mono">[1]</td></tr>
+        <tr><td class="mono">[5, 4, -1, 7, 8]</td><td class="mono">23</td><td>the whole array</td></tr>
+        <tr><td class="mono">[-3, -1, -7]</td><td class="mono">-1</td><td class="mono">[-1]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Study row one. The answer is <code>[4, -1, 2, 1] = 6</code>. Notice that it <em>includes</em> a
+  negative number. Taking the &minus;1 was worth it, because the 2 and the 1 sitting behind it more
+  than paid for it. That is the tension in this problem: sometimes you push through a loss to reach
+  a bigger gain, and sometimes you cut your losses. Kadane&rsquo;s algorithm is one rule that decides
+  which.</p>
+
+  <div class="note warn">
+    <span class="t">The row that breaks most solutions</span>
+    <p><code>[-3, -1, -7]</code> answers <code>-1</code>, not <code>0</code>. The block must be
+    <strong>non-empty</strong> &mdash; you have to pick at least one number, so you pick the least bad
+    one. Any solution that starts its answer at <code>0</code> returns <code>0</code> here and is wrong.
+    Test every solution on an all-negative array. Every single one.</p>
+  </div>
+
+  <p>Why anyone cares: this is the shape of &ldquo;the best week of sales in the quarter&rdquo;,
+  &ldquo;the worst sustained latency window in the log&rdquo;, &ldquo;the most profitable stretch of the
+  trip&rdquo;. Any time you scan a timeline for its best continuous stretch, this is the algorithm.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <p>With pen and paper you would try every block and keep the biggest total. A block is defined by
+  where it starts and where it ends, so: two loops to choose the ends, and a third loop to add
+  the block up.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; three loops, O(n&sup3;)</span></div>
+<pre><code>function maxSubArrayCubic(nums) {
+  let best = -Infinity;             // NOT 0 -- the answer can be negative
+
+  for (let start = 0; start &lt; nums.length; start++) {
+    for (let end = start; end &lt; nums.length; end++) {
+
+      // add up the block from start to end
+      let sum = 0;
+      for (let k = start; k &lt;= end; k++) {
+        sum += nums[k];
+      }
+
+      if (sum &gt; best) best = sum;
+    }
+  }
+
+  return best;
+}
+
+console.log(maxSubArrayCubic([-2, 1, -3, 4, -1, 2, 1, -5, 4]));   // 6
+console.log(maxSubArrayCubic([-3, -1, -7]));                      // -1</code></pre>
+  </div>
+
+  <p>Now spot the waste, because spotting it is the first real improvement. To total the block
+  <code>[4, -1, 2]</code> the inner loop adds 4, then &minus;1, then 2. To total
+  <code>[4, -1, 2, 1]</code> on the very next round it starts over and adds 4, &minus;1, 2, 1.
+  It just recomputed a sum it had a moment ago.</p>
+
+  <p>So drop the third loop and carry the running total as <code>end</code> moves:</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0b &mdash; two loops, O(n&sup2;)</span></div>
+<pre><code>function maxSubArrayQuadratic(nums) {
+  let best = -Infinity;
+
+  for (let start = 0; start &lt; nums.length; start++) {
+    let sum = 0;                       // fresh total for blocks starting here
+
+    for (let end = start; end &lt; nums.length; end++) {
+      sum += nums[end];                // extend by one, no recomputation
+      if (sum &gt; best) best = sum;
+    }
+  }
+
+  return best;
+}
+
+console.log(maxSubArrayQuadratic([-2, 1, -3, 4, -1, 2, 1, -5, 4]));   // 6
+console.log(maxSubArrayQuadratic([5, 4, -1, 7, 8]));                  // 23</code></pre>
+  </div>
+
+  <p>That is already a big win and it is a good thing to reach in an interview before going further.
+  But it still restarts from scratch for every possible starting point, and that is the loop we are
+  about to delete.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Size</th><th>O(n&sup3;) additions</th><th>O(n&sup2;) additions</th><th>O(n) additions</th></tr></thead>
+      <tbody>
+        <tr><td class="num">100</td><td class="num">171,700</td><td class="num">5,050</td><td class="num">100</td></tr>
+        <tr><td class="num">1,000</td><td class="num">167,167,000</td><td class="num">500,500</td><td class="num">1,000</td></tr>
+        <tr><td class="num">10,000</td><td class="num">~1.7 &times; 10<sup>11</sup></td><td class="num">50,005,000</td><td class="num">10,000</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Read the 10,000 row across. Cubic is out of reach on any machine. Quadratic finishes but you
+  wait for it. Linear does ten thousand additions and is done before you notice.</p>
+
+  <p>Press Run &mdash; 20,000 random numbers, quadratic against Kadane&rsquo;s:</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 20000;
+const nums = [];
+for (let i = 0; i &lt; N; i++) nums.push(Math.floor(Math.random() * 21) - 10);  // -10..10
+
+function quadratic(a) {
+  let best = -Infinity;
+  for (let s = 0; s &lt; a.length; s++) {
+    let sum = 0;
+    for (let e = s; e &lt; a.length; e++) {
+      sum += a[e];
+      if (sum &gt; best) best = sum;
+    }
+  }
+  return best;
+}
+
+function kadane(a) {
+  let best = a[0], current = a[0];
+  for (let i = 1; i &lt; a.length; i++) {
+    current = Math.max(a[i], current + a[i]);
+    best = Math.max(best, current);
+  }
+  return best;
+}
+
+let t = performance.now();
+const q = quadratic(nums);
+const qMs = performance.now() - t;
+
+t = performance.now();
+const k = kadane(nums);
+const kMs = performance.now() - t;
+
+console.log('quadratic :', q, 'in', qMs.toFixed(1) + ' ms');
+console.log('kadane    :', k, 'in', kMs.toFixed(2) + ' ms');
+console.log('same answer:', q === k);
+console.log('speed-up  :', Math.round(qMs / Math.max(kMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; derived, not memorised</h2>
+
+  <p>Here is the move that finds Kadane&rsquo;s, and it is a move you can use on many problems.
+  Instead of asking the big question, ask a smaller question at every position:</p>
+
+  <div class="note key">
+    <span class="t">The reframe</span>
+    <p>Do not ask &ldquo;what is the best block anywhere?&rdquo;<br>
+    Ask, for each position <code>i</code>: <strong>&ldquo;what is the best block that
+    <em>ends exactly at</em> <code>i</code>?&rdquo;</strong></p>
+  </div>
+
+  <p>Why is that smaller question better? Because every block ends <em>somewhere</em>. If I know the
+  best block ending at each of the n positions, the overall answer is just the biggest of those n
+  numbers. I have turned one hard question into n easy ones.</p>
+
+  <p>And the easy question has a beautifully short answer. A block that ends at position <code>i</code>
+  must contain <code>nums[i]</code>. There are only two possibilities for what comes before it:</p>
+
+  <ol>
+    <li>It is glued onto the best block that ended at <code>i - 1</code>.</li>
+    <li>It is just <code>nums[i]</code> on its own &mdash; a fresh start.</li>
+  </ol>
+
+  <p>There is no third option. So:</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the entire algorithm, in one line</span></div>
+<pre><code>bestEndingHere(i) = max( nums[i] ,  nums[i] + bestEndingHere(i - 1) )
+                          ^                    ^
+                     start fresh          extend the previous block</code></pre>
+  </div>
+
+  <p>Notice something: I never have to consider a block ending at <code>i - 1</code> that was <em>not</em>
+  the best one. If some worse block ended at <code>i - 1</code>, gluing <code>nums[i]</code> onto it gives
+  a worse result than gluing <code>nums[i]</code> onto the best one. The bad options can be thrown away
+  the moment they lose. That is why one number is enough to represent the entire past.</p>
+
+  <h3>The same rule said in plain English</h3>
+
+  <p>Rewrite the max slightly. Extending beats starting fresh exactly when
+  <code>nums[i] + previous &gt; nums[i]</code>, which is true exactly when <code>previous &gt; 0</code>.
+  So the rule is:</p>
+
+  <div class="note">
+    <span class="t">Kadane&rsquo;s, in one sentence</span>
+    <p><strong>If the running total behind you is positive, carry it &mdash; it is helping.
+    If it is negative, drop it and start fresh from where you stand.</strong></p>
+  </div>
+
+  <p>That is genuinely intuitive once you hear it. A negative running total is dead weight: whatever
+  comes next, you are strictly better off without it. It does not matter how negative, and it does
+  not matter what is coming &mdash; carrying a &minus;20 into the future can never help you. So you
+  cut it loose.</p>
+
+  <p>Back to <code>[-2, 1, -3, 4, -1, 2, 1, -5, 4]</code> and the &minus;1 that ended up inside the
+  answer. When we reach it, the running total is 4 &mdash; positive, so it is helping. We carry it,
+  giving 3. Then 2 and 1 build on that 3 and we reach 6. The &minus;1 got included not because it was
+  good, but because the total in front of it was still positive after paying for it.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p>Two variables, and confusing them is the number one bug in this problem:</p>
+
+  <ul>
+    <li><code>current</code> &mdash; the best block <strong>ending at the position I am standing on</strong>.
+    This goes up and down.</li>
+    <li><code>best</code> &mdash; the best block <strong>seen anywhere so far</strong>.
+    This never goes down.</li>
+  </ul>
+
+  <p><code>nums = [-2, 1, -3, 4, -1, 2, 1, -5, 4]</code>. Both start at <code>nums[0] = -2</code>.</p>
+
+  <div class="trace">
+<pre>start:   current = -2      best = -2
+
+i=1  value 1
+     extend: -2 + 1 = -1        start fresh: 1
+     1 is bigger  ->  START FRESH        current = 1
+     best = max(-2, 1) = 1               best = 1
+
+i=2  value -3
+     extend: 1 + -3 = -2        start fresh: -3
+     -2 is bigger ->  EXTEND              current = -2
+     best = max(1, -2) = 1               best = 1
+
+i=3  value 4
+     extend: -2 + 4 = 2         start fresh: 4
+     4 is bigger  ->  START FRESH        current = 4
+     best = max(1, 4) = 4                best = 4
+
+i=4  value -1
+     extend: 4 + -1 = 3         start fresh: -1
+     3 is bigger  ->  EXTEND              current = 3
+     best = max(4, 3) = 4                best = 4     &lt;-- best did NOT drop
+
+i=5  value 2
+     extend: 3 + 2 = 5          start fresh: 2
+     5 is bigger  ->  EXTEND              current = 5
+     best = max(4, 5) = 5                best = 5
+
+i=6  value 1
+     extend: 5 + 1 = 6          start fresh: 1
+     6 is bigger  ->  EXTEND              current = 6
+     best = max(5, 6) = 6                best = 6     &lt;-- the answer
+
+i=7  value -5
+     extend: 6 + -5 = 1         start fresh: -5
+     1 is bigger  ->  EXTEND              current = 1
+     best = max(6, 1) = 6                best = 6
+
+i=8  value 4
+     extend: 1 + 4 = 5          start fresh: 4
+     5 is bigger  ->  EXTEND              current = 5
+     best = max(6, 5) = 6                best = 6
+
+answer: 6      (the block [4, -1, 2, 1], found between i=3 and i=6)
+</pre>
+  </div>
+
+  <p>Three things to take from that trace:</p>
+
+  <ul>
+    <li>At <code>i=4</code>, <code>current</code> fell from 4 to 3 but <code>best</code> stayed at 4.
+    That is exactly why you need two variables. If you only kept one, the dip would erase the answer
+    you had already earned.</li>
+    <li>At <code>i=1</code> and <code>i=3</code> the algorithm chose to start fresh &mdash; both times
+    because the running total behind it was negative.</li>
+    <li>The tail <code>[-5, 4]</code> never beat 6, so the answer found at <code>i=6</code> survived to
+    the end untouched.</li>
+  </ul>
+
+  <p>Now the all-negative case, <code>nums = [-3, -1, -7]</code>:</p>
+
+  <div class="trace">
+<pre>start:   current = -3      best = -3
+
+i=1  value -1    extend: -4    fresh: -1    ->  fresh    current = -1   best = -1
+i=2  value -7    extend: -8    fresh: -7    ->  fresh    current = -7   best = -1
+
+answer: -1
+</pre>
+  </div>
+
+  <p>Every step starts fresh, because the running total is always negative, and the algorithm
+  naturally ends up returning the single largest element. It needs no special case for this &mdash;
+  as long as you started <code>best</code> at <code>nums[0]</code> and not at <code>0</code>.</p>
+
+  <p>Press Run and match it line by line against the first trace:</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function kadaneExplained(nums) {
+  if (nums.length === 0) return 0;
+
+  let current = nums[0];
+  let best = nums[0];
+
+  console.log('nums =', nums);
+  console.log('start: current = ' + current + '   best = ' + best);
+  console.log('');
+
+  for (let i = 1; i &lt; nums.length; i++) {
+    const extend = current + nums[i];
+    const fresh  = nums[i];
+    const choice = extend &gt; fresh ? 'EXTEND     ' : 'START FRESH';
+
+    current = extend &gt; fresh ? extend : fresh;
+
+    const improved = current &gt; best;
+    if (improved) best = current;
+
+    console.log(
+      'i=' + i + '  value ' + String(nums[i]).padStart(3) +
+      '   extend ' + String(extend).padStart(3) +
+      '   fresh ' + String(fresh).padStart(3) +
+      '   -> ' + choice +
+      '   current=' + String(current).padStart(3) +
+      '   best=' + String(best).padStart(3) +
+      (improved ? '   *new best*' : '')
+    );
+  }
+
+  console.log('');
+  return best;
+}
+
+console.log('ANSWER:', kadaneExplained([-2, 1, -3, 4, -1, 2, 1, -5, 4]));
+console.log('=========================================');
+console.log('ANSWER:', kadaneExplained([-3, -1, -7]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <p>No <code>Math.max</code>, no <code>reduce</code>. Just <code>if</code>. Written this way the two
+  decisions are impossible to miss.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; plain ifs</span></div>
+<pre><code>function maxSubArrayManual(nums) {
+  if (nums.length === 0) return 0;      // agree with your interviewer on this
+
+  let current = nums[0];   // best block ENDING at the current position
+  let best    = nums[0];   // best block seen ANYWHERE so far
+
+  for (let i = 1; i &lt; nums.length; i++) {
+
+    // decision 1: extend the block behind me, or start a new one here?
+    const extended = current + nums[i];
+
+    if (extended &gt; nums[i]) {
+      current = extended;    // the running total was helping -- keep it
+    } else {
+      current = nums[i];     // the running total was dead weight -- drop it
+    }
+
+    // decision 2: is the block ending here the best I have ever seen?
+    if (current &gt; best) {
+      best = current;
+    }
+  }
+
+  return best;
+}
+
+console.log(maxSubArrayManual([-2, 1, -3, 4, -1, 2, 1, -5, 4]));   // 6
+console.log(maxSubArrayManual([1]));                               // 1
+console.log(maxSubArrayManual([5, 4, -1, 7, 8]));                  // 23
+console.log(maxSubArrayManual([-3, -1, -7]));                      // -1
+console.log(maxSubArrayManual([-1]));                              // -1
+console.log(maxSubArrayManual([0, 0, 0]));                         // 0</code></pre>
+  </div>
+
+  <p>The <code>if (extended &gt; nums[i])</code> test can be written the other way round, and you will
+  see both in the wild:</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the same decision, said two ways</span></div>
+<pre><code>if (extended &gt; nums[i]) current = extended; else current = nums[i];
+
+// identical, because  current + nums[i] > nums[i]  is true
+// exactly when  current > 0 :
+if (current &gt; 0) current = current + nums[i]; else current = nums[i];</code></pre>
+  </div>
+
+  <p>The second form is the one that reads like the plain-English rule from Step&nbsp;4:
+  <em>positive total behind me, carry it; otherwise drop it.</em> Use whichever you can explain
+  faster under pressure.</p>
+
+  <h3>Returning the block itself, not just the sum</h3>
+
+  <p>&ldquo;Now tell me <em>which</em> numbers&rdquo; is the standard follow-up, and it is a small
+  addition: whenever you start fresh, that is a new candidate start; whenever you set a new best,
+  freeze the current start and end.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">variation &mdash; return the winning block</span></div>
+<pre><code>function maxSubArrayWithRange(nums) {
+  if (nums.length === 0) return { sum: 0, start: -1, end: -1, block: [] };
+
+  let current = nums[0];
+  let best    = nums[0];
+
+  let candidateStart = 0;   // where the CURRENT block began
+  let bestStart = 0;        // where the BEST block began
+  let bestEnd = 0;          // where the BEST block ended
+
+  for (let i = 1; i &lt; nums.length; i++) {
+    if (current + nums[i] &gt; nums[i]) {
+      current = current + nums[i];       // extending: start stays put
+    } else {
+      current = nums[i];
+      candidateStart = i;                // fresh start: the block begins here
+    }
+
+    if (current &gt; best) {
+      best = current;
+      bestStart = candidateStart;        // freeze the winning range
+      bestEnd = i;
+    }
+  }
+
+  return {
+    sum: best,
+    start: bestStart,
+    end: bestEnd,
+    block: nums.slice(bestStart, bestEnd + 1)
+  };
+}
+
+console.log(maxSubArrayWithRange([-2, 1, -3, 4, -1, 2, 1, -5, 4]));
+// { sum: 6, start: 3, end: 6, block: [4, -1, 2, 1] }
+
+console.log(maxSubArrayWithRange([-3, -1, -7]));
+// { sum: -1, start: 1, end: 1, block: [-1] }
+
+console.log(maxSubArrayWithRange([5, 4, -1, 7, 8]));
+// { sum: 23, start: 0, end: 4, block: [5, 4, -1, 7, 8] }</code></pre>
+  </div>
+
+  <p>The crucial detail is that <code>candidateStart</code> and <code>bestStart</code> are two different
+  variables. <code>candidateStart</code> moves every time you start fresh, even on blocks that turn
+  out to be rubbish. <code>bestStart</code> only copies it at the moment a new best is confirmed.
+  Use one variable for both and a later fresh start will corrupt the answer you already found.</p>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2a &mdash; Math.max</span></div>
+<pre><code>function maxSubArray(nums) {
+  let current = nums[0];
+  let best    = nums[0];
+
+  for (let i = 1; i &lt; nums.length; i++) {
+    current = Math.max(nums[i], current + nums[i]);   // extend or restart
+    best    = Math.max(best, current);                // record the high-water mark
+  }
+
+  return best;
+}
+
+console.log(maxSubArray([-2, 1, -3, 4, -1, 2, 1, -5, 4]));   // 6
+console.log(maxSubArray([1]));                               // 1
+console.log(maxSubArray([5, 4, -1, 7, 8]));                  // 23
+console.log(maxSubArray([-3, -1, -7]));                      // -1</code></pre>
+  </div>
+
+  <p>Four lines. This is what people mean by &ldquo;Kadane&rsquo;s algorithm&rdquo;, and it is why so many
+  people can type it without understanding it. You now know that line 1 is the extend-or-restart
+  decision and line 2 is the high-water mark, and that is the difference between reciting and
+  knowing.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 2b &mdash; reduce</span></div>
+<pre><code>function maxSubArrayReduce(nums) {
+  return nums.reduce(
+    (state, n) =&gt; {
+      const current = Math.max(n, state.current + n);
+      return { current, best: Math.max(state.best, current) };
+    },
+    { current: -Infinity, best: -Infinity }
+  ).best;
+}
+
+console.log(maxSubArrayReduce([-2, 1, -3, 4, -1, 2, 1, -5, 4]));   // 6
+console.log(maxSubArrayReduce([-3, -1, -7]));                      // -1
+
+// -Infinity as the seed is what makes the FIRST element behave correctly:
+//   Math.max(n, -Infinity + n) = Math.max(n, -Infinity) = n
+// so element 0 always starts a fresh block, exactly as it should.
+// It also removes the need for a separate nums[0] initialisation.</code></pre>
+  </div>
+
+  <p>Two things the <code>reduce</code> version buys you: it needs no <code>nums[0]</code> setup, and it
+  is a clean example of &ldquo;carry a state object through a fold&rdquo;. Two things it costs you: an
+  object allocated per element, and a colleague squinting at it. For a linear scan with two
+  variables, the loop is better code. Know both; ship the loop.</p>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th><th>In words</th></tr></thead>
+      <tbody>
+        <tr><td>Three loops</td><td class="mono">O(n&sup3;)</td><td class="mono">O(1)</td><td>Every block, re-added from scratch every time.</td></tr>
+        <tr><td>Two loops</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td><td>Every block, but the sum carried as the end moves.</td></tr>
+        <tr><td><strong>Kadane&rsquo;s</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td><td>One pass, two numbers, the past compressed into one running total.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Like the stock problem, this is O(n) time at <strong>O(1) space</strong> &mdash; the good kind of
+  win, where you pay nothing for the speed. Both work for the same underlying reason: everything
+  that happened before position <code>i</code> collapses into a single number that is all your next
+  decision depends on.</p>
+
+  <div class="note">
+    <span class="t">The name for this</span>
+    <p>Kadane&rsquo;s is the smallest honest example of <strong>dynamic programming</strong>. The formal
+    version says: <code>dp[i] = max(nums[i], nums[i] + dp[i-1])</code>, and the answer is
+    <code>max(dp)</code>. That is literally the line from Step&nbsp;4. The reason there is no
+    <code>dp</code> array in the final code is that <code>dp[i]</code> only ever reads
+    <code>dp[i-1]</code> &mdash; so a whole array collapses into one variable. If you can say that
+    sentence, you can claim dynamic programming on your CV and defend it.</p>
+  </div>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Brute force is O(n&sup2;) over all start/end pairs. Instead I compute, for each index,
+    the best subarray <em>ending</em> at that index &mdash; which is either the element alone or the
+    element plus the previous best-ending-here. The overall answer is the maximum of those.
+    Since each state only depends on the previous one, I keep two variables instead of an array:
+    O(n) time, O(1) space. I initialise both to <code>nums[0]</code>, not 0, so all-negative inputs
+    return the largest element.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Starting at 0 &mdash; the classic</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken</span></div>
+<pre><code>function broken(nums) {
+  let current = 0, best = 0;          // bug: both should be nums[0]
+  for (const n of nums) {
+    current = Math.max(n, current + n);
+    best = Math.max(best, current);
+  }
+  return best;
+}
+
+console.log(broken([-2, 1, -3, 4, -1, 2, 1, -5, 4]));   // 6   fine
+console.log(broken([5, 4, -1, 7, 8]));                  // 23  fine
+console.log(broken([-3, -1, -7]));                      // 0   WRONG, should be -1
+console.log(broken([-1]));                              // 0   WRONG, should be -1
+
+// Starting best at 0 secretly allows the EMPTY block, which the
+// problem forbids. It passes every test with a positive number in it,
+// which is why this bug survives all the way to the interview.</code></pre>
+  </div>
+
+  <h3>2. Letting <code>best</code> follow <code>current</code> down</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; only one variable</span></div>
+<pre><code>function broken(nums) {
+  let current = nums[0];
+  for (let i = 1; i &lt; nums.length; i++) {
+    current = Math.max(nums[i], current + nums[i]);
+  }
+  return current;                     // returns the block ending at the END
+}
+
+console.log(broken([-2, 1, -3, 4, -1, 2, 1, -5, 4]));   // 5   WRONG, should be 6
+
+// It returns the best block ending at the LAST index, not the best
+// block anywhere. The answer [4,-1,2,1] ended at index 6 and was
+// then trampled by the -5. `best` exists precisely to remember it.</code></pre>
+  </div>
+
+  <h3>3. Thinking the answer cannot contain a negative number</h3>
+
+  <p>It very often does. <code>[5, 4, -1, 7, 8]</code> answers 23 &mdash; the whole array, &minus;1
+  included, because the 7 and 8 behind it are worth far more than the 1 it costs. Filtering out the
+  negatives first would give 24 from a block that is not contiguous, which is not a legal answer.</p>
+
+  <h3>4. Confusing subarray with subsequence</h3>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Term</th><th>Means</th><th>From <code class="mono">[1, -9, 3]</code></th></tr></thead>
+      <tbody>
+        <tr><td><strong>Subarray</strong> / substring</td><td>contiguous, no gaps</td><td><code>[1]</code>, <code>[1,-9]</code>, <code>[-9,3]</code>, <code>[1,-9,3]</code>&hellip;</td></tr>
+        <tr><td><strong>Subsequence</strong></td><td>order kept, gaps allowed</td><td>also <code>[1, 3]</code> &mdash; skipping the &minus;9</td></tr>
+        <tr><td><strong>Subset</strong></td><td>order does not matter</td><td>also <code>[3, 1]</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Maximum <em>subsequence</em> sum is a trivial problem &mdash; add up the positives &mdash; and if
+  you misread the word you will solve the wrong problem confidently. When a question says
+  &ldquo;subarray&rdquo;, say &ldquo;contiguous&rdquo; back to the interviewer to confirm.</p>
+
+  <h3>5. Not agreeing what an empty array returns</h3>
+
+  <p>There is no correct answer &mdash; there is no non-empty block to pick. Some codebases return
+  <code>0</code>, some return <code>-Infinity</code>, some throw. Ask, then write the guard you agreed
+  on. Silently returning <code>undefined</code> is the only genuinely wrong choice.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Write the four-line version from memory</strong>, then say out loud what each of the
+    two lines inside the loop decides. If you can only do one of those, you have memorised it.</li>
+    <li><strong>Minimum subarray sum.</strong> Swap both <code>Math.max</code> for <code>Math.min</code>.
+    Check it on <code>[2, -5, 1, -3, 4]</code> &mdash; you should get &minus;7.</li>
+    <li><strong>Maximum product subarray.</strong> Much harder than it looks: two negatives multiply
+    into a big positive, so the <em>smallest</em> product so far can become the largest one step
+    later. You have to carry both a running max and a running min. Try it before looking it up.</li>
+    <li><strong>Circular maximum subarray.</strong> The array wraps around, so the block may run off
+    the end and continue at the start. Hint: the answer is either a normal Kadane result, or
+    <code>total sum &minus; minimum subarray</code>. Watch the all-negative case, which breaks the
+    second formula.</li>
+    <li><strong>Longest subarray with sum exactly K.</strong> Kadane does not apply. This one needs
+    prefix sums plus a hash map &mdash; the Two Sum trick, reappearing. Notice how often it does.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p>The move that made this problem easy was not clever code, it was the <strong>reframe</strong>:
+    replace &ldquo;find the best thing anywhere&rdquo; with &ldquo;find the best thing ending at each
+    position&rdquo;. Whenever a problem asks for the best contiguous range, try defining the answer
+    <em>at</em> index <code>i</code> in terms of the answer at <code>i - 1</code>. If it works, you get a
+    one-pass solution and a dynamic-programming answer at the same time.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="02-best-time-to-buy-sell-stock.html">&larr; Best Time to Buy and Sell Stock</a>
+  <a href="../index.html">All problems &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rotate Array by K</title>
+<meta name="description" content="Rotating an array in place with the three-reversal trick, taught from the naive shift-one-at-a-time version.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Arrays &middot; Problem 05</p>
+  <h1>Rotate Array by K</h1>
+  <p class="standfirst">A problem with a trick so odd that it looks like a magic spell:
+  reverse the whole array, then reverse each half. By the end of this page it will not look
+  like magic &mdash; it will look inevitable.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Shift every element of the array <code>k</code> places to the <strong>right</strong>. Anything that
+  falls off the right-hand end wraps around and reappears at the front.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th class="mono">k</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[1, 2, 3, 4, 5, 6, 7]</td><td class="mono">3</td><td class="mono">[5, 6, 7, 1, 2, 3, 4]</td></tr>
+        <tr><td class="mono">[1, 2, 3, 4, 5, 6, 7]</td><td class="mono">1</td><td class="mono">[7, 1, 2, 3, 4, 5, 6]</td></tr>
+        <tr><td class="mono">[1, 2, 3, 4]</td><td class="mono">4</td><td class="mono">[1, 2, 3, 4]</td></tr>
+        <tr><td class="mono">[1, 2, 3, 4]</td><td class="mono">6</td><td class="mono">[3, 4, 1, 2]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Look at rows three and four, because they carry the only real edge case in the problem.
+  Rotating a 4-element array by 4 puts everything back exactly where it started. Rotating it by 6 is
+  therefore the same as rotating it by 2. In general:</p>
+
+  <div class="note key">
+    <span class="t">The first line of your solution</span>
+    <p><code>k = k % nums.length;</code></p>
+    <p>A full lap changes nothing, so only the remainder matters. Without this line,
+    <code>k = 1000000</code> either runs a million pointless laps or reads clean off the end of the
+    array. Write it before you write anything else.</p>
+  </div>
+
+  <p>One more thing to settle before coding, and it is the kind of question interviewers want you to
+  ask: <strong>do I modify the array in place, or return a new one?</strong> The classic version says
+  in place. Real codebases usually prefer a new array, because silently mutating your caller&rsquo;s
+  data causes very hard bugs. Both are below.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <p>&ldquo;Rotating by 3&rdquo; obviously means &ldquo;rotate by 1, three times&rdquo;. And rotating by 1
+  is easy: take the last element off the end and put it at the front.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; one step at a time</span></div>
+<pre><code>function rotateOneAtATime(nums, k) {
+  k = k % nums.length;
+
+  for (let step = 0; step &lt; k; step++) {
+    // take the last element out
+    const last = nums[nums.length - 1];
+
+    // shift everything one place to the right, walking backwards
+    // (backwards so we do not overwrite a value before we move it)
+    for (let i = nums.length - 1; i &gt; 0; i--) {
+      nums[i] = nums[i - 1];
+    }
+
+    nums[0] = last;    // and the last element becomes the first
+  }
+
+  return nums;
+}
+
+console.log(rotateOneAtATime([1, 2, 3, 4, 5, 6, 7], 3));   // [5, 6, 7, 1, 2, 3, 4]
+console.log(rotateOneAtATime([1, 2, 3, 4], 6));            // [3, 4, 1, 2]
+console.log(rotateOneAtATime([1, 2, 3, 4], 4));            // [1, 2, 3, 4]</code></pre>
+  </div>
+
+  <p>The inner loop walking <em>backwards</em> matters. Going forwards, <code>nums[1] = nums[0]</code>
+  would destroy <code>nums[1]</code> before you had moved it, and you would end up with the first
+  element smeared across the whole array. Try changing it and running it &mdash; the failure is
+  instructive.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>The outer loop runs <code>k</code> times and the inner loop runs <code>n</code> times, so it is
+  <strong>O(n &times; k)</strong>. Since <code>k</code> can be almost as large as <code>n</code>, the
+  worst case is O(n&sup2;).</p>
+
+  <p>And it is a particularly silly O(n&sup2;), because every element gets picked up and put down
+  <code>k</code> separate times on its way to a destination it could have jumped to directly.
+  An element that needs to move three places is moved one place, three times.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 20000;
+const base = [];
+for (let i = 0; i &lt; N; i++) base.push(i);
+const k = 9999;
+
+function oneAtATime(a, k) {
+  k %= a.length;
+  for (let s = 0; s &lt; k; s++) {
+    const last = a[a.length - 1];
+    for (let i = a.length - 1; i &gt; 0; i--) a[i] = a[i - 1];
+    a[0] = last;
+  }
+  return a;
+}
+
+function reverseTrick(a, k) {
+  k %= a.length;
+  const rev = (lo, hi) =&gt; {
+    while (lo &lt; hi) { const t = a[lo]; a[lo] = a[hi]; a[hi] = t; lo++; hi--; }
+  };
+  rev(0, a.length - 1);
+  rev(0, k - 1);
+  rev(k, a.length - 1);
+  return a;
+}
+
+let t = performance.now();
+const slow = oneAtATime(base.slice(), k);
+const slowMs = performance.now() - t;
+
+t = performance.now();
+const fast = reverseTrick(base.slice(), k);
+const fastMs = performance.now() - t;
+
+console.log('one at a time : ' + slowMs.toFixed(1) + ' ms');
+console.log('three reversals: ' + fastMs.toFixed(2) + ' ms');
+console.log('same result:', slow[0] === fast[0] &amp;&amp; slow[N - 1] === fast[N - 1]);
+console.log('speed-up:', Math.round(slowMs / Math.max(fastMs, 0.01)) + 'x');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; two of them</h2>
+
+  <h3>Idea A: work out where each element lands</h3>
+
+  <p>Forget shifting. Ask directly: <em>if the element at index <code>i</code> moves <code>k</code>
+  places right, where does it end up?</em> At <code>i + k</code> &mdash; and if that runs past the end,
+  it wraps around, which is exactly what <code>%</code> does:</p>
+
+  <div class="codeblock solo">
+    <div class="codehead"><span class="tag">the whole idea in one line</span></div>
+<pre><code>newIndex = (i + k) % n</code></pre>
+  </div>
+
+  <p>With <code>[1,2,3,4,5,6,7]</code> and <code>k = 3</code>: the 1 at index 0 goes to index 3, the 5
+  at index 4 goes to <code>(4+3) % 7 = 0</code>. Check that against the expected answer
+  <code>[5,6,7,1,2,3,4]</code> &mdash; the 5 is indeed at the front and the 1 is indeed at index 3.</p>
+
+  <p>That gives an O(n) solution immediately, at the cost of a second array to write into.
+  Simple, correct, and the right answer in most real code.</p>
+
+  <h3>Idea B: the three-reversal trick</h3>
+
+  <p>To do it <em>in place</em> with no extra array, there is a trick. Watch it happen rather than
+  memorising it. Take <code>[1,2,3,4,5,6,7]</code>, <code>k = 3</code>:</p>
+
+  <div class="trace">
+<pre>start                 1  2  3  4  5  6  7
+                      \___________/  \____/
+                      the front         the tail that
+                      part              must move to the front
+
+step 1: reverse EVERYTHING
+                      7  6  5  4  3  2  1
+                      \____/  \___________/
+                      the 3 that     the rest,
+                      belong up      also backwards
+                      front -- but
+                      backwards
+
+step 2: reverse the first k = 3
+                      5  6  7  4  3  2  1
+                      \____/
+                      fixed
+
+step 3: reverse the rest
+                      5  6  7  1  2  3  4
+                               \________/
+                                        fixed
+
+done.
+</pre>
+  </div>
+
+  <p>So why does it work? Because reversing the whole array does exactly one useful thing: it brings
+  the last <code>k</code> elements to the front, which is where they need to be. It also leaves both
+  groups backwards as a side effect &mdash; and reversing a group twice puts it back the right way
+  round. Steps 2 and 3 undo that side effect.</p>
+
+  <div class="note key">
+    <span class="t">The one sentence to remember</span>
+    <p>Reversing everything <strong>moves the right group to the front</strong> but scrambles the order
+    within each group. Reversing each group afterwards <strong>unscrambles it</strong>.</p>
+  </div>
+
+  <p>Once you see it as &ldquo;one move plus two repairs&rdquo;, it stops being a spell.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace the reversals</h2>
+
+  <p>Reversing in place is itself two pointers walking towards each other and swapping. Trace
+  <code>reverse([7,6,5,4,3,2,1], 0, 2)</code> &mdash; step 2 above:</p>
+
+  <div class="trace">
+<pre>reverse(lo = 0, hi = 2)   on   7  6  5  4  3  2  1
+                               ^     ^
+lo=0 hi=2   swap 7 and 5  ->   5  6  7  4  3  2  1
+lo=1 hi=1   lo is not &lt; hi     STOP
+
+(the middle element never needs to move -- with an odd count
+ the two pointers meet on it, with an even count they cross)
+</pre>
+  </div>
+
+  <p>And the full run on <code>[1,2,3,4,5,6,7]</code> with <code>k = 3</code>:</p>
+
+  <div class="trace">
+<pre>k = 3 % 7 = 3
+
+reverse(0, 6):
+   swap idx 0,6:   7  2  3  4  5  6  1
+   swap idx 1,5:   7  6  3  4  5  2  1
+   swap idx 2,4:   7  6  5  4  3  2  1
+   idx 3,3 meet -> stop
+
+reverse(0, 2):
+   swap idx 0,2:   5  6  7  4  3  2  1
+   idx 1,1 meet -> stop
+
+reverse(3, 6):
+   swap idx 3,6:   5  6  7  1  3  2  4
+   swap idx 4,5:   5  6  7  1  2  3  4
+   idx 5,4 crossed -> stop
+
+answer: [5, 6, 7, 1, 2, 3, 4]
+</pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function rotateExplained(nums, k) {
+  const n = nums.length;
+  const original = k;
+  k = k % n;
+
+  console.log('nums =', nums, '  k =', original, '->', k, '(after % ' + n + ')');
+  console.log('start           [' + nums.join(', ') + ']');
+
+  function reverse(lo, hi, label) {
+    while (lo &lt; hi) {
+      const tmp = nums[lo];
+      nums[lo] = nums[hi];
+      nums[hi] = tmp;
+      lo++;
+      hi--;
+    }
+    console.log(label.padEnd(16) + '[' + nums.join(', ') + ']');
+  }
+
+  reverse(0, n - 1, 'reverse all');
+  reverse(0, k - 1, 'reverse first ' + k);
+  reverse(k, n - 1, 'reverse rest');
+
+  console.log('');
+  return nums;
+}
+
+console.log('ANSWER:', rotateExplained([1, 2, 3, 4, 5, 6, 7], 3));
+console.log('=========================================');
+console.log('ANSWER:', rotateExplained([1, 2, 3, 4], 6));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <p>No <code>reverse()</code>, no <code>slice</code>, no <code>splice</code>. Swapping by hand with two
+  indexes.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; three reversals, in place</span></div>
+<pre><code>function rotateManual(nums, k) {
+  const n = nums.length;
+  if (n === 0) return nums;
+
+  k = k % n;              // a full lap changes nothing
+  if (k === 0) return nums;
+
+  reverseRange(nums, 0, n - 1);   // bring the tail to the front (backwards)
+  reverseRange(nums, 0, k - 1);   // repair the first group
+  reverseRange(nums, k, n - 1);   // repair the second group
+
+  return nums;
+}
+
+function reverseRange(arr, lo, hi) {
+  while (lo &lt; hi) {
+    const tmp = arr[lo];    // classic three-line swap
+    arr[lo] = arr[hi];
+    arr[hi] = tmp;
+    lo++;
+    hi--;
+  }
+}
+
+console.log(rotateManual([1, 2, 3, 4, 5, 6, 7], 3));   // [5, 6, 7, 1, 2, 3, 4]
+console.log(rotateManual([1, 2, 3, 4, 5, 6, 7], 1));   // [7, 1, 2, 3, 4, 5, 6]
+console.log(rotateManual([1, 2, 3, 4], 6));            // [3, 4, 1, 2]
+console.log(rotateManual([1, 2, 3, 4], 4));            // [1, 2, 3, 4]
+console.log(rotateManual([1], 5));                     // [1]
+console.log(rotateManual([], 3));                      // []</code></pre>
+  </div>
+
+  <p>The <code>if (k === 0) return nums</code> guard is not decoration. With <code>k = 0</code> the
+  second call would be <code>reverseRange(nums, 0, -1)</code> &mdash; which happens to be harmless
+  here because <code>0 &lt; -1</code> is false, but relying on that is luck. Handle the trivial case
+  explicitly and you never have to reason about it.</p>
+
+  <h3>The other approach &mdash; a second array</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; direct placement, no mutation</span></div>
+<pre><code>function rotatedCopy(nums, k) {
+  const n = nums.length;
+  if (n === 0) return [];
+
+  k = k % n;
+  const out = new Array(n);
+
+  for (let i = 0; i &lt; n; i++) {
+    out[(i + k) % n] = nums[i];   // "where do I land?" -- computed, not shifted
+  }
+
+  return out;
+}
+
+const original = [1, 2, 3, 4, 5, 6, 7];
+console.log(rotatedCopy(original, 3));   // [5, 6, 7, 1, 2, 3, 4]
+console.log(original);                   // [1,2,3,4,5,6,7] -- untouched
+
+// Honest comparison:
+//   in place       : O(1) extra space, but mutates the caller's array
+//   copy           : O(n) extra space, but the input is safe
+// In application code the copy is almost always the better neighbour.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2a &mdash; slice and spread</span></div>
+<pre><code>function rotate(nums, k) {
+  const n = nums.length;
+  if (n === 0) return [];
+  k = k % n;
+  // the last k elements, then everything before them
+  return [...nums.slice(n - k), ...nums.slice(0, n - k)];
+}
+
+console.log(rotate([1, 2, 3, 4, 5, 6, 7], 3));   // [5, 6, 7, 1, 2, 3, 4]
+console.log(rotate([1, 2, 3, 4], 6));            // [3, 4, 1, 2]
+console.log(rotate([1, 2, 3, 4], 4));            // [1, 2, 3, 4]  needs the %
+console.log(rotate([1, 2, 3, 4], 0));            // [1, 2, 3, 4]</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">Why the <code>% n</code> is doubly important here</span>
+    <p>With <code>k = 4</code> on a 4-element array and no modulo, <code>slice(n - k)</code> is
+    <code>slice(0)</code> &mdash; the whole array &mdash; and <code>slice(0, 0)</code> is empty, so you
+    get the right answer by accident. But with <code>k = 6</code>, <code>slice(-2)</code> takes the last
+    two elements (negative indexes count from the end in <code>slice</code>) and
+    <code>slice(0, -2)</code> takes the rest, which gives <code>[3,4,1,2]</code> &mdash; also correct,
+    also by accident. With <code>k = 10</code> on 4 elements it breaks. Do not rely on negative-index
+    coincidences; take the remainder first.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2b &mdash; splice, in place</span></div>
+<pre><code>function rotateInPlace(nums, k) {
+  const n = nums.length;
+  if (n === 0) return nums;
+  k = k % n;
+  // cut the last k elements out, then put them back at the front
+  const tail = nums.splice(n - k, k);
+  nums.unshift(...tail);
+  return nums;
+}
+
+console.log(rotateInPlace([1, 2, 3, 4, 5, 6, 7], 3));   // [5, 6, 7, 1, 2, 3, 4]
+console.log(rotateInPlace([1, 2, 3, 4], 6));            // [3, 4, 1, 2]
+
+// Short and readable, and genuinely fine for small arrays.
+// Two caveats worth saying out loud:
+//   - unshift shifts every element along, so this is O(n) per call
+//     internally -- not the O(1)-space win the reversal trick gives
+//   - unshift(...tail) spreads the tail into arguments; with a very
+//     large k that can blow the argument limit (RangeError).</code></pre>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 2c &mdash; the built-in reverse</span></div>
+<pre><code>// The three-reversal trick, using Array.prototype.reverse.
+// reverse() works on a whole array, so we reverse slices and write back.
+function rotateReverse(nums, k) {
+  const n = nums.length;
+  if (n === 0) return nums;
+  k = k % n;
+  if (k === 0) return nums;
+
+  nums.reverse();
+
+  const front = nums.slice(0, k).reverse();
+  const back  = nums.slice(k).reverse();
+
+  for (let i = 0; i &lt; k; i++) nums[i] = front[i];
+  for (let i = k; i &lt; n; i++) nums[i] = back[i - k];
+
+  return nums;
+}
+
+console.log(rotateReverse([1, 2, 3, 4, 5, 6, 7], 3));   // [5, 6, 7, 1, 2, 3, 4]
+
+// This makes the point that a built-in is not automatically better:
+// slice() allocates two new arrays, so we have lost the O(1) space
+// that made the manual version worth writing. Version 1a is the
+// better code here, which is not something you can say very often.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Extra space</th><th>Mutates?</th></tr></thead>
+      <tbody>
+        <tr><td>One step at a time</td><td class="mono">O(n &times; k)</td><td class="mono">O(1)</td><td>yes</td></tr>
+        <tr><td>Direct placement</td><td class="mono">O(n)</td><td class="mono">O(n)</td><td>no</td></tr>
+        <tr><td>slice + spread</td><td class="mono">O(n)</td><td class="mono">O(n)</td><td>no</td></tr>
+        <tr><td><strong>Three reversals</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td><td>yes</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Three reversals is O(n) even though it looks like three passes: the first touches all n
+  elements, the other two touch k and n&minus;k, which together are another n. So 2n operations
+  total, which is O(n). Sequential passes add; they do not multiply.</p>
+
+  <p>It is the only version that is both linear <em>and</em> constant-space, which is exactly why the
+  problem is famous. If an interviewer asks for &ldquo;O(1) space, in place&rdquo;, this is the answer
+  they are waiting for.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;First, <code>k %= n</code>, because a full rotation is a no-op. The easy solution writes
+    each element to <code>(i + k) % n</code> in a new array &mdash; O(n) time, O(n) space. For O(1)
+    space in place, reverse the whole array, which brings the last k elements to the front but
+    backwards, then reverse the first k and reverse the remaining n&minus;k to repair the order.
+    O(n) time, O(1) space.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Forgetting <code>k %= n</code></h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken</span></div>
+<pre><code>function broken(nums, k) {
+  const n = nums.length;
+  // no modulo
+  const rev = (a, lo, hi) =&gt; { while (lo &lt; hi) { const t=a[lo]; a[lo]=a[hi]; a[hi]=t; lo++; hi--; } };
+  rev(nums, 0, n - 1);
+  rev(nums, 0, k - 1);
+  rev(nums, k, n - 1);
+  return nums;
+}
+
+console.log(broken([1, 2, 3, 4], 6));
+// [undefined, undefined, 1, 2, 3, 4]   WRONG, should be [3, 4, 1, 2]
+
+// Worse than wrong: the array GREW. rev(0, 5) tried to swap index 0
+// with index 5, and writing to index 5 of a 4-element array simply
+// creates it. JavaScript never throws for reading past the end -- it
+// hands you undefined and carries on. Silent damage beats a crash
+// only in the sense that it is harder to find.</code></pre>
+  </div>
+
+  <h3>2. Rotating left instead of right</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the two directions, side by side</span></div>
+<pre><code>const nums = [1, 2, 3, 4, 5];
+const k = 2;
+const n = nums.length;
+
+const right = [...nums.slice(n - k), ...nums.slice(0, n - k)];
+const left  = [...nums.slice(k), ...nums.slice(0, k)];
+
+console.log('rotate RIGHT by 2:', right);   // [4, 5, 1, 2, 3]
+console.log('rotate LEFT  by 2:', left);    // [3, 4, 5, 1, 2]
+
+// They are mirror images: rotating right by k is the same as
+// rotating left by (n - k). If you ever get the direction wrong,
+// that identity is the quickest fix.
+console.log('right by 2 === left by 3:',
+            JSON.stringify(right) === JSON.stringify([...nums.slice(3), ...nums.slice(0, 3)]));</code></pre>
+  </div>
+
+  <h3>3. Shifting forwards and smearing the array</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; overwrites before moving</span></div>
+<pre><code>function broken(nums) {   // trying to rotate right by 1
+  const last = nums[nums.length - 1];
+  for (let i = nums.length - 1; i &gt; 0; i--) nums[i] = nums[i - 1];   // correct: backwards
+  nums[0] = last;
+  return nums;
+}
+
+function alsoBroken(nums) {
+  const last = nums[nums.length - 1];
+  for (let i = 1; i &lt; nums.length; i++) nums[i] = nums[i - 1];       // forwards: BUG
+  nums[0] = last;
+  return nums;
+}
+
+console.log(broken([1, 2, 3, 4, 5]));       // [5, 1, 2, 3, 4]  correct
+console.log(alsoBroken([1, 2, 3, 4, 5]));   // [5, 1, 1, 1, 1]  smeared
+
+// Going forwards, nums[1] = nums[0] destroys the 2 before it has
+// been copied anywhere, and then that same value propagates right.</code></pre>
+  </div>
+
+  <h3>4. Mutating the caller&rsquo;s array by surprise</h3>
+
+  <p><code>reverse()</code>, <code>splice()</code>, <code>sort()</code>, <code>push()</code> and
+  <code>unshift()</code> all change the array you pass in. <code>slice()</code>, <code>map()</code>,
+  <code>filter()</code> and <code>concat()</code> return a new one. Rotating a config array in place
+  because you reached for <code>reverse()</code> inside a helper is a genuinely nasty production bug.
+  Decide deliberately which kind of function you are writing, and name it accordingly &mdash;
+  <code>rotate</code> versus <code>rotated</code>.</p>
+
+  <h3>5. Not handling empty or single-element arrays</h3>
+
+  <p><code>k % 0</code> is <code>NaN</code>, and every index comparison against <code>NaN</code> is
+  false, so an empty array tends to silently do nothing rather than crash. That is lucky, not
+  correct. Guard <code>n === 0</code> explicitly.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Rotate left by k</strong>, without converting it into a right rotation first.
+    (The three reversals still work &mdash; just swap which group you cut at.)</li>
+    <li><strong>Rotate a string.</strong> Strings are immutable in JavaScript, so the in-place trick
+    is unavailable. What is the cleanest O(n) way? (Hint: <code>str.slice</code> behaves like the
+    array version.)</li>
+    <li><strong>Check whether one string is a rotation of another.</strong>
+    <code>isRotation("erbottlewat", "waterbottle")</code> should be true. There is a beautiful
+    one-line answer: <code>(a + a).includes(b)</code> when the lengths match. Work out why it is
+    correct before you accept it.</li>
+    <li><strong>Rotate a matrix 90 degrees.</strong> The same &ldquo;one move plus repairs&rdquo; shape:
+    transpose the matrix, then reverse each row. Trace it on a 3&times;3 by hand.</li>
+    <li><strong>The cyclic-replacement solution.</strong> There is a third in-place method that moves
+    each element straight to its final home by following cycles. It is genuinely tricky &mdash; the
+    number of cycles is <code>gcd(n, k)</code> &mdash; and worth reading once so the reversal trick
+    feels as simple as it is.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p>Two things. First, <strong><code>%</code> is how you wrap around</strong>: any time a problem
+    talks about circular arrays, clock arithmetic, or round-robin assignment, the modulo operator is
+    doing the work. Second, <strong>reversal is a cheap, reusable building block</strong> &mdash;
+    a surprising number of in-place rearrangement problems reduce to &ldquo;reverse this range, then
+    reverse those ranges&rdquo;.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="04-product-of-array-except-self.html">&larr; Product of Array Except Self</a>
+  <a href="../strings/01-longest-substring-without-repeating.html">Next topic: Strings &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

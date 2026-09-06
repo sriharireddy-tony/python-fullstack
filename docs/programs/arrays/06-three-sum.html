@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Three Sum</title>
+<meta name="description" content="Three Sum taught as Two Sum wearing a coat: sort, fix one number, then walk two pointers inward. With the duplicate handling explained properly.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Arrays &middot; Problem 06</p>
+  <h1>Three Sum</h1>
+  <p class="standfirst">Two Sum with one extra number &mdash; and one extra headache. The algorithm
+  is short. The part that actually fails people in interviews is
+  <strong>not returning the same triplet twice</strong>, so that gets a whole section here.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Find every group of three numbers in the array that add up to <strong>zero</strong>. Return the
+  triplets themselves, not their positions. No triplet may appear twice.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[-1, 0, 1, 2, -1, -4]</td><td class="mono">[[-1, -1, 2], [-1, 0, 1]]</td></tr>
+        <tr><td class="mono">[0, 1, 1]</td><td class="mono">[]</td></tr>
+        <tr><td class="mono">[0, 0, 0]</td><td class="mono">[[0, 0, 0]]</td></tr>
+        <tr><td class="mono">[0, 0, 0, 0]</td><td class="mono">[[0, 0, 0]]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Read those last two rows together, because they are the whole difficulty of this problem in
+  miniature. Three zeros give one triplet. <em>Four</em> zeros still give one triplet &mdash; there
+  are four different ways to pick three of them, but they all produce the same set of values, and
+  the problem wants distinct <strong>values</strong>, not distinct positions.</p>
+
+  <p>The first row shows the same thing more subtly. The array has two <code>-1</code>s. The triplet
+  <code>[-1, 0, 1]</code> can be built using either of them, so a careless solution reports it twice.</p>
+
+  <div class="note warn">
+    <span class="t">What this problem is really testing</span>
+    <p>Not &ldquo;can you find triplets&rdquo;. It is testing whether you can eliminate duplicates
+    <em>without</em> resorting to stringifying every triplet and stuffing it in a Set. That fallback
+    works and interviewers accept it, but the clean answer &mdash; sort, then skip equal neighbours
+    &mdash; is what separates a good answer from a passing one.</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <p>Three numbers, so three nested loops. Each one starts past the one above it so no element is
+  reused and no combination is tried twice.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; brute force</span></div>
+<pre><code>function threeSumBrute(nums) {
+  const found = new Set();      // to kill duplicate triplets
+  const result = [];
+
+  for (let i = 0; i &lt; nums.length; i++) {
+    for (let j = i + 1; j &lt; nums.length; j++) {
+      for (let k = j + 1; k &lt; nums.length; k++) {
+
+        if (nums[i] + nums[j] + nums[k] === 0) {
+          // sort the three values so [-1,0,1] and [0,1,-1] look the same
+          const triplet = [nums[i], nums[j], nums[k]].sort((a, b) =&gt; a - b);
+          const key = triplet.join(',');
+
+          if (!found.has(key)) {
+            found.add(key);
+            result.push(triplet);
+          }
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+console.log(threeSumBrute([-1, 0, 1, 2, -1, -4]));   // [[-1,-1,2], [-1,0,1]]
+console.log(threeSumBrute([0, 1, 1]));               // []
+console.log(threeSumBrute([0, 0, 0, 0]));            // [[0,0,0]]</code></pre>
+  </div>
+
+  <p>Notice the two lines doing the de-duplication: sort the triplet into a canonical order, turn it
+  into a string, and use that string as a Set key. That is the &ldquo;stringify&rdquo; fallback, and it
+  is worth knowing because it works on <em>any</em> version of this problem. It is just not the
+  clean answer.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow</h2>
+
+  <p>Three nested loops is <strong>O(n&sup3;)</strong>. With 1,000 numbers that is roughly 166 million
+  triplets; with 3,000 it is 4.5 billion and you have lost.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 600;                       // deliberately small -- O(n^3) is brutal
+const nums = [];
+for (let i = 0; i &lt; N; i++) nums.push(Math.floor(Math.random() * 200) - 100);
+
+function brute(a) {
+  const seen = new Set(), out = [];
+  for (let i = 0; i &lt; a.length; i++)
+    for (let j = i + 1; j &lt; a.length; j++)
+      for (let k = j + 1; k &lt; a.length; k++)
+        if (a[i] + a[j] + a[k] === 0) {
+          const key = [a[i], a[j], a[k]].sort((x, y) =&gt; x - y).join(',');
+          if (!seen.has(key)) { seen.add(key); out.push(key); }
+        }
+  return out.length;
+}
+
+function twoPointer(a) {
+  const s = [...a].sort((x, y) =&gt; x - y), out = [];
+  for (let i = 0; i &lt; s.length - 2; i++) {
+    if (i &gt; 0 &amp;&amp; s[i] === s[i - 1]) continue;
+    let lo = i + 1, hi = s.length - 1;
+    while (lo &lt; hi) {
+      const sum = s[i] + s[lo] + s[hi];
+      if (sum &lt; 0) lo++;
+      else if (sum &gt; 0) hi--;
+      else {
+        out.push([s[i], s[lo], s[hi]]);
+        while (lo &lt; hi &amp;&amp; s[lo] === s[lo + 1]) lo++;
+        while (lo &lt; hi &amp;&amp; s[hi] === s[hi - 1]) hi--;
+        lo++; hi--;
+      }
+    }
+  }
+  return out.length;
+}
+
+let t = performance.now();
+const a = brute(nums);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const b = twoPointer(nums);
+const fastMs = performance.now() - t;
+
+console.log('brute O(n^3) :', a, 'triplets in', bruteMs.toFixed(1) + ' ms');
+console.log('sort + 2ptr  :', b, 'triplets in', fastMs.toFixed(2) + ' ms');
+console.log('same count:', a === b);
+console.log('and this is only ' + N + ' numbers.');</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; it is Two Sum underneath</h2>
+
+  <p>Here is the reduction, and it is the single most valuable idea on this page:</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p>Pick one number and hold it still. Now you need <strong>two</strong> numbers from the rest that
+    add up to <code>-fixed</code>. That is Two Sum. A three-number problem just became a
+    two-number problem, n times over.</p>
+  </div>
+
+  <p>So the shape is: loop over every choice of the first number (n times), and solve Two Sum on
+  what remains. Two Sum with a hash map is O(n), so the total is <strong>n &times; n = O(n&sup2;)</strong>
+  &mdash; a whole factor of n better than brute force.</p>
+
+  <h3>Why sort first?</h3>
+
+  <p>You could use the hash-map Two Sum inside the loop and get O(n&sup2;) without sorting. It works.
+  But then you are back to stringify-and-Set for duplicates, because the array is in a random order
+  and equal values are scattered.</p>
+
+  <p><strong>Sorting puts every equal value next to its twin.</strong> Once <code>[-1,-1,0,1,2]</code> is
+  in order, &ldquo;have I already used this value as my first number?&rdquo; becomes
+  <code>nums[i] === nums[i-1]</code> &mdash; a single comparison against your neighbour. That is the
+  whole reason to sort, and it is worth saying out loud in an interview.</p>
+
+  <p>Sorting buys a second thing too. On a sorted array, Two Sum can be solved with
+  <strong>two pointers instead of a hash map</strong>, using O(1) space:</p>
+
+  <div class="trace">
+<pre>looking for two numbers that add to TARGET, in a sorted array
+
+     -4  -1  -1   0   1   2
+     lo                   hi
+
+  sum = nums[lo] + nums[hi]
+
+  sum too SMALL  ->  lo++     (the only way to get a bigger sum
+                               is to take a bigger small number)
+  sum too BIG    ->  hi--     (the only way to get a smaller sum
+                               is to take a smaller big number)
+  sum EXACT      ->  record it, then move BOTH
+</pre>
+  </div>
+
+  <p>Each move is forced. If the sum is too small, no smaller <code>hi</code> can help, so
+  <code>lo</code> must rise. That is why the two pointers never need to back up, and why the scan is
+  O(n).</p>
+
+  <h3>One free optimisation</h3>
+
+  <p>After sorting, if <code>nums[i] &gt; 0</code> then the two numbers after it are also positive, so
+  the sum can never be zero. Break out entirely. On arrays that are mostly positive this skips
+  almost all the work.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace it by hand</h2>
+
+  <p><code>nums = [-1, 0, 1, 2, -1, -4]</code>. First, sort:
+  <code>[-4, -1, -1, 0, 1, 2]</code>.</p>
+
+  <div class="trace">
+<pre>sorted:   -4  -1  -1   0   1   2
+index:     0   1   2   3   4   5
+
+i=0  fixed = -4      need lo+hi = 4
+     lo=1 hi=5   -1 + 2 = 1  &lt;  4   too small -> lo++
+     lo=2 hi=5   -1 + 2 = 1  &lt;  4   too small -> lo++
+     lo=3 hi=5    0 + 2 = 2  &lt;  4   too small -> lo++
+     lo=4 hi=5    1 + 2 = 3  &lt;  4   too small -> lo++
+     lo=5 hi=5   pointers met, stop.  nothing found
+
+i=1  fixed = -1      need lo+hi = 1
+     lo=2 hi=5   -1 + 2 = 1  ==  1   FOUND  [-1, -1, 2]
+                 skip duplicates, then lo++ hi--
+     lo=3 hi=4    0 + 1 = 1  ==  1   FOUND  [-1, 0, 1]
+                 lo++ hi--  ->  lo=4 hi=3, crossed, stop
+
+i=2  fixed = -1   ...but nums[2] === nums[1]
+     SKIP -- we already used -1 as the fixed number, and it would
+     rediscover exactly the same two triplets
+
+i=3  fixed = 0    0 > 0?  no, keep going.   need lo+hi = 0
+     lo=4 hi=5    1 + 2 = 3  >  0   too big -> hi--
+     lo=4 hi=4   met, stop
+
+i=4  fixed = 1    1 > 0  ->  BREAK. Everything from here is positive.
+
+answer: [[-1, -1, 2], [-1, 0, 1]]
+</pre>
+  </div>
+
+  <p>Two different duplicate-skips happen in that trace and they do different jobs:</p>
+
+  <ul>
+    <li><strong>The <code>i</code> skip</strong> (at <code>i=2</code>) stops the same value being used as
+    the fixed number twice.</li>
+    <li><strong>The <code>lo</code>/<code>hi</code> skips</strong> (right after a match) stop the same pair
+    being reported twice when the array has runs like <code>[0, 0, 0, 0]</code>.</li>
+  </ul>
+
+  <p>You need both. Leaving out either one produces duplicates, and only on certain inputs, which is
+  why this bug survives testing.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function threeSumExplained(nums) {
+  const s = [...nums].sort((a, b) =&gt; a - b);
+  const out = [];
+
+  console.log('sorted:', s);
+  console.log('');
+
+  for (let i = 0; i &lt; s.length - 2; i++) {
+    if (s[i] &gt; 0) { console.log('i=' + i + '  fixed=' + s[i] + '  > 0, BREAK'); break; }
+    if (i &gt; 0 &amp;&amp; s[i] === s[i - 1]) { console.log('i=' + i + '  fixed=' + s[i] + '  same as previous, SKIP'); continue; }
+
+    let lo = i + 1, hi = s.length - 1;
+    console.log('i=' + i + '  fixed=' + s[i] + '   need lo+hi = ' + (-s[i]));
+
+    while (lo &lt; hi) {
+      const sum = s[i] + s[lo] + s[hi];
+
+      if (sum &lt; 0) {
+        console.log('     lo=' + lo + ' hi=' + hi + '  sum ' + sum + ' too small -> lo++');
+        lo++;
+      } else if (sum &gt; 0) {
+        console.log('     lo=' + lo + ' hi=' + hi + '  sum ' + sum + ' too big   -> hi--');
+        hi--;
+      } else {
+        console.log('     lo=' + lo + ' hi=' + hi + '  FOUND [' + s[i] + ', ' + s[lo] + ', ' + s[hi] + ']');
+        out.push([s[i], s[lo], s[hi]]);
+        while (lo &lt; hi &amp;&amp; s[lo] === s[lo + 1]) lo++;
+        while (lo &lt; hi &amp;&amp; s[hi] === s[hi - 1]) hi--;
+        lo++; hi--;
+      }
+    }
+  }
+
+  console.log('');
+  return out;
+}
+
+console.log('ANSWER:', threeSumExplained([-1, 0, 1, 2, -1, -4]));
+console.log('=========================================');
+console.log('ANSWER:', threeSumExplained([0, 0, 0, 0]));</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <p>Sorting by hand would be a whole page of its own, so the honest version here writes the
+  <em>algorithm</em> without built-ins and calls a hand-written insertion sort to get the array in
+  order. Everything else is loops and comparisons.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1 &mdash; hand-written sort, hand-written scan</span></div>
+<pre><code>function insertionSort(arr) {
+  // simple O(n^2) sort -- fine for teaching, not for production
+  for (let i = 1; i &lt; arr.length; i++) {
+    const value = arr[i];
+    let j = i - 1;
+    while (j &gt;= 0 &amp;&amp; arr[j] &gt; value) {
+      arr[j + 1] = arr[j];
+      j--;
+    }
+    arr[j + 1] = value;
+  }
+  return arr;
+}
+
+function threeSumManual(nums) {
+  // copy so we do not mutate the caller's array
+  const s = [];
+  for (let i = 0; i &lt; nums.length; i++) s[i] = nums[i];
+  insertionSort(s);
+
+  const out = [];
+
+  for (let i = 0; i &lt; s.length - 2; i++) {
+
+    if (s[i] &gt; 0) break;                       // nothing left can reach zero
+    if (i &gt; 0 &amp;&amp; s[i] === s[i - 1]) continue;  // this fixed value is already done
+
+    let lo = i + 1;
+    let hi = s.length - 1;
+
+    while (lo &lt; hi) {
+      const sum = s[i] + s[lo] + s[hi];
+
+      if (sum &lt; 0) {
+        lo++;                                  // need a bigger sum
+      } else if (sum &gt; 0) {
+        hi--;                                  // need a smaller sum
+      } else {
+        out[out.length] = [s[i], s[lo], s[hi]];
+
+        // walk past every copy of the value we just used
+        while (lo &lt; hi &amp;&amp; s[lo] === s[lo + 1]) lo++;
+        while (lo &lt; hi &amp;&amp; s[hi] === s[hi - 1]) hi--;
+
+        lo++;
+        hi--;
+      }
+    }
+  }
+
+  return out;
+}
+
+console.log(threeSumManual([-1, 0, 1, 2, -1, -4]));   // [[-1,-1,2], [-1,0,1]]
+console.log(threeSumManual([0, 1, 1]));               // []
+console.log(threeSumManual([0, 0, 0]));               // [[0,0,0]]
+console.log(threeSumManual([0, 0, 0, 0]));            // [[0,0,0]]
+console.log(threeSumManual([-2, 0, 1, 1, 2]));        // [[-2,0,2], [-2,1,1]]
+console.log(threeSumManual([1, 2, 3]));               // []</code></pre>
+  </div>
+
+  <p>Read the two inner <code>while</code> loops carefully. They advance <code>lo</code> only while the
+  <em>next</em> value equals the current one, so after the loop <code>lo</code> sits on the
+  <em>last</em> copy. The <code>lo++</code> that follows then steps onto a genuinely new value. Writing
+  it as <code>while (s[lo] === s[lo+1]) lo++;</code> followed by <code>lo++</code> is easier to get
+  right than trying to do it in one step.</p>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; the one to write in an interview</span></div>
+<pre><code>function threeSum(nums) {
+  const s = [...nums].sort((a, b) =&gt; a - b);   // NOTE the comparator
+  const result = [];
+
+  for (let i = 0; i &lt; s.length - 2; i++) {
+    if (s[i] &gt; 0) break;
+    if (i &gt; 0 &amp;&amp; s[i] === s[i - 1]) continue;
+
+    let lo = i + 1, hi = s.length - 1;
+
+    while (lo &lt; hi) {
+      const sum = s[i] + s[lo] + s[hi];
+
+      if (sum &lt; 0) lo++;
+      else if (sum &gt; 0) hi--;
+      else {
+        result.push([s[i], s[lo], s[hi]]);
+        while (lo &lt; hi &amp;&amp; s[lo] === s[lo + 1]) lo++;
+        while (lo &lt; hi &amp;&amp; s[hi] === s[hi - 1]) hi--;
+        lo++;
+        hi--;
+      }
+    }
+  }
+
+  return result;
+}
+
+console.log(threeSum([-1, 0, 1, 2, -1, -4]));   // [[-1,-1,2], [-1,0,1]]
+console.log(threeSum([-4, -2, -2, -2, 0, 1, 2, 2, 2, 3, 3, 4, 4, 6, 6]));
+console.log(threeSum([]));                      // []
+console.log(threeSum([0]));                     // []</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="t">The comparator is not optional</span>
+    <p><code>[10, 9, 1].sort()</code> gives <code>[1, 10, 9]</code>. JavaScript&rsquo;s default sort
+    converts everything to <strong>strings</strong> and sorts alphabetically, so <code>"10"</code>
+    comes before <code>"9"</code>. Every numeric sort needs
+    <code>.sort((a, b) =&gt; a - b)</code>. Forgetting it silently ruins this entire algorithm,
+    because the two-pointer logic depends on the array actually being in numeric order.</p>
+  </div>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">see it fail</span></div>
+<pre><code>console.log([10, 9, 1, 100, 20].sort());              // [1, 10, 100, 20, 9]
+console.log([10, 9, 1, 100, 20].sort((a, b) =&gt; a - b)); // [1, 9, 10, 20, 100]
+
+// And note: sort() mutates. This is why Version 2 starts with [...nums].
+const original = [3, 1, 2];
+const sorted = original.sort((a, b) =&gt; a - b);
+console.log('original is now:', original);   // [1,2,3] -- the caller's array changed
+console.log('same object?', original === sorted);   // true</code></pre>
+  </div>
+
+  <h3>The hash-map version, without sorting</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">alternative &mdash; Two Sum inside a loop</span></div>
+<pre><code>function threeSumHash(nums) {
+  const found = new Set();
+  const result = [];
+
+  for (let i = 0; i &lt; nums.length - 2; i++) {
+    const seen = new Set();
+    const target = 0 - nums[i];   // 0 - x, not -x: avoids producing -0
+
+    for (let j = i + 1; j &lt; nums.length; j++) {
+      const need = target - nums[j];
+
+      if (seen.has(need)) {
+        const triplet = [nums[i], need, nums[j]].sort((a, b) =&gt; a - b);
+        const key = triplet.join(',');
+        if (!found.has(key)) { found.add(key); result.push(triplet); }
+      }
+
+      seen.add(nums[j]);
+    }
+  }
+
+  return result;
+}
+
+console.log(threeSumHash([-1, 0, 1, 2, -1, -4]));   // [[-1,0,1], [-1,-1,2]]
+console.log(threeSumHash([0, 0, 0, 0]));            // [[0,0,0]]
+
+// Also O(n^2) time, and it makes the "it is just Two Sum" reduction
+// impossible to miss. But it needs O(n) space AND the stringify-Set
+// for duplicates, so the sorted two-pointer version is the better
+// answer. Know this one so you can explain why you did not use it.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Space</th></tr></thead>
+      <tbody>
+        <tr><td>Three loops</td><td class="mono">O(n&sup3;)</td><td class="mono">O(triplets)</td></tr>
+        <tr><td>Loop + hash Two Sum</td><td class="mono">O(n&sup2;)</td><td class="mono">O(n)</td></tr>
+        <tr><td><strong>Sort + two pointers</strong></td><td class="mono">O(n&sup2;)</td><td class="mono">O(1) extra</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Where does O(n&sup2;) come from? Sorting is O(n log n) &mdash; done once, at the start. Then the
+  outer loop runs n times and each inner two-pointer scan is O(n), giving n&sup2;. Since n&sup2; grows
+  faster than n log n, the sort disappears into the total. Say that explicitly: interviewers listen
+  for whether you can identify which term dominates.</p>
+
+  <p>&ldquo;O(1) extra space&rdquo; assumes you are allowed to sort in place. If you copy first, as the
+  code here does to be a good neighbour, it is O(n). Either answer is fine as long as you say which
+  one you mean.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Brute force is O(n&sup3;). I sort first, which is O(n log n) and gets absorbed. Then I fix
+    each number and solve Two Sum on the remainder with two pointers, since the array is sorted
+    &mdash; that is O(n) per fixed number, so O(n&sup2;) overall with O(1) extra space. Sorting also
+    makes de-duplication easy: equal values are adjacent, so I skip a fixed number equal to its
+    predecessor, and after recording a triplet I skip past equal values on both pointers.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Forgetting the <code>i</code> duplicate skip</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; repeats triplets</span></div>
+<pre><code>function broken(nums) {
+  const s = [...nums].sort((a, b) =&gt; a - b);
+  const out = [];
+  for (let i = 0; i &lt; s.length - 2; i++) {
+    // missing:  if (i > 0 && s[i] === s[i-1]) continue;
+    let lo = i + 1, hi = s.length - 1;
+    while (lo &lt; hi) {
+      const sum = s[i] + s[lo] + s[hi];
+      if (sum &lt; 0) lo++;
+      else if (sum &gt; 0) hi--;
+      else {
+        out.push([s[i], s[lo], s[hi]]);
+        while (lo &lt; hi &amp;&amp; s[lo] === s[lo + 1]) lo++;
+        while (lo &lt; hi &amp;&amp; s[hi] === s[hi - 1]) hi--;
+        lo++; hi--;
+      }
+    }
+  }
+  return out;
+}
+
+console.log(broken([-1, 0, 1, 2, -1, -4]));
+// [[-1,-1,2], [-1,0,1], [-1,0,1]]   &lt;-- [-1,0,1] appears TWICE
+
+// Sorted, the array is [-4,-1,-1,0,1,2]. i=1 and i=2 both fix a -1,
+// and both find [-1,0,1].</code></pre>
+  </div>
+
+  <h3>2. Forgetting the pointer duplicate skips</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; repeats on runs of equal values</span></div>
+<pre><code>function broken(nums) {
+  const s = [...nums].sort((a, b) =&gt; a - b);
+  const out = [];
+  for (let i = 0; i &lt; s.length - 2; i++) {
+    if (i &gt; 0 &amp;&amp; s[i] === s[i - 1]) continue;
+    let lo = i + 1, hi = s.length - 1;
+    while (lo &lt; hi) {
+      const sum = s[i] + s[lo] + s[hi];
+      if (sum &lt; 0) lo++;
+      else if (sum &gt; 0) hi--;
+      else {
+        out.push([s[i], s[lo], s[hi]]);
+        lo++; hi--;              // no skipping -- bug
+      }
+    }
+  }
+  return out;
+}
+
+console.log(broken([0, 0, 0, 0]));           // [[0,0,0], [0,0,0]]  duplicated
+console.log(broken([-2, 0, 0, 2, 2]));       // [[-2,0,2], [-2,0,2]]  duplicated</code></pre>
+  </div>
+
+  <h3>3. <code>sort()</code> without a comparator</h3>
+
+  <p>Covered above, and it is the single most common JavaScript-specific failure in this problem.
+  <code>[-1, 0, 1, 2, -1, -4].sort()</code> gives <code>[-1, -1, -4, 0, 1, 2]</code> &mdash; note the
+  <code>-4</code> in the middle. The two-pointer logic then produces nonsense.</p>
+
+  <h3>4. Looping <code>i</code> to the end</h3>
+
+  <p><code>for (let i = 0; i &lt; s.length; i++)</code> leaves fewer than two elements for
+  <code>lo</code> and <code>hi</code> on the last two rounds. It does not crash &mdash; the
+  <code>while (lo &lt; hi)</code> simply never runs &mdash; but stopping at
+  <code>s.length - 2</code> says what you mean.</p>
+
+  <h3>5. Mutating the caller&rsquo;s array</h3>
+
+  <p><code>nums.sort(...)</code> reorders the array that was passed in. If the caller needed the
+  original order, you have just broken them, silently, from inside a function that looks read-only.
+  <code>[...nums].sort(...)</code> costs one copy and removes the whole class of bug.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Three Sum Closest.</strong> Return the triplet sum nearest to a target. Same scan, but
+    instead of only reacting to an exact match you track the smallest
+    <code>Math.abs(sum - target)</code> seen. Easier than Three Sum, because duplicates stop
+    mattering.</li>
+    <li><strong>Four Sum.</strong> Two nested fixed loops, then the same two-pointer scan &mdash;
+    O(n&sup3;). The duplicate skipping now has to happen at three levels. Do it, carefully.</li>
+    <li><strong>Three Sum with a target other than zero.</strong> One character changes. Make sure you
+    know which.</li>
+    <li><strong>Count triplets instead of listing them.</strong> With runs of equal values, counting is
+    harder than listing: <code>[0,0,0,0]</code> has four position-triplets but one value-triplet.
+    Decide which the question wants before you write anything.</li>
+    <li><strong>Two Sum on a sorted array.</strong> Go back and write just the two-pointer core on its
+    own. It is ten lines and it is the engine inside this whole page.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p>Two things. First, <strong>reduce k-sum to (k&minus;1)-sum</strong> by fixing one number &mdash;
+    that ladder goes all the way up. Second, <strong>sorting is a setup move</strong>: it costs
+    O(n log n) once and then hands you two things for free, adjacency of equal values (easy
+    de-duplication) and monotonicity (two pointers that never back up). When a problem involves
+    duplicates or &ldquo;find a pair that sums to&hellip;&rdquo;, ask whether sorting first makes the rest
+    trivial.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="01-two-sum.html">&larr; Two Sum</a>
+  <a href="07-merge-intervals.html">Next: Merge Intervals &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>

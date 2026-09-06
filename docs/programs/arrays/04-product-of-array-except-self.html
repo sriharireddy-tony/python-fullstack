@@ -1,0 +1,619 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product of Array Except Self</title>
+<meta name="description" content="Left products times right products: the two-pass trick that removes a nested loop, taught from scratch.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;family=Outfit:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="../index.html">&larr; All problems</a>
+  <span class="spacer"></span>
+  <button class="themebtn" type="button">Dark</button>
+</nav>
+
+<div class="wrap">
+
+<header class="page">
+  <p class="eyebrow">Arrays &middot; Problem 04</p>
+  <h1>Product of Array Except Self</h1>
+  <p class="standfirst">The problem that bans the obvious tool. You are not allowed to divide, which
+  forces you to discover a genuinely useful pattern: <em>everything except me = everything on my left,
+  times everything on my right</em>.</p>
+</header>
+
+<!-- ==================================================================== 1 -->
+<section class="step">
+  <span class="step-n">Step 1</span>
+  <h2>The problem</h2>
+
+  <p>Given an array, return a new array where each position holds the product of
+  <strong>all the other</strong> numbers &mdash; everything except the one standing there.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Input</th><th>Answer</th><th>Working</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[1, 2, 3, 4]</td><td class="mono">[24, 12, 8, 6]</td><td>2&times;3&times;4, 1&times;3&times;4, 1&times;2&times;4, 1&times;2&times;3</td></tr>
+        <tr><td class="mono">[2, 3, 4, 5]</td><td class="mono">[60, 40, 30, 24]</td><td>same idea</td></tr>
+        <tr><td class="mono">[1, 0]</td><td class="mono">[0, 1]</td><td>a zero flattens everything except its own slot</td></tr>
+        <tr><td class="mono">[0, 0, 3]</td><td class="mono">[0, 0, 0]</td><td>two zeros flatten everything</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Two constraints come with it, and both are there to stop you taking a shortcut:</p>
+
+  <ul>
+    <li><strong>No division.</strong> Which kills the one-liner everybody thinks of first.</li>
+    <li><strong>O(n) time.</strong> Which kills the nested loop.</li>
+  </ul>
+
+  <div class="note warn">
+    <span class="t">Why division is banned &mdash; and it is not arbitrary</span>
+    <p>The obvious idea is: multiply everything once, then divide by <code>nums[i]</code> at each
+    position. It is elegant and it explodes the moment the array contains a <strong>zero</strong>.
+    <code>totalProduct</code> becomes 0, and every answer becomes <code>0 / nums[i]</code>, or worse
+    <code>0 / 0 = NaN</code>. You would then need one special case for exactly one zero and another
+    for two or more zeros. The ban is the interviewer saving you from writing that.</p>
+  </div>
+
+  <p>Real uses: &ldquo;each region&rsquo;s share of everyone else&rsquo;s traffic&rdquo;, &ldquo;leave-one-out&rdquo;
+  scoring, and any &ldquo;everything but this one&rdquo; aggregate. The pattern generalises far past
+  multiplication.</p>
+</section>
+
+<!-- ==================================================================== 2 -->
+<section class="step">
+  <span class="step-n">Step 2</span>
+  <h2>Think first &mdash; the obvious answer</h2>
+
+  <p>By hand you would stand on each position and multiply everything else together. Two loops:
+  the outer one picks the position, the inner one multiplies every <em>other</em> number.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Version 0 &mdash; brute force</span></div>
+<pre><code>function productExceptSelfBrute(nums) {
+  const result = [];
+
+  for (let i = 0; i &lt; nums.length; i++) {
+    let product = 1;                    // start at 1, the identity for multiplication
+
+    for (let j = 0; j &lt; nums.length; j++) {
+      if (j === i) continue;            // skip myself -- that is the whole rule
+      product *= nums[j];
+    }
+
+    result[i] = product;
+  }
+
+  return result;
+}
+
+console.log(productExceptSelfBrute([1, 2, 3, 4]));   // [24, 12, 8, 6]
+console.log(productExceptSelfBrute([2, 3, 4, 5]));   // [60, 40, 30, 24]
+console.log(productExceptSelfBrute([1, 0]));         // [0, 1]
+console.log(productExceptSelfBrute([0, 0, 3]));      // [0, 0, 0]</code></pre>
+  </div>
+
+  <p>Note <code>let product = 1</code>. Starting a sum at 0 and a product at 1 is the same idea:
+  the value that changes nothing. Start a product at 0 and every answer is 0.</p>
+</section>
+
+<!-- ==================================================================== 3 -->
+<section class="step">
+  <span class="step-n">Step 3</span>
+  <h2>Why it is slow &mdash; and what it repeats</h2>
+
+  <p>n positions, each doing n multiplications: <strong>n&sup2;</strong>. But look closer at
+  <em>what</em> it repeats, because that is where the fix hides.</p>
+
+  <div class="trace">
+<pre>nums = [1, 2, 3, 4]
+
+position 0:  skip 1,  multiply  2 x 3 x 4
+position 1:  skip 2,  multiply  1     x 3 x 4
+position 2:  skip 3,  multiply  1 x 2     x 4
+position 3:  skip 4,  multiply  1 x 2 x 3
+
+         ^^^^^^^^^^^          ^^^^^^^^^^^
+         the left part        the right part
+         is recomputed        is recomputed
+         from scratch         from scratch
+         every single row     every single row
+</pre>
+  </div>
+
+  <p>Every row rebuilds &ldquo;the product of everything to my left&rdquo; from position 0, even though
+  the row above it already worked out almost the same thing. Same waste as always.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">Timing demo</span></div>
+<pre><code>const N = 20000;
+const nums = [];
+for (let i = 0; i &lt; N; i++) nums.push((i % 9) + 1);   // 1..9, never zero
+
+function brute(a) {
+  const out = [];
+  for (let i = 0; i &lt; a.length; i++) {
+    let p = 1;
+    for (let j = 0; j &lt; a.length; j++) if (j !== i) p *= a[j];
+    out[i] = p;
+  }
+  return out;
+}
+
+function twoPass(a) {
+  const out = new Array(a.length).fill(1);
+  let running = 1;
+  for (let i = 0; i &lt; a.length; i++) { out[i] = running; running *= a[i]; }
+  running = 1;
+  for (let i = a.length - 1; i &gt;= 0; i--) { out[i] *= running; running *= a[i]; }
+  return out;
+}
+
+let t = performance.now();
+const x = brute(nums);
+const bruteMs = performance.now() - t;
+
+t = performance.now();
+const y = twoPass(nums);
+const fastMs = performance.now() - t;
+
+console.log('brute force : ' + bruteMs.toFixed(1) + ' ms');
+console.log('two passes  : ' + fastMs.toFixed(2) + ' ms');
+console.log('first 4 match:', x[0] === y[0] &amp;&amp; x[1] === y[1] &amp;&amp; x[2] === y[2] &amp;&amp; x[3] === y[3]);</code></pre>
+  </div>
+
+  <p>(The numbers go astronomically large and turn into <code>Infinity</code> at this size &mdash;
+  that is fine, we are timing the work, not trusting the values.)</p>
+</section>
+
+<!-- ==================================================================== 4 -->
+<section class="step">
+  <span class="step-n">Step 4</span>
+  <h2>The better idea &mdash; split at the gap</h2>
+
+  <p>Look again at that trace. Each row is a product with a hole punched in it. And a product with a
+  hole in it is really <strong>two</strong> products stuck together:</p>
+
+  <div class="note key">
+    <span class="t">The unlock</span>
+    <p><strong>everything except me = (everything to my left) &times; (everything to my right)</strong></p>
+  </div>
+
+  <p>Draw it for <code>[1, 2, 3, 4]</code> at position 2:</p>
+
+  <div class="trace">
+<pre>      index:     0     1    [2]    3
+      value:     1     2    [3]    4
+                 \_____/           |
+                 left = 1x2 = 2    |
+                                  \|/
+                          right = 4
+
+      answer[2] = left x right = 2 x 4 = 8
+</pre>
+  </div>
+
+  <p>And here is the payoff: <em>left</em> for position 2 is just <em>left</em> for position 1
+  multiplied by <code>nums[1]</code>. Each one is one step past the previous one. So a single sweep
+  left-to-right can compute all the left products, and a single sweep right-to-left can compute all
+  the right products. Two passes, no nesting.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>index</th><th class="num">0</th><th class="num">1</th><th class="num">2</th><th class="num">3</th></tr></thead>
+      <tbody>
+        <tr><td>value</td><td class="num">1</td><td class="num">2</td><td class="num">3</td><td class="num">4</td></tr>
+        <tr><td>left products</td><td class="num">1</td><td class="num">1</td><td class="num">2</td><td class="num">6</td></tr>
+        <tr><td>right products</td><td class="num">24</td><td class="num">12</td><td class="num">4</td><td class="num">1</td></tr>
+        <tr><td><strong>left &times; right</strong></td><td class="num"><strong>24</strong></td><td class="num"><strong>12</strong></td><td class="num"><strong>8</strong></td><td class="num"><strong>6</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Read the ends carefully, because this is where the off-by-one bugs live. <code>left[0] = 1</code>:
+  there is nothing to the left of position 0, and the product of nothing is 1. Same for
+  <code>right[3]</code>. Those two 1s are not padding &mdash; they are the mathematically correct
+  answer for &ldquo;multiply an empty set of numbers&rdquo;.</p>
+
+  <p>Notice too that the zero problem simply disappears. Nothing is divided, so a zero just
+  multiplies through like any other number and every answer comes out right without a single
+  special case.</p>
+</section>
+
+<!-- ==================================================================== 5 -->
+<section class="step">
+  <span class="step-n">Step 5</span>
+  <h2>Dry run &mdash; trace both passes</h2>
+
+  <p><code>nums = [1, 2, 3, 4]</code>. Pass one goes left to right and writes the left product into
+  the output before updating the running total.</p>
+
+  <div class="trace">
+<pre>PASS 1  (left to right)     running = 1     out = [_, _, _, _]
+
+i=0   out[0] = running = 1        then  running = 1 x nums[0] = 1 x 1 = 1
+      out = [1, _, _, _]
+i=1   out[1] = running = 1        then  running = 1 x nums[1] = 1 x 2 = 2
+      out = [1, 1, _, _]
+i=2   out[2] = running = 2        then  running = 2 x nums[2] = 2 x 3 = 6
+      out = [1, 1, 2, _]
+i=3   out[3] = running = 6        then  running = 6 x nums[3] = 6 x 4 = 24
+      out = [1, 1, 2, 6]          &lt;-- every left product
+</pre>
+  </div>
+
+  <p>Pass two goes right to left and <em>multiplies into</em> what is already there.</p>
+
+  <div class="trace">
+<pre>PASS 2  (right to left)     running = 1     out = [1, 1, 2, 6]
+
+i=3   out[3] = 6 x running = 6 x 1  = 6     then running = 1 x nums[3] = 4
+      out = [1, 1, 2, 6]
+i=2   out[2] = 2 x running = 2 x 4  = 8     then running = 4 x nums[2] = 12
+      out = [1, 1, 8, 6]
+i=1   out[1] = 1 x running = 1 x 12 = 12    then running = 12 x nums[1] = 24
+      out = [1, 12, 8, 6]
+i=0   out[0] = 1 x running = 1 x 24 = 24    then running = 24 x nums[0] = 24
+      out = [24, 12, 8, 6]        &lt;-- the answer
+</pre>
+  </div>
+
+  <p>The rhythm in both passes is identical and it is worth saying out loud:
+  <strong>write first, then update.</strong> If you update <code>running</code> before writing, you
+  include yourself in your own answer &mdash; which is exactly what the problem forbids.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag">the algorithm, narrating itself</span></div>
+<pre><code>function productExplained(nums) {
+  const out = new Array(nums.length).fill(1);
+  console.log('nums =', nums);
+  console.log('');
+  console.log('PASS 1  left to right');
+
+  let running = 1;
+  for (let i = 0; i &lt; nums.length; i++) {
+    out[i] = running;
+    console.log('  i=' + i + '  out[' + i + '] = ' + running +
+                '   then running = ' + running + ' x ' + nums[i] + ' = ' + (running * nums[i]) +
+                '   out = [' + out.join(', ') + ']');
+    running *= nums[i];
+  }
+
+  console.log('');
+  console.log('PASS 2  right to left');
+
+  running = 1;
+  for (let i = nums.length - 1; i &gt;= 0; i--) {
+    const before = out[i];
+    out[i] *= running;
+    console.log('  i=' + i + '  out[' + i + '] = ' + before + ' x ' + running + ' = ' + out[i] +
+                '   then running = ' + (running * nums[i]) +
+                '   out = [' + out.join(', ') + ']');
+    running *= nums[i];
+  }
+
+  console.log('');
+  return out;
+}
+
+console.log('ANSWER:', productExplained([1, 2, 3, 4]));
+console.log('=====================================');
+console.log('ANSWER:', productExplained([1, 0, 3]));   // zeros need no special case</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 6 -->
+<section class="step">
+  <span class="step-n">Step 6</span>
+  <h2>Version 1 &mdash; without built-in methods</h2>
+
+  <p>Written the clearest way first: two explicit helper arrays, one for the left products and one
+  for the right. Slower on memory, but you can see exactly what the table in Step 4 is.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1a &mdash; two helper arrays, loops only</span></div>
+<pre><code>function productExceptSelfArrays(nums) {
+  const n = nums.length;
+
+  const left  = [];     // left[i]  = product of everything BEFORE i
+  const right = [];     // right[i] = product of everything AFTER i
+  const out   = [];
+
+  // nothing is to the left of position 0
+  left[0] = 1;
+  for (let i = 1; i &lt; n; i++) {
+    left[i] = left[i - 1] * nums[i - 1];
+  }
+
+  // nothing is to the right of the last position
+  right[n - 1] = 1;
+  for (let i = n - 2; i &gt;= 0; i--) {
+    right[i] = right[i + 1] * nums[i + 1];
+  }
+
+  for (let i = 0; i &lt; n; i++) {
+    out[i] = left[i] * right[i];
+  }
+
+  return out;
+}
+
+console.log(productExceptSelfArrays([1, 2, 3, 4]));   // [24, 12, 8, 6]
+console.log(productExceptSelfArrays([2, 3, 4, 5]));   // [60, 40, 30, 24]
+console.log(productExceptSelfArrays([1, 0]));         // [0, 1]
+console.log(productExceptSelfArrays([5]));            // [1]</code></pre>
+  </div>
+
+  <p>Read the two index shifts. <code>left[i]</code> uses <code>nums[i - 1]</code>, not
+  <code>nums[i]</code> &mdash; because &ldquo;everything before me&rdquo; ends at the element before me.
+  Getting that wrong by one is the single most common bug in this problem, and the trace in Step 5
+  is how you catch it.</p>
+
+  <h3>Now collapse the helper arrays away</h3>
+
+  <p>The two extra arrays are not needed. Write the left products directly into the output, then
+  multiply the right products into it on the way back &mdash; using one variable instead of an
+  array.</p>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 1b &mdash; two passes, one output array</span></div>
+<pre><code>function productExceptSelfManual(nums) {
+  const n = nums.length;
+  const out = [];
+
+  // PASS 1: out[i] = product of everything to the LEFT of i
+  let running = 1;
+  for (let i = 0; i &lt; n; i++) {
+    out[i] = running;       // write first...
+    running *= nums[i];     // ...then include myself for the next position
+  }
+
+  // PASS 2: multiply in the product of everything to the RIGHT of i
+  running = 1;
+  for (let i = n - 1; i &gt;= 0; i--) {
+    out[i] *= running;      // write first...
+    running *= nums[i];     // ...then include myself
+  }
+
+  return out;
+}
+
+console.log(productExceptSelfManual([1, 2, 3, 4]));   // [24, 12, 8, 6]
+console.log(productExceptSelfManual([2, 3, 4, 5]));   // [60, 40, 30, 24]
+console.log(productExceptSelfManual([1, 0]));         // [0, 1]
+console.log(productExceptSelfManual([0, 0, 3]));      // [0, 0, 0]
+console.log(productExceptSelfManual([-1, 2, -3]));    // [-6, 3, -2]  negatives are fine
+console.log(productExceptSelfManual([5]));            // [1]</code></pre>
+  </div>
+
+  <p>Six lines of real work. Both passes are the identical two-line rhythm, once forwards and once
+  backwards. If you can hold &ldquo;write, then update&rdquo; in your head you can reproduce this from
+  nothing.</p>
+</section>
+
+<!-- ==================================================================== 7 -->
+<section class="step">
+  <span class="step-n">Step 7</span>
+  <h2>Version 2 &mdash; with built-in methods</h2>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag good">Version 2 &mdash; Array.fill and reduceRight</span></div>
+<pre><code>function productExceptSelf(nums) {
+  const out = new Array(nums.length).fill(1);
+
+  // left pass: reduce carries the running product for us
+  nums.reduce((running, value, i) =&gt; {
+    out[i] = running;
+    return running * value;
+  }, 1);
+
+  // right pass: reduceRight is reduce, walking backwards
+  nums.reduceRight((running, value, i) =&gt; {
+    out[i] *= running;
+    return running * value;
+  }, 1);
+
+  return out;
+}
+
+console.log(productExceptSelf([1, 2, 3, 4]));   // [24, 12, 8, 6]
+console.log(productExceptSelf([1, 0]));         // [0, 1]
+console.log(productExceptSelf([-1, 2, -3]));    // [-6, 3, -2]</code></pre>
+  </div>
+
+  <p><code>reduceRight</code> is the one genuinely useful built-in here &mdash; it is exactly
+  <code>reduce</code> with the loop running backwards, which saves you writing
+  <code>for (let i = n - 1; i &gt;= 0; i--)</code> and getting the bounds wrong. Note that we are using
+  <code>reduce</code> for its <em>side effect</em> of writing into <code>out</code> and throwing the
+  return value away, which some reviewers dislike. It is honest here because the running product is
+  genuinely a fold; if it bothers you, ship Version 1b.</p>
+
+  <div class="note">
+    <span class="t"><code>new Array(n)</code> vs <code>new Array(n).fill(1)</code></span>
+    <p><code>new Array(4)</code> makes an array with four <em>holes</em>, not four values. Holes are
+    skipped by <code>map</code>, <code>forEach</code> and <code>filter</code>, which produces baffling
+    bugs where your loop appears not to run. <code>.fill(1)</code> turns the holes into real values.
+    In Version 1 we sidestepped it by assigning <code>out[i]</code> directly, which fills holes as it
+    goes.</p>
+  </div>
+
+  <h3>The banned version, for completeness</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; the division shortcut</span></div>
+<pre><code>function withDivision(nums) {
+  const total = nums.reduce((a, b) =&gt; a * b, 1);
+  return nums.map(n =&gt; total / n);
+}
+
+console.log(withDivision([1, 2, 3, 4]));   // [24, 12, 8, 6]   works...
+console.log(withDivision([1, 0]));         // [0, NaN]         should be [0, 1]
+console.log(withDivision([0, 0, 3]));      // [NaN, NaN, 0]    should be [0, 0, 0]
+
+// The moment a zero appears, `total` is 0, so every answer becomes
+// 0 / nums[i] -- and 0 / 0 is NaN. Patching this needs a zero count
+// and two special cases: more code than just doing it properly.</code></pre>
+  </div>
+</section>
+
+<!-- ==================================================================== 8 -->
+<section class="step">
+  <span class="step-n">Step 8</span>
+  <h2>Complexity, in sentences</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solution</th><th>Time</th><th>Extra space</th><th>In words</th></tr></thead>
+      <tbody>
+        <tr><td>Brute force</td><td class="mono">O(n&sup2;)</td><td class="mono">O(1)</td><td>Every position multiplies every other.</td></tr>
+        <tr><td>Two helper arrays</td><td class="mono">O(n)</td><td class="mono">O(n)</td><td>Two extra arrays of size n.</td></tr>
+        <tr><td><strong>Two passes</strong></td><td class="mono">O(n)</td><td class="mono">O(1)</td><td>Two sweeps, one running variable each.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Two passes is still O(n).</strong> Beginners often think two loops means O(n&sup2;) &mdash;
+  it does not. Nested loops multiply; sequential loops <em>add</em>. n + n = 2n, and Big-O ignores
+  the constant, so 2n is O(n). You can make ten separate passes over an array and still be linear.</p>
+
+  <p>&ldquo;O(1) extra space&rdquo; needs one caveat and interviewers listen for it: the output array is
+  size n, so the total memory is obviously O(n). By convention the array you are required to return
+  does not count against your space complexity &mdash; only the <em>scratch</em> space does, and here
+  that is one variable. Say that out loud rather than claiming O(1) and hoping.</p>
+
+  <div class="note">
+    <span class="t">Say this in the interview</span>
+    <p>&ldquo;Division would be O(n) but breaks on zeros, and it is disallowed. Instead, the answer at
+    <em>i</em> is the product of everything left of <em>i</em> times everything right of <em>i</em>.
+    Both of those are running products, so I sweep left to right writing left-products into the
+    output, then right to left multiplying right-products in. O(n) time, O(1) extra space beyond the
+    output.&rdquo;</p>
+  </div>
+</section>
+
+<!-- ==================================================================== 9 -->
+<section class="step">
+  <span class="step-n">Step 9</span>
+  <h2>Mistakes people actually make</h2>
+
+  <h3>1. Update before write</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; includes itself</span></div>
+<pre><code>function broken(nums) {
+  const out = [];
+  let running = 1;
+  for (let i = 0; i &lt; nums.length; i++) {
+    running *= nums[i];    // updated FIRST -- bug
+    out[i] = running;
+  }
+  running = 1;
+  for (let i = nums.length - 1; i &gt;= 0; i--) {
+    running *= nums[i];
+    out[i] *= running;
+  }
+  return out;
+}
+
+console.log(broken([1, 2, 3, 4]));   // [24, 48, 72, 96]  every value counted twice
+
+// out[1] became (1x2) x (4x3x2) = 2 x 24 = 48.
+// The 2 appears in BOTH halves. Write the value, THEN update the
+// running product -- that gap is what excludes the current element.</code></pre>
+  </div>
+
+  <h3>2. Off-by-one in the helper arrays</h3>
+
+  <div class="codeblock" data-run>
+    <div class="codehead"><span class="tag wrong">Broken &mdash; wrong index</span></div>
+<pre><code>function broken(nums) {
+  const n = nums.length, left = [], right = [], out = [];
+  left[0] = 1;
+  for (let i = 1; i &lt; n; i++) left[i] = left[i - 1] * nums[i];   // should be nums[i-1]
+  right[n - 1] = 1;
+  for (let i = n - 2; i &gt;= 0; i--) right[i] = right[i + 1] * nums[i];  // should be nums[i+1]
+  for (let i = 0; i &lt; n; i++) out[i] = left[i] * right[i];
+  return out;
+}
+
+console.log(broken([1, 2, 3, 4]));   // [6, 12, 18, 24]  wrong
+
+// Every answer is 6x too big -- it is the product of the WHOLE array
+// (24) divided by nothing, because each element got counted in both
+// halves. "Everything before me" ends at i-1, not at i.
+// A single dry run on [1,2,3,4] catches this in ten seconds.</code></pre>
+  </div>
+
+  <h3>3. Starting the product at 0</h3>
+
+  <p><code>let product = 0</code> makes every answer 0, because anything times zero is zero.
+  Sums start at 0, products start at 1. The rule is: start at the value that does not change the
+  result.</p>
+
+  <h3>4. Assuming no zeros, no negatives</h3>
+
+  <p>Both are allowed. <code>[-1, 2, -3]</code> answers <code>[-6, 3, -2]</code> &mdash; the signs take
+  care of themselves as long as you are multiplying rather than dividing. Test with a zero, with two
+  zeros, and with an odd number of negatives.</p>
+
+  <h3>5. Forgetting the single-element array</h3>
+
+  <p><code>[5]</code> answers <code>[1]</code>: there are no other elements, and the product of nothing
+  is 1. Both versions here get this right for free &mdash; but only because the passes are written to
+  handle an empty left and an empty right, which is the same reason the <code>1</code>s at the ends of
+  the Step 4 table are there.</p>
+</section>
+
+<!-- =================================================================== 10 -->
+<section class="step">
+  <span class="step-n">Step 10</span>
+  <h2>Practice before you move on</h2>
+
+  <ol>
+    <li><strong>Sum of array except self.</strong> Much easier &mdash; one total, then
+    <code>total - nums[i]</code>. Do it, then say <em>why</em> subtraction is safe here when division
+    was not. (Because there is no value of <code>nums[i]</code> that makes subtraction undefined.)</li>
+    <li><strong>Do it with division anyway, correctly.</strong> Count the zeros first. Zero zeros:
+    divide as normal. Exactly one zero: every answer is 0 except at the zero&rsquo;s own position,
+    which gets the product of the rest. Two or more zeros: all zeros. Writing this is the fastest way
+    to appreciate why the two-pass version is better.</li>
+    <li><strong>Running prefix sums.</strong> Build <code>prefix[i] = sum of nums[0..i]</code>, then
+    answer &ldquo;what is the sum between index a and b?&rdquo; in O(1) with
+    <code>prefix[b] - prefix[a-1]</code>. This is the same left-sweep idea and it is one of the most
+    reused tools in the whole subject.</li>
+    <li><strong>Product of the array except a whole range.</strong> Given a and b, return the product
+    of everything outside <code>[a, b]</code>. Your left and right arrays already contain the answer.</li>
+    <li><strong>Trapping rain water.</strong> A famously hard problem that becomes easy with exactly
+    this idea: for each position, compute the tallest bar to its left and the tallest to its right in
+    two sweeps. Try it &mdash; you now have the technique.</li>
+  </ol>
+
+  <div class="note key">
+    <span class="t">What to carry forward</span>
+    <p>The pattern is <strong>prefix and suffix sweeps</strong>. Whenever the answer at position
+    <code>i</code> depends on &ldquo;everything before <code>i</code>&rdquo; and &ldquo;everything after
+    <code>i</code>&rdquo;, you can almost always compute both in one forward pass and one backward
+    pass instead of a nested loop. It works for products, sums, maximums, minimums and counts &mdash;
+    anything you can accumulate one element at a time.</p>
+  </div>
+</section>
+
+<nav class="pagenav">
+  <a href="03-maximum-subarray-kadane.html">&larr; Maximum Subarray</a>
+  <a href="05-rotate-array.html">Next: Rotate Array &rarr;</a>
+</nav>
+
+</div>
+
+<script src="../runner.js"></script>
+</body>
+</html>
