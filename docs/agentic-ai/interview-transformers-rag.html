@@ -1,0 +1,2258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Transformers, Embeddings & RAG</title>
+<meta name="description" content="36 senior interview questions on transformers, embeddings and production RAG.">
+<title>Transformers, Embeddings &amp; RAG</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Literata:opsz,wght@7..72,400;7..72,600&family=IBM+Plex+Mono:wght@400;600&display=swap">
+
+<style>
+/* ================================================================ tokens
+   Palette taken from attention heatmaps: violet is the weight, amber the
+   hot cell. Neutrals carry a violet bias so they read as chosen. */
+:root {
+  --bg:        #f7f6fa;
+  --surface:   #ffffff;
+  --surface-2: #efedf5;
+  --line:      #dcd8e6;
+  --line-soft: #e8e5ef;
+  --text:      #1a1725;
+  --text-2:    #4f4a60;
+  --text-3:    #7d7690;
+
+  --attn:      #6a4ec4;   /* primary: attention, links, structure   */
+  --attn-w:    #ebe6f9;
+  --heat:      #a8631a;   /* emphasis: the hot cell                 */
+  --heat-w:    #f8ecdc;
+
+  --good:      #2f7a4e;
+  --warn:      #91690f;
+  --crit:      #a8433c;
+  --crit-w:    #f8e7e5;
+
+  --shadow: 0 1px 2px rgba(26,23,37,.05), 0 8px 22px rgba(26,23,37,.05);
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:        #0f0d16;
+    --surface:   #17141f;
+    --surface-2: #1f1b2b;
+    --line:      #322c42;
+    --line-soft: #262133;
+    --text:      #e9e5f2;
+    --text-2:    #a9a2bd;
+    --text-3:    #7b7492;
+
+    --attn:      #a892f0;
+    --attn-w:    #241d3d;
+    --heat:      #e0a25c;
+    --heat-w:    #33261a;
+
+    --good:      #5fbd83;
+    --warn:      #d0a545;
+    --crit:      #e58279;
+    --crit-w:    #331d1c;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.45), 0 10px 28px rgba(0,0,0,.35);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:        #0f0d16;
+  --surface:   #17141f;
+  --surface-2: #1f1b2b;
+  --line:      #322c42;
+  --line-soft: #262133;
+  --text:      #e9e5f2;
+  --text-2:    #a9a2bd;
+  --text-3:    #7b7492;
+
+  --attn:      #a892f0;
+  --attn-w:    #241d3d;
+  --heat:      #e0a25c;
+  --heat-w:    #33261a;
+
+  --good:      #5fbd83;
+  --warn:      #d0a545;
+  --crit:      #e58279;
+  --crit-w:    #331d1c;
+
+  --shadow: 0 1px 2px rgba(0,0,0,.45), 0 10px 28px rgba(0,0,0,.35);
+}
+
+/* ================================================================== base */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Literata, Georgia, "Times New Roman", serif;
+  font-size: 16.5px;
+  line-height: 1.68;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, .display {
+  font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+  font-weight: 700;
+  text-wrap: balance;
+  letter-spacing: -0.018em;
+  line-height: 1.18;
+  margin: 0;
+}
+
+code, pre, .mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; }
+
+a { color: var(--attn); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--attn); outline-offset: 3px; border-radius: 3px; }
+
+/* ================================================================= shell */
+.shell { display: grid; grid-template-columns: minmax(0,1fr); }
+@media (min-width: 1100px) {
+  .shell { grid-template-columns: 292px minmax(0,1fr); }
+}
+
+/* ------------------------------------------------------------------ nav */
+.index {
+  display: none;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+}
+@media (min-width: 1100px) {
+  .index {
+    display: block;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 30px 22px 60px;
+  }
+}
+.index-brand {
+  font-family: Archivo, sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  margin-bottom: 4px;
+}
+.index-sub {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 26px;
+}
+.index h4 {
+  font-size: 11px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 24px 0 8px;
+  font-weight: 600;
+}
+.index a {
+  display: block;
+  padding: 5px 0 5px 13px;
+  border-left: 2px solid var(--line-soft);
+  color: var(--text-2);
+  text-decoration: none;
+  font-size: 13.5px;
+  line-height: 1.42;
+  font-family: Archivo, sans-serif;
+  transition: color .12s, border-color .12s;
+}
+.index a:hover { color: var(--text); border-left-color: var(--attn); }
+.index a.active { color: var(--attn); border-left-color: var(--attn); font-weight: 600; }
+.index a .qn {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  color: var(--text-3);
+  margin-right: 6px;
+}
+
+/* -------------------------------------------------------------- content */
+main { min-width: 0; padding: 0 24px 140px; }
+@media (min-width: 1100px) { main { padding: 0 56px 160px; } }
+.wrap { max-width: 74ch; margin: 0 auto; }
+
+.masthead { padding: 76px 0 34px; border-bottom: 1px solid var(--line); }
+.eyebrow {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--heat);
+  margin: 0 0 16px;
+}
+.masthead h1 { font-size: clamp(32px, 4.6vw, 50px); margin-bottom: 18px; }
+.standfirst { font-size: 19px; line-height: 1.5; color: var(--text-2); margin: 0; }
+
+.sec { padding-top: 66px; scroll-margin-top: 20px; }
+.sec-head { border-bottom: 2px solid var(--attn); padding-bottom: 12px; margin-bottom: 8px; }
+.sec-n {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: .13em;
+  color: var(--attn);
+  display: block;
+  margin-bottom: 8px;
+}
+.sec-head h2 { font-size: clamp(25px, 3.2vw, 33px); }
+.sec-intro { color: var(--text-2); font-size: 17px; margin: 18px 0 0; }
+
+/* ------------------------------------------------------------------- Q&A */
+.qa { padding: 40px 0 8px; scroll-margin-top: 20px; border-top: 1px solid var(--line-soft); margin-top: 34px; }
+.qa:first-of-type { border-top: 0; }
+.qa-head { display: flex; gap: 12px; align-items: baseline; margin-bottom: 4px; }
+.qa-n {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--attn);
+  flex: none;
+  padding-top: 3px;
+}
+.qa h3 { font-size: 20px; }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 18px 34px; }
+.tag {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid;
+}
+.t-core  { color: var(--text-2); background: var(--surface-2); border-color: var(--line); }
+.t-deep  { color: var(--attn);   background: var(--attn-w);    border-color: var(--attn); }
+.t-trap  { color: var(--crit);   background: var(--crit-w);    border-color: var(--crit); }
+
+.qa-body { margin-left: 34px; }
+@media (max-width: 620px) { .qa-body, .tags { margin-left: 0; } }
+.qa-body > p { margin: 0 0 16px; }
+.qa-body > p:last-child { margin-bottom: 0; }
+
+.lede { font-size: 17.5px; }
+.lede strong { color: var(--text); }
+
+ul, ol { margin: 0 0 16px; padding-left: 21px; }
+li { margin-bottom: 7px; }
+li::marker { color: var(--attn); }
+
+strong { font-weight: 600; }
+
+code:not(pre code) {
+  font-size: .84em;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+pre {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 15px 17px;
+  overflow-x: auto;
+  font-size: 12.5px;
+  line-height: 1.62;
+  margin: 0 0 18px;
+  box-shadow: var(--shadow);
+}
+pre code { background: none; border: 0; padding: 0; white-space: pre; }
+.codelabel {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0 0 6px;
+}
+
+/* -------------------------------------------------------------- callouts */
+.box {
+  border-left: 3px solid;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--surface);
+  padding: 15px 18px;
+  margin: 0 0 18px;
+  font-size: 15.5px;
+}
+.box p:last-child { margin-bottom: 0; }
+.box p { margin: 0 0 10px; }
+.box-t {
+  font-family: Archivo, sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 7px;
+}
+.mine   { border-left-color: var(--attn); }
+.mine .box-t { color: var(--attn); }
+.breaks { border-left-color: var(--crit); }
+.breaks .box-t { color: var(--crit); }
+.said   { border-left-color: var(--heat); }
+.said .box-t { color: var(--heat); }
+
+/* ---------------------------------------------------------------- tables */
+.tw { overflow-x: auto; margin: 0 0 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+th {
+  font-family: Archivo, sans-serif;
+  font-size: 10.5px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+tr:last-child td { border-bottom: 0; }
+td.mono { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+
+/* --------------------------------------------------------------- diagram */
+.dia {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  overflow-x: auto;
+  margin: 0 0 18px;
+  box-shadow: var(--shadow);
+}
+.dia pre { border: 0; background: none; padding: 0; margin: 0; box-shadow: none; color: var(--text-2); font-size: 12px; line-height: 1.5; }
+
+.theme-toggle {
+  position: fixed; top: 14px; right: 14px; z-index: 60;
+  padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); color: var(--text-2); box-shadow: var(--shadow);
+  font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+  letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
+}
+.theme-toggle:hover { color: var(--text); border-color: var(--text-3); }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<button class="theme-toggle" type="button" id="themeToggle"><span id="themeLabel">Auto</span></button>
+
+<div class="shell">
+
+<nav class="index" aria-label="Question index">
+  <div class="index-brand">Transformers, Embeddings &amp; RAG</div>
+  <div class="index-sub">Senior interview prep</div>
+
+  <h4>1 · Transformer fundamentals</h4>
+  <a href="#q1-1"><span class="qn">1.1</span>The complete flow, input to output</a>
+  <a href="#q1-2"><span class="qn">1.2</span>Encoder, decoder, encoder–decoder</a>
+  <a href="#q1-3"><span class="qn">1.3</span>Self-attention and why Q, K, V</a>
+  <a href="#q1-4"><span class="qn">1.4</span>Why divide by √d<sub>k</sub></a>
+  <a href="#q1-5"><span class="qn">1.5</span>Multi-head attention</a>
+  <a href="#q1-6"><span class="qn">1.6</span>Cross-attention</a>
+  <a href="#q1-7"><span class="qn">1.7</span>Masked / causal attention</a>
+  <a href="#q1-8"><span class="qn">1.8</span>Positional encoding</a>
+  <a href="#q1-9"><span class="qn">1.9</span>The feed-forward network</a>
+  <a href="#q1-10"><span class="qn">1.10</span>Residuals and layer norm</a>
+  <a href="#q1-11"><span class="qn">1.11</span>Tokenization</a>
+  <a href="#q1-12"><span class="qn">1.12</span>Autoregressive generation and the KV cache</a>
+
+  <h4>2 · Embeddings &amp; vectors</h4>
+  <a href="#q2-1"><span class="qn">2.1</span>What an embedding actually is</a>
+  <a href="#q2-2"><span class="qn">2.2</span>Embedding model vs LLM</a>
+  <a href="#q2-3"><span class="qn">2.3</span>Choosing the dimension</a>
+  <a href="#q2-4"><span class="qn">2.4</span>Cosine, dot product, Euclidean</a>
+  <a href="#q2-5"><span class="qn">2.5</span>Asymmetric embeddings</a>
+  <a href="#q2-6"><span class="qn">2.6</span>Reading a similarity score</a>
+  <a href="#q2-7"><span class="qn">2.7</span>Matryoshka representations</a>
+  <a href="#q2-8"><span class="qn">2.8</span>ANN search and HNSW</a>
+
+  <h4>3 · Production RAG</h4>
+  <a href="#q3-1"><span class="qn">3.1</span>The full lifecycle</a>
+  <a href="#q3-2"><span class="qn">3.2</span>Ingestion</a>
+  <a href="#q3-3"><span class="qn">3.3</span>Chunking strategies</a>
+  <a href="#q3-4"><span class="qn">3.4</span>When not to chunk</a>
+  <a href="#q3-5"><span class="qn">3.5</span>Indexing and freshness</a>
+  <a href="#q3-6"><span class="qn">3.6</span>Semantic vs keyword vs hybrid</a>
+  <a href="#q3-7"><span class="qn">3.7</span>Fusion: RRF and why it lost</a>
+  <a href="#q3-8"><span class="qn">3.8</span>Metadata filtering</a>
+  <a href="#q3-9"><span class="qn">3.9</span>Top-K and the retrieval funnel</a>
+  <a href="#q3-10"><span class="qn">3.10</span>Thresholds</a>
+  <a href="#q3-11"><span class="qn">3.11</span>Context-window management</a>
+  <a href="#q3-12"><span class="qn">3.12</span>Re-ranking</a>
+  <a href="#q3-13"><span class="qn">3.13</span>Query rewriting and HyDE</a>
+  <a href="#q3-14"><span class="qn">3.14</span>Evaluating RAG</a>
+  <a href="#q3-15"><span class="qn">3.15</span>Troubleshooting in production</a>
+  <a href="#q3-16"><span class="qn">3.16</span>Small-scale vs enterprise-scale</a>
+</nav>
+
+<main>
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">Interview preparation · senior</p>
+  <h1>Transformers, Embeddings &amp; Production RAG</h1>
+  <p class="standfirst">
+    Thirty-six questions with the answer a senior engineer is expected to give:
+    a definition, working code, and the failure that taught it. Every
+    <span style="color:var(--attn)">In this system</span> box is real code from
+    OS&nbsp;Tracker — a multi-tenant hybrid-RAG bug tracker — because a measured
+    answer beats a memorised one.
+  </p>
+</header>
+
+<!-- ============================================================ SECTION 1 -->
+<section class="sec" id="s1">
+  <div class="sec-head">
+    <span class="sec-n">Section 1</span>
+    <h2>LLM &amp; Transformer fundamentals</h2>
+  </div>
+  <p class="sec-intro">
+    The bar here is not reciting the architecture diagram. It is being able to say
+    <em>why</em> each block exists — what breaks without it — and to trace a token
+    from string to logit without hand-waving.
+  </p>
+
+  <!-- 1.1 -->
+  <article class="qa" id="q1-1">
+    <div class="qa-head"><span class="qa-n">1.1</span>
+      <h3>Walk me through a Transformer from input tokens to generated output.</h3></div>
+    <div class="tags"><span class="tag t-core">core</span><span class="tag t-deep">must be fluent</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        <strong>The answer they want is a pipeline, in order, with a reason attached to each stage.</strong>
+        Here it is for a decoder-only model — GPT, Llama, Qwen — which is what almost
+        everything in production now is.
+      </p>
+
+      <div class="dia">
+<pre>  "payslip is blank"
+        │
+        ▼  tokenizer (BPE)              text → integer ids
+  [1350, 8391, 374, 10321]
+        │
+        ▼  embedding lookup             ids → vectors      [T, d_model]
+  [[0.02, -0.11, …], …]
+        │
+        ▼  + positional information     order becomes visible
+        │
+        ▼  ┌─────────────────────────┐
+        │  │  N × TRANSFORMER BLOCK  │
+        │  │                         │
+        │  │   x + Attention(LN(x))  │  ← mix across tokens
+        │  │   x + FFN(LN(x))        │  ← think per token
+        │  └─────────────────────────┘
+        │
+        ▼  final layer norm
+        ▼  output projection            [T, d_model] → [T, vocab]
+  logits
+        │
+        ▼  softmax + sampling           pick the next token
+  "for"
+        │
+        └──────► append, feed back in, repeat</pre>
+      </div>
+
+      <p>The two-line summary of a block, which is worth memorising:</p>
+      <ul>
+        <li><strong>Attention mixes information <em>across</em> tokens.</strong> It is the only
+        operation in the whole model where one position can see another.</li>
+        <li><strong>The FFN transforms each token <em>independently</em>.</strong> Same weights
+        applied at every position, no communication.</li>
+      </ul>
+      <p>
+        Everything else — residuals, normalisation, positional encoding — exists to make
+        those two operations trainable at depth.
+      </p>
+
+      <div class="box breaks">
+        <span class="box-t">Where candidates lose the room</span>
+        <p>
+          Saying "the encoder processes the input and the decoder generates the output"
+          for a model that <em>has no encoder</em>. GPT, Llama and Qwen are decoder-only.
+          Know which architecture you are describing before you start.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 1.2 -->
+  <article class="qa" id="q1-2">
+    <div class="qa-head"><span class="qa-n">1.2</span>
+      <h3>Encoder-only, decoder-only, encoder–decoder — when would you pick each?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>
+        The distinction is <strong>what each token is allowed to see</strong>, and that
+        determines what the model is good for.
+      </p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Architecture</th><th>Each token sees</th><th>Good at</th><th>Examples</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Encoder-only</strong></td><td>The whole sequence, both directions</td><td>Understanding: classification, NER, <strong>embeddings</strong></td><td>BERT, most embedding models</td></tr>
+            <tr><td><strong>Decoder-only</strong></td><td>Itself and everything before it</td><td>Generation, and in practice everything else too</td><td>GPT, Llama, Qwen, Gemini</td></tr>
+            <tr><td><strong>Encoder–decoder</strong></td><td>Encoder: all. Decoder: past + all of encoder</td><td>Transduction: translation, summarisation</td><td>T5, BART, the original 2017 paper</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        The reason encoder-only wins for <strong>embeddings</strong> is bidirectionality. To
+        represent "payslip is blank for contractors" as one vector, the word
+        <em>payslip</em> should be informed by <em>contractors</em>. A causal model
+        physically cannot do that — position 1 can never see position 6.
+      </p>
+
+      <div class="box mine">
+        <span class="box-t">In this system</span>
+        <p>
+          Both types run side by side. <code>qwen3-embedding:0.6b</code> is encoder-style
+          and produces the 1024-dim vectors for retrieval; <code>qwen3:8b</code> is
+          decoder-only and writes the answers. They are different models doing
+          categorically different jobs, and conflating them is a common interview slip.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 1.3 -->
+  <article class="qa" id="q1-3">
+    <div class="qa-head"><span class="qa-n">1.3</span>
+      <h3>Explain self-attention. Why three projections instead of one?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        Self-attention lets every token build a <strong>weighted summary of every other
+        token</strong>, where it chooses the weights itself.
+      </p>
+
+      <p>The database analogy is the one that lands:</p>
+      <ul>
+        <li><strong>Query</strong> — what this token is looking for</li>
+        <li><strong>Key</strong> — what each token offers as a match</li>
+        <li><strong>Value</strong> — what each token actually contributes if matched</li>
+      </ul>
+      <p>
+        Q·K decides <em>how much</em> to attend; V decides <em>what flows</em>. Collapsing
+        them would force one vector to serve as both the advertisement and the goods —
+        a token could not say "I am the subject of this sentence" as a matching signal
+        while contributing tense information as content.
+      </p>
+
+      <p class="codelabel">Scaled dot-product attention, complete</p>
+<pre><code>import torch, torch.nn.functional as F
+
+def attention(x, Wq, Wk, Wv, mask=None):
+    Q, K, V = x @ Wq, x @ Wk, x @ Wv        # [T, d_k] each
+    scores  = Q @ K.transpose(-2, -1)       # [T, T]  token-to-token
+    scores  = scores / (Q.size(-1) ** 0.5)  # see 1.4
+    if mask is not None:
+        scores = scores.masked_fill(mask, float("-inf"))
+    weights = F.softmax(scores, dim=-1)     # each row sums to 1
+    return weights @ V                      # [T, d_v]</code></pre>
+
+      <p>
+        The whole model's expressive power lives in that <code>[T, T]</code> matrix. Row
+        <em>i</em> is a probability distribution: "given what I am, how much of each
+        other token do I want?"
+      </p>
+
+      <div class="box breaks">
+        <span class="box-t">The cost nobody mentions until it hurts</span>
+        <p>
+          That matrix is <strong>O(T²)</strong> in both time and memory. Doubling context
+          quadruples attention cost. This is the single reason long-context is hard, and
+          why FlashAttention, sliding-window attention, and GQA exist.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 1.4 -->
+  <article class="qa" id="q1-4">
+    <div class="qa-head"><span class="qa-n">1.4</span>
+      <h3>Why divide the scores by √d<sub>k</sub>?</h3></div>
+    <div class="tags"><span class="tag t-trap">favourite follow-up</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        <strong>To stop softmax saturating and killing the gradient.</strong>
+      </p>
+      <p>
+        If Q and K components are roughly independent with unit variance, their dot
+        product over d<sub>k</sub> dimensions has variance ≈ d<sub>k</sub>. At
+        d<sub>k</sub> = 128 the scores swing by ±11 or so. Feed that to softmax and it
+        collapses to nearly one-hot — one token gets weight ~1.0, the rest ~0.
+      </p>
+      <p>
+        A saturated softmax has a vanishing derivative, so gradients stop flowing and
+        the layer stops learning. Dividing by √d<sub>k</sub> renormalises the variance
+        back to ~1 and keeps the distribution soft enough to train.
+      </p>
+
+      <p class="codelabel">The effect, in three lines</p>
+<pre><code>d_k = 128
+scores = torch.randn(1, 8) * (d_k ** 0.5)   # unscaled magnitude
+
+F.softmax(scores, -1)               # → [0.98, 0.01, 0.00, …]  saturated
+F.softmax(scores / d_k**0.5, -1)    # → [0.31, 0.18, 0.12, …]  learnable</code></pre>
+
+      <div class="box said">
+        <span class="box-t">Say this and you sound senior</span>
+        <p>
+          "It's a variance-control trick, not a normalisation of the output. The scaling
+          keeps the softmax in its high-gradient region — without it, deep models with
+          large head dimensions barely train."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 1.5 -->
+  <article class="qa" id="q1-5">
+    <div class="qa-head"><span class="qa-n">1.5</span>
+      <h3>What does multi-head attention buy that a single large head does not?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        <strong>Multiple attention patterns at once.</strong> One softmax produces one
+        distribution — one thing a token can look at. Real language needs several
+        simultaneously: the syntactic head of the phrase, the coreferent pronoun, the
+        adjacent token.
+      </p>
+      <p>
+        Crucially, heads <em>split</em> the dimension rather than adding to it:
+        d<sub>head</sub> = d<sub>model</sub> / h. Eight heads of 64 across a 512-dim
+        model costs the same FLOPs as one head of 512 — you get diversity for free.
+      </p>
+
+      <p class="codelabel">Multi-head, batched</p>
+<pre><code>class MultiHeadAttention(nn.Module):
+    def __init__(self, d_model, n_heads):
+        super().__init__()
+        self.h  = n_heads
+        self.dk = d_model // n_heads          # 512 / 8 = 64
+        self.qkv = nn.Linear(d_model, 3 * d_model)
+        self.out = nn.Linear(d_model, d_model)   # W^O: mixes heads back
+
+    def forward(self, x, mask=None):
+        B, T, C = x.shape
+        q, k, v = self.qkv(x).chunk(3, dim=-1)
+        # [B, T, C] -> [B, heads, T, dk] so heads batch like extra samples
+        q, k, v = (t.view(B, T, self.h, self.dk).transpose(1, 2) for t in (q, k, v))
+
+        att = (q @ k.transpose(-2, -1)) / self.dk**0.5
+        if mask is not None:
+            att = att.masked_fill(mask, float("-inf"))
+        y = F.softmax(att, dim=-1) @ v
+
+        y = y.transpose(1, 2).contiguous().view(B, T, C)   # concat heads
+        return self.out(y)</code></pre>
+
+      <p>
+        <code>W^O</code> is not decoration. Without it the heads are concatenated but
+        never combined, and the next layer sees eight independent 64-dim opinions rather
+        than one 512-dim representation.
+      </p>
+      <p>
+        Modern models often use <strong>Grouped-Query Attention</strong>: many query heads
+        share a smaller number of K/V heads. That shrinks the KV cache (see 1.12), which
+        is the real memory constraint at inference.
+      </p>
+    </div>
+  </article>
+
+  <!-- 1.6 -->
+  <article class="qa" id="q1-6">
+    <div class="qa-head"><span class="qa-n">1.6</span>
+      <h3>What is cross-attention and where does it appear?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>
+        Identical mechanism, different source. In self-attention Q, K and V all come from
+        the same sequence. In <strong>cross-attention, Q comes from one sequence and K, V
+        from another</strong>.
+      </p>
+<pre><code># self-attention        : one sequence talking to itself
+Q, K, V = x @ Wq, x @ Wk, x @ Wv
+
+# cross-attention       : decoder asking the encoder
+Q       = decoder_state @ Wq      # "what do I need next?"
+K, V    = encoder_out   @ Wk, encoder_out @ Wv   # "here is the source"</code></pre>
+      <p>
+        It is the bridge in an encoder–decoder model: it is how a translation decoder
+        looks back at the source sentence. Decoder-only models have <em>no</em>
+        cross-attention — the "source" is simply earlier tokens in the same stream, which
+        is exactly why prompting works at all.
+      </p>
+      <div class="box said">
+        <span class="box-t">The RAG connection worth making</span>
+        <p>
+          "RAG is cross-attention done in retrieval space instead of parameter space.
+          Rather than training a component to attend over a corpus, you fetch the
+          relevant part and paste it into the context — then ordinary self-attention does
+          the work. That's why RAG needs no fine-tuning."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 1.7 -->
+  <article class="qa" id="q1-7">
+    <div class="qa-head"><span class="qa-n">1.7</span>
+      <h3>Why is masked attention necessary, and what exactly is masked?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span><span class="tag t-trap">trap</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        Without a causal mask, training is <strong>cheating</strong>: the model predicting
+        token 5 could attend to token 5. It would learn to copy, score near-zero loss, and
+        generate nonsense at inference where the future does not exist.
+      </p>
+      <p>
+        The mask sets the upper triangle of the score matrix to −∞ <em>before</em>
+        softmax, so those positions receive exactly zero weight.
+      </p>
+
+      <p class="codelabel">The causal mask</p>
+<pre><code>T = 5
+mask = torch.triu(torch.ones(T, T, dtype=torch.bool), diagonal=1)
+# True = block
+#  F T T T T      token 0 sees only itself
+#  F F T T T      token 1 sees 0,1
+#  F F F T T
+#  F F F F T
+#  F F F F F      token 4 sees everything
+
+scores = scores.masked_fill(mask, float("-inf"))   # BEFORE softmax</code></pre>
+
+      <p>
+        <strong>−∞ before softmax, not zero after.</strong> Zeroing weights afterwards
+        breaks the normalisation — the surviving row no longer sums to 1, and you have
+        silently rescaled every attention output.
+      </p>
+
+      <div class="box breaks">
+        <span class="box-t">Two masks, often confused</span>
+        <p>
+          <strong>Causal mask</strong> hides the future and is architectural.
+          <strong>Padding mask</strong> hides <code>&lt;pad&gt;</code> tokens in a batch of
+          uneven lengths and is a batching artefact. Forget the padding mask and your
+          model attends to padding, which quietly poisons short sequences in a batch.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 1.8 -->
+  <article class="qa" id="q1-8">
+    <div class="qa-head"><span class="qa-n">1.8</span>
+      <h3>Why does a Transformer need positional encoding at all?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        <strong>Attention is permutation-equivariant.</strong> It is a weighted sum over a
+        <em>set</em>. Shuffle the input and you get the same outputs, shuffled — so
+        "payroll blocked release" and "release blocked payroll" are literally
+        indistinguishable to bare attention.
+      </p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Scheme</th><th>How</th><th>Extrapolates?</th><th>Used by</th></tr></thead>
+          <tbody>
+            <tr><td>Sinusoidal</td><td>Fixed sin/cos of varying frequency, added to embeddings</td><td>In principle</td><td>Original 2017 paper</td></tr>
+            <tr><td>Learned absolute</td><td>A trainable vector per position</td><td>No — hard cap at trained length</td><td>BERT, GPT-2</td></tr>
+            <tr><td><strong>RoPE</strong></td><td><em>Rotates</em> Q and K by an angle proportional to position</td><td>Yes, and interpolates well</td><td>Llama, Qwen, most modern models</td></tr>
+            <tr><td>ALiBi</td><td>Linear distance penalty added to scores</td><td>Yes</td><td>BLOOM, MPT</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        RoPE won because it encodes <strong>relative</strong> position as a natural
+        consequence of rotation: the dot product between a rotated query and a rotated key
+        depends only on the <em>difference</em> of their angles. Relative distance is what
+        language actually cares about — "the previous word" matters, "word 4,197" does not.
+      </p>
+
+      <div class="box breaks">
+        <span class="box-t">Production symptom</span>
+        <p>
+          A model that degrades sharply past its trained context length is usually hitting
+          positional extrapolation failure, not "running out of memory". Context extension
+          via RoPE scaling (NTK, YaRN) is the standard fix and it is not free — quality
+          drops as you stretch.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 1.9 -->
+  <article class="qa" id="q1-9">
+    <div class="qa-head"><span class="qa-n">1.9</span>
+      <h3>What does the feed-forward network do? It looks like filler.</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        It is <strong>two thirds of the parameters</strong> and the current best guess at
+        where factual knowledge is stored.
+      </p>
+      <p>
+        Attention <em>moves</em> information between positions but is fundamentally a
+        weighted average — it is linear in V. The FFN is where the non-linear
+        transformation happens, applied identically at every position.
+      </p>
+<pre><code>class FeedForward(nn.Module):
+    def __init__(self, d_model, expansion=4):
+        super().__init__()
+        self.up   = nn.Linear(d_model, expansion * d_model)   # 512 -> 2048
+        self.down = nn.Linear(expansion * d_model, d_model)   # 2048 -> 512
+
+    def forward(self, x):
+        return self.down(F.gelu(self.up(x)))</code></pre>
+      <p>
+        The <strong>expand-then-project</strong> shape is the point. Widening to 4×
+        creates room to compute many features in parallel; the projection back selects and
+        recombines them. A useful mental model from the interpretability literature: the
+        up-projection is a set of key detectors, the down-projection their associated
+        values — a soft key-value memory.
+      </p>
+      <p>
+        Modern models use <strong>SwiGLU</strong> with a gate, and typically ~⅔·4·d to keep
+        the parameter count comparable:
+      </p>
+<pre><code>def swiglu(x, W_gate, W_up, W_down):
+    return (F.silu(x @ W_gate) * (x @ W_up)) @ W_down</code></pre>
+      <div class="box said">
+        <span class="box-t">The one-liner</span>
+        <p>
+          "Attention decides <em>what to look at</em>; the FFN decides <em>what to think
+          about it</em>. Editing-model research locates factual recall in FFN weights, not
+          attention."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 1.10 -->
+  <article class="qa" id="q1-10">
+    <div class="qa-head"><span class="qa-n">1.10</span>
+      <h3>Residual connections and layer norm — why both, and does order matter?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span><span class="tag t-trap">trap</span></div>
+    <div class="qa-body">
+      <p>
+        <strong>Residuals</strong> give gradients a path that skips every non-linearity.
+        <code>x + f(x)</code> has derivative <code>1 + f'(x)</code>, so even when
+        <code>f'</code> vanishes the gradient still flows. Without them, 96 stacked layers
+        do not train.
+      </p>
+      <p>
+        They also create the <em>residual stream</em>: a running representation that each
+        block reads from and writes into, rather than replaces.
+      </p>
+      <p>
+        <strong>Layer norm</strong> normalises across the feature dimension per token —
+        independent of batch size, which is why it is used instead of batch norm for
+        variable-length sequences.
+      </p>
+
+      <p class="codelabel">Order matters more than it looks</p>
+<pre><code># Post-LN — the 2017 original
+x = LayerNorm(x + Attention(x))
+x = LayerNorm(x + FFN(x))
+# needs LR warmup; unstable beyond ~12 layers
+
+# Pre-LN — what everything modern uses
+x = x + Attention(LayerNorm(x))
+x = x + FFN(LayerNorm(x))
+# clean residual path; trains at 100+ layers without warmup</code></pre>
+
+      <p>
+        In Pre-LN nothing sits between the input and output of the residual, so the
+        gradient highway is unobstructed. That single rearrangement is what made very deep
+        Transformers trainable.
+      </p>
+      <p>
+        Most current models also use <strong>RMSNorm</strong> — drop the mean-centring,
+        keep the scaling. Marginally cheaper, empirically just as good.
+      </p>
+    </div>
+  </article>
+
+  <!-- 1.11 -->
+  <article class="qa" id="q1-11">
+    <div class="qa-head"><span class="qa-n">1.11</span>
+      <h3>Why subword tokenization, and how does it bite you in production?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span><span class="tag t-trap">RAG-relevant</span></div>
+    <div class="qa-body">
+      <p>
+        Word-level vocabularies cannot handle unseen words; character-level makes
+        sequences far too long, and attention is O(T²). <strong>BPE</strong> splits the
+        difference: start from characters, repeatedly merge the most frequent adjacent
+        pair, stop at a target vocabulary size.
+      </p>
+<pre><code>from transformers import AutoTokenizer
+tok = AutoTokenizer.from_pretrained("Qwen/Qwen3-Embedding-0.6B")
+
+tok.tokenize("payslip")      # ['pay', 'slip']          common → few tokens
+tok.tokenize("OS-1042")      # ['OS', '-', '104', '2']  identifiers shatter
+tok.tokenize("ERR-40001")    # ['ERR', '-', '400', '01']</code></pre>
+
+      <div class="box breaks">
+        <span class="box-t">This is a real RAG failure, not trivia</span>
+        <p>
+          Identifiers, error codes and SKUs fragment into meaningless pieces. The
+          embedding of <code>ERR-40001</code> is not close to the embedding of
+          <code>ERR-40002</code> in any useful way — and it is not far from it either.
+          <strong>Embeddings are systematically bad at exact tokens</strong>, and that is
+          the single strongest argument for hybrid retrieval (see 3.6).
+        </p>
+      </div>
+
+      <div class="box mine">
+        <span class="box-t">In this system</span>
+        <p>
+          Measured on 24 error-code queries: semantic search reached
+          <strong>recall@20 = 0.583</strong>; keyword search reached <strong>1.000</strong>.
+          Same corpus, same queries. Tokenization is why.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 1.12 -->
+  <article class="qa" id="q1-12">
+    <div class="qa-head"><span class="qa-n">1.12</span>
+      <h3>Explain autoregressive generation. What is the KV cache and why does it matter?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>
+        Generation is a loop: run the model, take the logits at the <em>last</em> position,
+        sample a token, append it, repeat.
+      </p>
+<pre><code>tokens = tokenizer.encode(prompt)
+for _ in range(max_new_tokens):
+    logits = model(tokens)[:, -1, :]          # only the last position matters
+    logits = logits / temperature
+    probs  = F.softmax(top_p_filter(logits, p=0.9), dim=-1)
+    nxt    = torch.multinomial(probs, 1)
+    if nxt == eos_id:
+        break
+    tokens.append(nxt)</code></pre>
+
+      <p>
+        Naively that recomputes attention over the whole prefix every step — O(T²) per
+        token, O(T³) for the sequence. But <strong>K and V for past tokens never change</strong>
+        (the causal mask guarantees the past cannot see the future). So cache them:
+      </p>
+<pre><code>k_cache = torch.cat([k_cache, k_new], dim=2)   # append one column
+v_cache = torch.cat([v_cache, v_new], dim=2)
+att = (q_new @ k_cache.transpose(-2, -1)) / dk**0.5   # one row, not a matrix</code></pre>
+
+      <p>Which produces the two-phase behaviour you see in any served model:</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Phase</th><th>Work</th><th>Bound by</th><th>Feels like</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Prefill</strong></td><td>All prompt tokens in parallel</td><td>Compute</td><td>Time to first token</td></tr>
+            <tr><td><strong>Decode</strong></td><td>One token at a time, reading the cache</td><td>Memory bandwidth</td><td>Tokens per second</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Cache size = <code>2 × layers × heads × d_head × seq_len × bytes</code>, per
+        sequence. It grows linearly with context and is usually what limits how many
+        concurrent requests a GPU can hold — hence GQA, paged attention, and quantised
+        caches.
+      </p>
+
+      <div class="box mine">
+        <span class="box-t">In this system</span>
+        <p>
+          The local model was emitting chain-of-thought before answering: <strong>217
+          output tokens for "Say OK"</strong> against 9 from the hosted model. Decode is
+          the slow phase, so that made re-ranking time out against a 25-second deadline.
+          Fixed by passing <code>"think": false</code> — the output is schema-constrained
+          anyway, so the reasoning was generated and discarded.
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- ============================================================ SECTION 2 -->
+<section class="sec" id="s2">
+  <div class="sec-head">
+    <span class="sec-n">Section 2</span>
+    <h2>Embeddings &amp; vector representations</h2>
+  </div>
+  <p class="sec-intro">
+    The section where hand-waving is most obvious. Interviewers probe whether you have
+    actually looked at the numbers — what a cosine of 0.44 means, why your dimension is
+    what it is, whether you know your model is asymmetric.
+  </p>
+
+  <!-- 2.1 -->
+  <article class="qa" id="q2-1">
+    <div class="qa-head"><span class="qa-n">2.1</span>
+      <h3>What is an embedding, precisely?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        A learned map from text to a fixed-length vector, trained so that
+        <strong>geometric closeness corresponds to semantic closeness</strong>.
+      </p>
+      <p>
+        "Fixed-length" is the load-bearing part: a three-word title and a two-page
+        description both become 1024 numbers. That is what makes them comparable and
+        indexable — and also what makes them lossy.
+      </p>
+      <p>
+        The map is learned by contrastive training: pull known-related pairs together,
+        push random pairs apart. So an embedding space encodes <em>whatever notion of
+        relatedness was in the training pairs</em> — which is why a general model has no
+        idea that <code>80C</code> and <code>section 80C investment proof</code> are the
+        same thing in Indian payroll.
+      </p>
+
+      <p class="codelabel">Text in, vector out — production path</p>
+<pre><code>vector = await embeddings.embed_query("payslip is blank for contractors")
+len(vector)      # 1024
+vector[:5]       # [0.0268, -0.0332, 0.0095, 0.0092, 0.0123]</code></pre>
+
+      <div class="box said">
+        <span class="box-t">Sharpen it</span>
+        <p>
+          "An embedding is a lossy compression optimised to preserve one specific thing —
+          similarity as defined by the training objective. It is not a summary, and it is
+          not reversible."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 2.2 -->
+  <article class="qa" id="q2-2">
+    <div class="qa-head"><span class="qa-n">2.2</span>
+      <h3>How is an embedding model different from an LLM?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span><span class="tag t-trap">commonly muddled</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th></th><th>Embedding model</th><th>LLM</th></tr></thead>
+          <tbody>
+            <tr><td>Architecture</td><td>Usually encoder-only, bidirectional</td><td>Decoder-only, causal</td></tr>
+            <tr><td>Output</td><td>One vector for the whole input</td><td>A distribution over the next token</td></tr>
+            <tr><td>Pooling</td><td>Mean / CLS / last-token over positions</td><td>None — per-position logits</td></tr>
+            <tr><td>Typical size</td><td>0.1B – 8B</td><td>7B – 700B</td></tr>
+            <tr><td>Cost per call</td><td>Sub-cent, often local</td><td>Meaningful</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        An LLM produces a vector per token; an embedding model <strong>pools</strong> them
+        into one. The pooling strategy matters — mean-pooling over a long document
+        averages away the distinctive parts, which is one reason long chunks retrieve
+        poorly.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this system</span>
+        <p>
+          Both are Qwen3 and they are still different models with different jobs.
+          Retrieval calls <code>qwen3-embedding:0.6b</code> — no reasoning, no generation,
+          ~50ms. Answering calls <code>qwen3:8b</code>. With re-ranking off, the entire
+          similar-issues feature makes <strong>zero LLM calls</strong>: one embedding call,
+          one vector search, one SQL query.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 2.3 -->
+  <article class="qa" id="q2-3">
+    <div class="qa-head"><span class="qa-n">2.3</span>
+      <h3>How do you choose the embedding dimension?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span><span class="tag t-trap">expects a real answer</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        Higher dimensions carry marginally more information and cost linearly more in
+        storage, memory and every distance computation. The honest answer is that you
+        <strong>measure it</strong> rather than reason about it.
+      </p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Dimension</th><th>Bytes / vector</th><th>1M vectors</th><th>Relative search cost</th></tr></thead>
+          <tbody>
+            <tr><td class="num">384</td><td class="num">1,536</td><td class="num">1.5 GB</td><td class="num">1.0×</td></tr>
+            <tr><td class="num">768</td><td class="num">3,072</td><td class="num">3.1 GB</td><td class="num">2.0×</td></tr>
+            <tr><td class="num">1024</td><td class="num">4,096</td><td class="num">4.1 GB</td><td class="num">2.7×</td></tr>
+            <tr><td class="num">4096</td><td class="num">16,384</td><td class="num">16.4 GB</td><td class="num">10.7×</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        And the index is usually in RAM, so this is not disk you can shrug at.
+      </p>
+
+      <div class="box mine">
+        <span class="box-t">In this system — a decision I got wrong first</span>
+        <p>
+          The build started on <code>qwen3-embedding</code> (8B) at <strong>4096
+          dimensions</strong>. That was never a decision — it was the default the model
+          emitted. Moving to the 0.6B variant gave <strong>1024 native</strong>: a quarter
+          of the storage, a quarter of the index memory, and roughly 4× faster distance
+          computation.
+        </p>
+        <p>
+          What made it a one-line change is that the dimension is <em>probed from the
+          model at startup</em>, never configured — and <code>source_hash</code> includes
+          the model name, so every stored vector invalidated automatically.
+        </p>
+      </div>
+
+      <div class="box said">
+        <span class="box-t">The senior answer</span>
+        <p>
+          "I inherited 4096 from the model default, which is not a justification. The way
+          to settle it is to truncate to 2048/1024/512 and run the retrieval eval at each
+          — recall@k is free to compute. If quality is flat at 1024, take the 4× saving."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 2.4 -->
+  <article class="qa" id="q2-4">
+    <div class="qa-head"><span class="qa-n">2.4</span>
+      <h3>Cosine, dot product, Euclidean — which and why?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p><strong>Cosine, for text, almost always.</strong> The reason is length.</p>
+      <p>
+        Euclidean distance is sensitive to vector magnitude, and magnitude in text
+        embeddings correlates with document length. Use L2 and a long ticket and a short
+        ticket about the identical bug look far apart — you have built a length filter
+        wearing a similarity filter's clothes.
+      </p>
+      <p>
+        Cosine compares <em>direction only</em>, which is the semantic part.
+      </p>
+<pre><code>import numpy as np
+
+def cosine(a, b):
+    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+# If vectors are pre-normalised to unit length, cosine IS the dot product --
+# and dot product is a single fused instruction, so most vector databases
+# normalise on write and use dot internally.
+a, b = a / np.linalg.norm(a), b / np.linalg.norm(b)
+similarity = float(a @ b)</code></pre>
+
+      <div class="box breaks">
+        <span class="box-t">The bug this causes when porting</span>
+        <p>
+          Some stores return <strong>distance</strong> (smaller is closer), others
+          <strong>similarity</strong> (larger is closer). Chroma returns cosine distance;
+          Pinecone returns cosine similarity. Carrying a <code>1 - d</code> conversion
+          across a migration <strong>inverts every ranking</strong> while still producing
+          plausible-looking numbers between 0 and 1. Convert once, at the adapter boundary,
+          and assert the direction.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 2.5 -->
+  <article class="qa" id="q2-5">
+    <div class="qa-head"><span class="qa-n">2.5</span>
+      <h3>What are asymmetric embeddings and why do they matter?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span><span class="tag t-trap">silent failure</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        Many retrieval models are trained so that <strong>queries and documents are encoded
+        differently</strong> — typically a task-instruction prefix on the query only.
+        A short question and a long passage are different kinds of text, and forcing them
+        through one encoding loses recall.
+      </p>
+<pre><code># Query gets an instruction prefix
+EMBED_QUERY_INSTRUCTION = (
+    "Instruct: Given a software bug report, retrieve other bug reports "
+    "describing the same underlying problem\nQuery: "
+)
+EMBED_DOCUMENT_INSTRUCTION = ""      # documents get nothing
+
+async def embed_query(self, text):
+    return (await self._embed([f"{self._query_instruction}{text}"]))[0]
+
+async def embed_documents(self, texts):
+    return await self._embed([f"{self._document_instruction}{t}" for t in texts])</code></pre>
+
+      <div class="box breaks">
+        <span class="box-t">Why this is dangerous</span>
+        <p>
+          Using the wrong one produces <strong>no error whatsoever</strong>. You get a
+          valid vector of the right dimension. Recall is simply worse, and unless you have
+          an evaluation harness you will never know.
+        </p>
+      </div>
+
+      <div class="box mine">
+        <span class="box-t">In this system</span>
+        <p>
+          The port exposes <code>embed_query</code> and <code>embed_documents</code> as
+          <em>separate methods</em> precisely so this cannot be got wrong silently. A
+          single <code>embed(text)</code> would compile, run, and quietly under-perform.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 2.6 -->
+  <article class="qa" id="q2-6">
+    <div class="qa-head"><span class="qa-n">2.6</span>
+      <h3>A result has cosine similarity 0.44. Is that a good match?</h3></div>
+    <div class="tags"><span class="tag t-trap">excellent question to be asked</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        <strong>Unanswerable without calibration for your corpus and model</strong> — and
+        saying so is the correct answer.
+      </p>
+      <p>
+        Cosine between two pieces of ordinary English rarely drops below ~0.3 even when
+        the texts are unrelated. They share syntax, function words, and register. So a
+        naive reading of 0.44 as "44% similar" is badly wrong — it is closer to
+        <em>no match at all</em>.
+      </p>
+
+      <div class="box mine">
+        <span class="box-t">In this system — measured, not guessed</span>
+        <div class="tw" style="margin-top:10px">
+          <table>
+            <thead><tr><th>Pair</th><th class="num">cosine</th><th>Reality</th></tr></thead>
+            <tbody>
+              <tr><td>OS-4 vs OS-18 (same SCIM bug, different words)</td><td class="num">0.889</td><td>True duplicate</td></tr>
+              <tr><td>OS-4 vs OS-19 (same bug again)</td><td class="num">0.829</td><td>True duplicate</td></tr>
+              <tr><td>OS-4 vs OS-3 (unrelated bug)</td><td class="num">0.444</td><td>Not a match</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          So the usable band is roughly 0.80+ for duplicates and below 0.55 for noise. The
+          UI labels these <em>very close</em> / <em>close</em> / <em>loose</em> /
+          <em>distant</em> rather than showing a bare percentage, because "44%" reads as a
+          weak match when it means none.
+        </p>
+      </div>
+
+      <div class="box said">
+        <span class="box-t">How to answer</span>
+        <p>
+          "Not without knowing the corpus. I'd embed a few hundred known-related and
+          known-unrelated pairs, plot both distributions, and set the threshold where they
+          separate. Absolute cosine values are not portable across models or domains."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 2.7 -->
+  <article class="qa" id="q2-7">
+    <div class="qa-head"><span class="qa-n">2.7</span>
+      <h3>What are Matryoshka embeddings?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>
+        Models trained with <strong>Matryoshka Representation Learning</strong> apply the
+        loss at several nested prefixes — 64, 128, 256, … 1024 — so the leading dimensions
+        carry the most information. You can then <em>truncate</em> the vector and keep most
+        of the quality.
+      </p>
+<pre><code>full = embed(text)              # 4096 dims
+small = full[:1024]             # keep the first quarter
+small = small / np.linalg.norm(small)    # MUST re-normalise: truncation
+                                         # changes the magnitude</code></pre>
+      <p>
+        Useful for a two-stage search: retrieve broadly with truncated vectors, then
+        re-score the survivors with full-dimension vectors.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this system — considered and rejected</span>
+        <p>
+          Truncating the 8B model to 1024 was the alternative to switching to the 0.6B
+          model. It lost on a design argument: the dimension is <em>probed from the
+          model</em> and treated as authoritative, so a native-1024 model kept that
+          property with a one-line change, whereas truncation meant adding a
+          slice-and-renormalise step plus a configurable dimension — reintroducing exactly
+          the hardcoded value the probe exists to eliminate. It also pays full 8B inference
+          cost and throws away three quarters of the output.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 2.8 -->
+  <article class="qa" id="q2-8">
+    <div class="qa-head"><span class="qa-n">2.8</span>
+      <h3>How does vector search actually work at scale?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>
+        Exact search is a linear scan: compute similarity against every vector, O(N·d).
+        Fine at 100k, hopeless at 100M. Production uses <strong>approximate nearest
+        neighbour</strong> and accepts a small recall loss for a large speed win.
+      </p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Index</th><th>Idea</th><th>Trade</th></tr></thead>
+          <tbody>
+            <tr><td><strong>HNSW</strong></td><td>Multi-layer navigable small-world graph; greedy descent from a sparse top layer</td><td>Fast and accurate; high memory; the default</td></tr>
+            <tr><td>IVF</td><td>Cluster vectors, search only the nearest <em>n</em> clusters</td><td>Lower memory; recall depends on <code>nprobe</code></td></tr>
+            <tr><td>PQ</td><td>Quantise sub-vectors to codebook entries</td><td>Huge compression; lossy; usually combined with IVF</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        HNSW's tunables are <code>M</code> (edges per node), <code>ef_construction</code>
+        (build-time breadth) and <code>ef_search</code> (query-time breadth). Only the last
+        is adjustable per query — raise it for recall, lower it for latency.
+      </p>
+
+      <div class="box breaks">
+        <span class="box-t">The one that surprises people</span>
+        <p>
+          <strong>ANN recall is not 100%, and your offline evaluation probably assumed it
+          was.</strong> If you measured recall@20 on a small corpus with exact search and
+          then deploy HNSW at scale, real recall is lower — and the gap widens with
+          aggressive filtering, because filtered ANN search can walk the graph into a
+          region where everything is excluded.
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- ============================================================ SECTION 3 -->
+<section class="sec" id="s3">
+  <div class="sec-head">
+    <span class="sec-n">Section 3</span>
+    <h2>Production RAG</h2>
+  </div>
+  <p class="sec-intro">
+    This is where the interview is decided. Anyone can draw the pipeline; the signal is
+    whether you have numbers, whether you know what broke, and whether you can articulate
+    how the design changes at a different scale.
+  </p>
+
+  <!-- 3.1 -->
+  <article class="qa" id="q3-1">
+    <div class="qa-head"><span class="qa-n">3.1</span>
+      <h3>Walk me through the full RAG lifecycle.</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>Two pipelines that meet at the index, and saying so is the first mark:</p>
+      <div class="dia">
+<pre>  OFFLINE — the write path, runs when documents change
+  ────────────────────────────────────────────────────────────
+   source → ingest → clean → chunk → embed → index
+                                        │
+                                        ▼
+                                 ┌──────────────┐
+                                 │ VECTOR INDEX │
+                                 │   + keyword  │
+                                 └──────────────┘
+                                        ▲
+  ONLINE — the read path, runs per request │
+  ────────────────────────────────────────────────────────────
+   query → guard → rewrite → embed ──────┘
+                                │
+                                ▼
+                    retrieve (dense ∥ sparse)
+                                │
+                                ▼
+                          fuse + filter
+                                │
+                                ▼
+                            re-rank
+                                │
+                                ▼
+                    build context (budgeted)
+                                │
+                                ▼
+                              LLM
+                                │
+                                ▼
+                    ground + cite + verify</pre>
+      </div>
+      <p>
+        The separation matters operationally: the offline path can be slow, batched and
+        retried; the online path has a latency budget measured in hundreds of
+        milliseconds. Conflating them — embedding documents inside a request — is a
+        classic first-version mistake.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this system</span>
+        <p>
+          The write path is a <strong>transactional outbox</strong>: creating a ticket
+          writes the row and an <code>ai_jobs</code> row in one transaction, and a separate
+          worker drains it. Nothing on the write path calls a model, so filing a bug never
+          waits on a GPU and never fails because one is down.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 3.2 -->
+  <article class="qa" id="q3-2">
+    <div class="qa-head"><span class="qa-n">3.2</span>
+      <h3>What does ingestion involve beyond "read the file"?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>The unglamorous 60% of a real RAG project:</p>
+      <ul>
+        <li><strong>Extraction</strong> — PDF, HTML, DOCX, scans. Layout-aware parsing matters: naive PDF extraction interleaves multi-column text into nonsense.</li>
+        <li><strong>Cleaning</strong> — strip nav chrome, headers, footers. Boilerplate repeated across 10,000 pages dominates the embedding space.</li>
+        <li><strong>Deduplication</strong> — near-duplicate documents crowd out diversity in the top-k.</li>
+        <li><strong>Metadata capture</strong> — source, date, ACL, version. Cannot be reconstructed later.</li>
+        <li><strong>Change detection</strong> — what actually needs re-embedding.</li>
+      </ul>
+
+      <p class="codelabel">Content-hash idempotency — the pattern that pays for itself</p>
+<pre><code>def compute_source_hash(text: str, model: str, instruction_version: str) -> str:
+    normalised = WHITESPACE.sub(" ", text).strip().lower()
+    payload = f"{model}|{instruction_version}|{normalised}"
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+# Skip if unchanged -- one indexed query instead of an embedding call
+if existing and existing.source_hash == source_hash:
+    return None</code></pre>
+
+      <p>
+        Folding the <strong>model name and instruction version</strong> into the hash is
+        the detail worth stating: change either and every stored vector is stale by
+        construction, so a model upgrade forces a re-embed automatically instead of leaving
+        a corpus half in each convention.
+      </p>
+    </div>
+  </article>
+
+  <!-- 3.3 -->
+  <article class="qa" id="q3-3">
+    <div class="qa-head"><span class="qa-n">3.3</span>
+      <h3>What chunking strategies do you know, and how do you choose?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>
+        Chunking exists for two reasons: fitting the context window, and giving retrieval
+        a unit small enough that a match points somewhere useful. Everything else is
+        detail.
+      </p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Strategy</th><th>How</th><th>Best for</th><th>Weakness</th></tr></thead>
+          <tbody>
+            <tr><td>Fixed-size + overlap</td><td>N tokens, stride N−k</td><td>Baseline, uniform prose</td><td>Cuts mid-sentence; overlap inflates the index</td></tr>
+            <tr><td>Recursive character</td><td>Split on ¶ → sentence → word until it fits</td><td>General text</td><td>Still structure-blind</td></tr>
+            <tr><td><strong>Structure-aware</strong></td><td>Markdown headings, HTML sections, code functions</td><td>Docs, wikis, code</td><td>Needs a parser per format</td></tr>
+            <tr><td>Semantic</td><td>Split where consecutive-sentence similarity dips</td><td>Unstructured narrative</td><td>Costs embeddings at ingest; unstable</td></tr>
+            <tr><td><strong>Parent–child</strong></td><td>Embed small, return the enclosing parent</td><td>Precision + context together</td><td>Two stores to keep in sync</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        <strong>Parent–child is the technique most worth naming</strong>, because it
+        dissolves the central tension. Small chunks retrieve precisely; large chunks answer
+        well. So embed the small one and hand the LLM its parent.
+      </p>
+<pre><code>chunks = [
+    {"embed_text": section_text,          # ~200 tokens, precise retrieval
+     "return_text": document_text,        # ~2000 tokens, full context
+     "metadata": {"doc_id": doc.id, "heading": heading}},
+]</code></pre>
+
+      <div class="box said">
+        <span class="box-t">Answer the question behind the question</span>
+        <p>
+          "Size follows from the retrieval unit the user wants back, not from a token
+          budget. I'd start with structure-aware splitting at ~300–500 tokens with
+          parent–child, then tune against a golden set — chunking changes are the cheapest
+          large win in RAG and the easiest to evaluate."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 3.4 -->
+  <article class="qa" id="q3-4">
+    <div class="qa-head"><span class="qa-n">3.4</span>
+      <h3>When would you <em>not</em> chunk?</h3></div>
+    <div class="tags"><span class="tag t-trap">separates senior from mid</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        <strong>When the document is already the unit the user wants back, and it fits.</strong>
+      </p>
+      <p>
+        Chunking a 1 KB support ticket produces "paragraph three of OS-1042" as a search
+        result. Nobody wants that. The answer to "what is similar to this bug" is a bug.
+      </p>
+      <p>Records rather than documents — tickets, products, CRM entries, log lines — usually want one vector each:</p>
+      <ul>
+        <li>They fit comfortably in any embedding window.</li>
+        <li>They have a natural identity a user recognises.</li>
+        <li>Splitting them destroys the identity for no retrieval gain.</li>
+      </ul>
+
+      <div class="box mine">
+        <span class="box-t">In this system</span>
+        <p>
+          One chunk per ticket, and the policy lives in a named module rather than being
+          implicit. What survives of chunking is <em>bounding</em> — title 300 chars,
+          description 2000, steps 1000, title first so truncation eats the least important
+          thing. The caps are folded into <code>source_hash</code>, so changing one forces
+          a re-embed.
+        </p>
+        <p>
+          The file also records the trigger to revisit: if attachment text is ever indexed
+          — stack traces, logs, call transcripts — those <em>are</em> documents and would
+          need splitting.
+        </p>
+      </div>
+
+      <div class="box said">
+        <span class="box-t">Why this answer scores</span>
+        <p>
+          It shows you understand what chunking is <em>for</em>, rather than treating it as
+          a mandatory pipeline stage. "There's no chunker because my documents are 1 KB
+          records with a natural boundary" is a stronger answer than any chunk size.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 3.5 -->
+  <article class="qa" id="q3-5">
+    <div class="qa-head"><span class="qa-n">3.5</span>
+      <h3>How do you keep the index fresh, and what happens when it drifts?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span><span class="tag t-trap">production reality</span></div>
+    <div class="qa-body">
+      <p>
+        Two stores holding related state is a <strong>dual write</strong>, and dual writes
+        drift. There is no way to make Postgres and a vector database transactional
+        together, so the choice is between drift you can detect and drift you cannot.
+      </p>
+
+      <p class="codelabel">Transactional outbox — atomic where it matters</p>
+<pre><code># Same transaction as the business write
+async def _enqueue_embed(ctx: EventContext) -> None:
+    await AiJobRepository(ctx.session).enqueue(
+        tenant_id=ctx.tenant_id,
+        kind=AiJobKind.EMBED_TICKET,
+        payload={"ticket_id": str(ctx.entity_id)},
+    )
+# The job row and the ticket commit together, or neither does.</code></pre>
+
+      <p class="codelabel">Reconciliation — because eventually-consistent still drifts</p>
+<pre><code>missing    = live_tickets - recorded      # never embedded
+orphaned   = in_store     - live_tickets  # deleted, vector remains
+unrecorded = in_store     - recorded      # bookkeeping lost</code></pre>
+
+      <div class="box breaks">
+        <span class="box-t">The state that looks healthy and is not</span>
+        <p>
+          <strong>Stale</strong> — a vector exists but the document changed after it was
+          written. A naive "how many have vectors" check reports it as fine, while
+          retrieval confidently returns it for text that no longer exists. That is worse
+          than having no vector at all, and it needs its own state in your tooling.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 3.6 -->
+  <article class="qa" id="q3-6">
+    <div class="qa-head"><span class="qa-n">3.6</span>
+      <h3>Semantic, keyword, or hybrid — and can you prove it?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span><span class="tag t-deep">bring numbers</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        Hybrid, and the argument is not "two is better than one". It is that
+        <strong>neither wins everywhere and which one wins changes with the query</strong>.
+      </p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th></th><th>Dense (vector)</th><th>Sparse (BM25 / FTS)</th></tr></thead>
+          <tbody>
+            <tr><td>Finds</td><td>Paraphrase, synonymy, intent</td><td>Exact tokens: codes, names, SKUs</td></tr>
+            <tr><td>Fails on</td><td>Rare identifiers, negation, numbers</td><td>Any wording it has not seen</td></tr>
+            <tr><td>Cost</td><td>Embedding call + ANN search</td><td>An index scan</td></tr>
+            <tr><td>Cold start</td><td>Needs an embedding model</td><td>Works day one</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="box mine">
+        <span class="box-t">In this system — measured on 100 tickets, unaided</span>
+        <div class="tw" style="margin-top:10px">
+          <table>
+            <thead><tr><th>Retriever</th><th class="num">paraphrase R@20</th><th class="num">error-code R@20</th></tr></thead>
+            <tbody>
+              <tr><td>Semantic only</td><td class="num"><strong>1.000</strong></td><td class="num">0.583</td></tr>
+              <tr><td>Keyword only</td><td class="num">0.986</td><td class="num"><strong>1.000</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Delete either one and you lose a query family. Note also how lopsided the margins
+          are — one query on paraphrase, ten on identifiers — so the honest version of the
+          hybrid argument rests almost entirely on the identifier case.
+        </p>
+      </div>
+
+      <p class="codelabel">The keyword half, done properly</p>
+<pre><code>-- Build the tsquery IN SQL, so query and index share one tokenizer
+(
+    SELECT string_agg(quote_literal(lexeme), ' | ')
+    FROM unnest(tsvector_to_array(to_tsvector('english', :query_text))) AS lexeme
+)::tsquery</code></pre>
+      <p>
+        <strong>OR, not AND.</strong> <code>plainto_tsquery</code> joins terms with
+        <code>&amp;</code>, which is right for a search box and wrong when the query is a
+        whole document — requiring every term matches nothing. Rank by how much overlaps
+        instead of filtering on total overlap.
+      </p>
+
+      <div class="box breaks">
+        <span class="box-t">A silent bug worth telling as a story</span>
+        <p>
+          Postgres tokenizes <code>ERR-40001</code> as <code>'err'</code> +
+          <code>'-40001'</code> — the hyphen stays with the number. Our Python-side query
+          builder stripped hyphens and searched <code>40001</code>, which appears in no
+          document. <strong>Every error-code lookup silently returned nothing.</strong> It
+          read as "keyword search is just weak at identifiers". Building the tsquery in SQL
+          took recall@5 from 0.083 to 0.625 and recall@20 from 0.583 to 1.000.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 3.7 -->
+  <article class="qa" id="q3-7">
+    <div class="qa-head"><span class="qa-n">3.7</span>
+      <h3>How do you combine two rankings? Talk me through RRF.</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span><span class="tag t-trap">the differentiator</span></div>
+    <div class="qa-body">
+      <p>
+        Scores from different retrievers are not comparable — a cosine of 0.72 and a
+        <code>ts_rank_cd</code> of 0.09 live on unrelated scales. <strong>Reciprocal Rank
+        Fusion</strong> sidesteps that by using rank, not score:
+      </p>
+<pre><code>K = 60
+scores = defaultdict(float)
+for ranked_list in (semantic_hits, lexical_hits):
+    for rank, doc_id in enumerate(ranked_list, start=1):
+        scores[doc_id] += 1.0 / (K + rank)</code></pre>
+      <p>
+        Ranks are comparable by construction, a document in both lists is promoted
+        automatically, and there is no weight to tune. It is the standard answer, and it is
+        usually right.
+      </p>
+
+      <div class="box mine">
+        <span class="box-t">In this system — RRF was measured and rejected</span>
+        <p>
+          Implemented exactly as above, equal weight, it scored <strong>below its own best
+          input on both query families</strong>: 0.986 vs 1.000 at R@5 on paraphrases, and
+          0.792 vs 1.000 at R@20 on identifiers.
+        </p>
+        <p>
+          The cause is structural, not a misconfiguration. RRF's value is its agreement
+          bonus, and that bonus is also its failure mode when the retrievers are of unequal
+          quality for the query at hand:
+        </p>
+<pre><code>1/(60+35) + 1/(60+2)  =  0.0266   >   1/(60+1)  =  0.0164
+  weak retriever's rank 2               strong retriever's rank 1</code></pre>
+        <p>And weighting the secondary down does not fix it — that is provable. Require that an agreement bonus never lift a document above the leader's own top hit:</p>
+<pre><code>1/(K + 2) + w/(K + 1)  <=  1/(K + 1)
+                   w   <=  1/(K + 2)  =  0.016   at K = 60</code></pre>
+        <p>
+          At any weight small enough to be safe, the secondary only orders the tail — which
+          <em>is</em> a cascade. "Keep the agreement bonus" and "never rank worse than the
+          better retriever" are not simultaneously satisfiable.
+        </p>
+      </div>
+
+      <p>
+        What shipped instead is a <strong>cascade</strong>: the leading retriever's order,
+        with the other's finds appended below. It is never worse than the leader alone at
+        any cutoff, and <code>agreed</code> is still recorded so the re-ranker and the UI
+        keep the cross-retriever signal even though ordering no longer uses it.
+      </p>
+
+      <div class="box said">
+        <span class="box-t">Why this story lands</span>
+        <p>
+          It demonstrates measuring a textbook technique instead of adopting it, deriving
+          why the failure is structural, and shipping the simpler thing. Add the honest
+          caveat — unaided on identifiers RRF actually beats the cascade, and the cascade
+          only wins because an exact-match probe handles that family first — and you look
+          like someone who reads their own results carefully.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 3.8 -->
+  <article class="qa" id="q3-8">
+    <div class="qa-head"><span class="qa-n">3.8</span>
+      <h3>How do you handle metadata filtering and access control?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span><span class="tag t-trap">security</span></div>
+    <div class="qa-body">
+      <p>Two mechanisms, and mixing them up is how leaks happen.</p>
+      <ul>
+        <li><strong>Filtering</strong> narrows results — status, date, team. A UX concern.</li>
+        <li><strong>Isolation</strong> enforces that a caller can never see another tenant's data. A security boundary.</li>
+      </ul>
+      <p>
+        <strong>Never implement isolation as a metadata filter.</strong> One forgotten
+        <code>where</code> clause becomes a cross-tenant leak with nothing underneath to
+        catch it.
+      </p>
+
+      <div class="box mine">
+        <span class="box-t">In this system</span>
+        <p>
+          Postgres enforces isolation with row-level security and
+          <code>FORCE ROW LEVEL SECURITY</code> across 13 tables — a developer who forgets
+          a tenant clause is caught by the database. The vector store has no equivalent, so
+          isolation is <strong>one namespace per tenant</strong>: a query names exactly one
+          namespace and cannot read across. There is no filter to forget, and the namespace
+          name derives from the authenticated tenant id, never from client input.
+        </p>
+<pre><code>def namespace_for(tenant_id: uuid.UUID) -> str:
+    return f"tenant_{tenant_id.hex}"      # never accepts client input</code></pre>
+      </div>
+
+      <div class="box breaks">
+        <span class="box-t">Pre-filter vs post-filter</span>
+        <p>
+          Post-filtering retrieves k then discards — a selective filter can leave you with
+          two results out of fifty. Pre-filtering restricts the ANN search itself, which is
+          correct but can degrade recall badly when the filter is narrow, because the graph
+          walk gets trapped. Know which your store does; over-fetch to compensate.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 3.9 -->
+  <article class="qa" id="q3-9">
+    <div class="qa-head"><span class="qa-n">3.9</span>
+      <h3>How do you choose top-K?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>
+        There is not one K. There is a <strong>funnel</strong>, and each stage trades
+        recall for precision at a different price.
+      </p>
+      <div class="dia">
+<pre>  corpus
+    │
+    ├── dense  top 50 ─┐          over-fetch: exclusions are removed AFTER
+    ├── sparse top 50 ─┤          fetch = limit + len(exclude) + 5
+    │                  ▼
+    │            fuse + dedupe
+    │                  │
+    │                  ▼   20 candidates       ← the re-ranker's menu
+    │                  │
+    │                  ▼   score floor 0.012
+    │                  │
+    │                  ▼   10 re-ranked        ← cost lives here
+    │                  │
+    │                  ▼   confidence >= 0.55
+    │                  │
+    └──────────────────▼    5 shown</pre>
+      </div>
+      <p>The governing asymmetry, and the sentence to say out loud:</p>
+      <div class="box said">
+        <span class="box-t">Say this</span>
+        <p>
+          "A re-ranker can reorder what it is given, but it cannot recover a document
+          retrieval never returned. So the pool's job is recall and precision at the head
+          is the re-ranker's — which is why the pool is deliberately generous and slightly
+          noisy."
+        </p>
+      </div>
+      <p>
+        It also explains a design detail: the score floor is applied <em>after</em> fusion,
+        not per retriever. A document ranked 40th by both is a better candidate than one
+        ranked 8th by a single retriever, and a per-retriever cutoff would discard it before
+        fusion ever saw the agreement.
+      </p>
+    </div>
+  </article>
+
+  <!-- 3.10 -->
+  <article class="qa" id="q3-10">
+    <div class="qa-head"><span class="qa-n">3.10</span>
+      <h3>How do you set a retrieval threshold?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p>
+        Empirically, from labelled pairs — never from intuition, because the absolute
+        numbers are not portable (see 2.6).
+      </p>
+      <ul>
+        <li>Embed known-related and known-unrelated pairs.</li>
+        <li>Plot both similarity distributions.</li>
+        <li>Choose the threshold by the cost of each error: a false positive shows a wrong document; a false negative shows nothing.</li>
+      </ul>
+      <p>
+        For a suggestion panel, <strong>false positives cost more</strong>. A panel that is
+        sometimes wrong gets ignored, and once ignored it is dead. So bias toward silence.
+      </p>
+      <div class="box said">
+        <span class="box-t">The design principle</span>
+        <p>
+          "<em>No results</em> must be a first-class answer. A threshold tuned to always
+          return something is how a retrieval feature loses trust — most queries genuinely
+          have no good match, and saying so is the correct output."
+        </p>
+      </div>
+      <div class="box mine">
+        <span class="box-t">In this system</span>
+        <p>
+          Two thresholds at different stages: a fused-score floor of <code>0.012</code>
+          before re-ranking, and a model-confidence floor of <code>0.55</code> after. A
+          0.3-confidence "related" is noise with a number attached, so it is dropped rather
+          than shown.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 3.11 -->
+  <article class="qa" id="q3-11">
+    <div class="qa-head"><span class="qa-n">3.11</span>
+      <h3>How do you manage the context window?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span><span class="tag t-trap">common failure</span></div>
+    <div class="qa-body">
+      <p>
+        Budget it explicitly rather than hoping. And do not assume a bigger window solves
+        it — <strong>lost in the middle</strong> is well documented: models attend most
+        reliably to the beginning and end of their context, so material buried in the
+        middle is effectively invisible.
+      </p>
+<pre><code>BUDGET = 8000                       # tokens for retrieved context
+used, context = 0, []
+for doc in ranked_documents:        # best first
+    cost = count_tokens(doc.text)
+    if used + cost > BUDGET:
+        break                       # stop; do NOT truncate mid-document
+    context.append(doc)
+    used += cost</code></pre>
+      <p>Four rules that matter more than the budget number:</p>
+      <ul>
+        <li><strong>Order by relevance, and consider putting the best at both ends.</strong></li>
+        <li><strong>Drop whole documents, never truncate one</strong> — half a document is often worse than none, because it reads as complete.</li>
+        <li><strong>Label every chunk with its source</strong>, so citations can be verified afterwards.</li>
+        <li><strong>Reserve room for the answer.</strong> Context plus output must fit.</li>
+      </ul>
+      <div class="box breaks">
+        <span class="box-t">More context is not free</span>
+        <p>
+          Cost and latency scale with input tokens, and quality often <em>drops</em> past a
+          point as genuinely relevant material gets diluted by marginal material. Stuffing
+          20 documents when 5 would do is a common and expensive regression.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 3.12 -->
+  <article class="qa" id="q3-12">
+    <div class="qa-head"><span class="qa-n">3.12</span>
+      <h3>What is re-ranking and when is it worth the call?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span></div>
+    <div class="qa-body">
+      <p>
+        Retrieval scores query and document <em>separately</em> — that is what makes it
+        indexable, and what makes it approximate. A re-ranker scores them
+        <strong>together</strong>, so it can model interaction, at the cost of one
+        forward pass per candidate.
+      </p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Type</th><th>Mechanism</th><th>Latency</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td>Cross-encoder</td><td>BERT-style over (query, doc)</td><td>~10–50ms / doc</td><td>Default; strong quality per unit cost</td></tr>
+            <tr><td>LLM re-ranker</td><td>Prompt the model to judge or order</td><td>seconds</td><td>When you need a <em>labelled</em> relation, not just an order</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="box mine">
+        <span class="box-t">In this system — and why an LLM, not a cross-encoder</span>
+        <p>
+          The panel needs more than an ordering: it must distinguish
+          <code>duplicate</code> from <code>recurring</code> from <code>related</code>.
+          "Someone is already working on this" and "this was fixed and has come back" route
+          to entirely different human responses. A cross-encoder gives a score; only a
+          generative model gives a label with a reason.
+        </p>
+        <p>
+          That is why the prompt carries ticket <strong>status and closure date</strong> —
+          "recurring" is a judgement about a <em>closed</em> ticket returning, and the model
+          cannot make it without knowing the ticket was closed.
+        </p>
+        <div class="tw" style="margin-top:10px">
+          <table>
+            <thead><tr><th>Configuration</th><th class="num">precision@5</th><th class="num">shown</th><th class="num">s/query</th></tr></thead>
+            <tbody>
+              <tr><td>retrieval only</td><td class="num">0.275</td><td class="num">40</td><td class="num">0.7</td></tr>
+              <tr><td>+ re-rank</td><td class="num"><strong>0.635</strong></td><td class="num">20</td><td class="num">4.3</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>+0.360 for +3.5s, and it halved the list rather than padding it.</strong>
+          A panel showing two good matches beats one showing five of which three are noise.
+          It is off by default and degrades to the fused order when unavailable.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 3.13 -->
+  <article class="qa" id="q3-13">
+    <div class="qa-head"><span class="qa-n">3.13</span>
+      <h3>What query enhancement techniques do you use?</h3></div>
+    <div class="tags"><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <div class="tw">
+        <table>
+          <thead><tr><th>Technique</th><th>What it does</th><th>Costs</th></tr></thead>
+          <tbody>
+            <tr><td>Rewriting</td><td>Clarify a vague or conversational query</td><td>1 LLM call</td></tr>
+            <tr><td>Expansion</td><td>Add synonyms and domain terms</td><td>1 call, or a static map</td></tr>
+            <tr><td>Multi-query</td><td>Generate N phrasings, retrieve each, fuse</td><td>1 call + N searches</td></tr>
+            <tr><td><strong>HyDE</strong></td><td>Generate a <em>hypothetical answer</em>, embed <em>that</em></td><td>1 call</td></tr>
+            <tr><td>Decomposition</td><td>Split a multi-part question into sub-queries</td><td>1 call + N searches</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>HyDE</strong> is the clever one and worth being able to explain: a question
+        and its answer live in different regions of embedding space — questions look like
+        questions. So generate a fake answer, embed that, and search document-space with a
+        document-shaped vector.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this system — corrective RAG, conditionally</span>
+        <p>
+          Rewriting is not unconditional. A <code>grade</code> node inspects the candidate
+          set and only escalates when retrieval was thin:
+        </p>
+<pre><code>if certain:                                   # a pinned exact match
+    grade = Grade.GOOD
+elif len(candidates) >= 3 and agreed:
+    grade = Grade.GOOD
+elif rewrites < max_rewrites:
+    grade = Grade.WEAK          # -> rewrite, loop back to embed
+else:
+    grade = Grade.EMPTY         # -> stop, say so</code></pre>
+        <p>
+          <strong>No LLM in the grader.</strong> Asking a model "are these results good?"
+          costs a call and a second of latency to answer a question two counts already
+          answer. And the rewrite loop's termination lives in state, not in the model's
+          judgement — capped at 2, with LangGraph's own recursion limit as a second,
+          independent backstop.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 3.14 -->
+  <article class="qa" id="q3-14">
+    <div class="qa-head"><span class="qa-n">3.14</span>
+      <h3>How do you evaluate a RAG system?</h3></div>
+    <div class="tags"><span class="tag t-core">core</span><span class="tag t-deep">bring specifics</span></div>
+    <div class="qa-body">
+      <p>Separately, because retrieval and generation fail differently.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Layer</th><th>Metrics</th><th>Cost</th><th>Cadence</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Retrieval</strong></td><td>recall@k, MRR, nDCG, hit rate</td><td>free, deterministic</td><td>every change</td></tr>
+            <tr><td><strong>Re-rank</strong></td><td>precision@k</td><td>LLM calls</td><td>on demand</td></tr>
+            <tr><td><strong>Generation</strong></td><td>faithfulness, answer relevancy, context precision (RAGAS)</td><td>LLM judge</td><td>occasional</td></tr>
+            <tr><td><strong>Human</strong></td><td>acceptance rate, thumbs, edit distance</td><td>free but slow</td><td>continuous</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>Faithfulness is the one to gate on.</strong> It asks whether every claim in
+        the answer is supported by the retrieved context — the hallucination detector.
+      </p>
+
+      <div class="box mine">
+        <span class="box-t">In this system — what RAGAS caught</span>
+        <p>
+          A first run scored <code>faithfulness 0.7312</code>. The revealing row was
+          <strong>faithfulness 0.20 with relevancy 0.88</strong> — the dangerous
+          combination: fluent, on-topic, and unsupported. The model had answered a count
+          correctly and then decorated it with three invented ticket references.
+        </p>
+        <p>
+          The cause was precise and fixable: the aggregate tool returned counts with
+          <em>no</em> references, and the model filled the absence. Making the tool declare
+          <code>"ticket_references": []</code> plus stripping decorative fabrications took
+          faithfulness to <strong>0.9167</strong>.
+        </p>
+      </div>
+
+      <div class="box breaks">
+        <span class="box-t">Two traps in LLM-as-judge, both worth mentioning</span>
+        <p>
+          <strong>The judge is unstable.</strong> Scoring one identical sample three times
+          at temperature 0 gave 0.25, 0.25, 1.00. Read these as a trend across runs, never
+          as a per-row verdict.
+        </p>
+        <p>
+          <strong>Relevancy punishes correct refusals.</strong> RAGAS classifies
+          noncommittal answers as irrelevant by design, so "the data does not answer that"
+          scores 0.00. Optimising that number rewards guessing.
+        </p>
+      </div>
+
+      <div class="box said">
+        <span class="box-t">The most senior thing you can say here</span>
+        <p>
+          "Every offline metric is a proxy. The number that actually matters is whether the
+          people using it accepted the suggestion — so the accept/reject buttons exist
+          partly as the evaluation dataset. The feature and its own labelled data are the
+          same thing."
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 3.15 -->
+  <article class="qa" id="q3-15">
+    <div class="qa-head"><span class="qa-n">3.15</span>
+      <h3>Users report the answers are wrong. How do you debug it?</h3></div>
+    <div class="tags"><span class="tag t-trap">the real test</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        <strong>Bisect the pipeline before touching the prompt.</strong> "The LLM is bad" is
+        almost never the diagnosis, and prompt-tweaking is the most expensive way to find
+        that out.
+      </p>
+      <div class="dia">
+<pre>  Is the document in the index at all?
+     no ──► INGESTION      never ingested, filtered out, or failed silently
+     yes
+      ▼
+  Does retrieval return it for the query?
+     no ──► RETRIEVAL      wrong chunking, wrong model, tokenizer mismatch,
+      │                    identifier query needing keyword search
+     yes
+      ▼
+  Does it survive re-rank and the context budget?
+     no ──► RANKING        threshold too aggressive, budget too small,
+      │                    re-ranker mis-scoring
+     yes
+      ▼
+  Is it in the prompt the model actually received?
+     no ──► ASSEMBLY       truncation, ordering, a template bug
+     yes
+      ▼
+  ────► GENERATION        now, and only now, look at the prompt</pre>
+      </div>
+      <p>What makes this possible is instrumentation you build before you need it:</p>
+<pre><code>trace: guard:ok | references:none | identifiers:none | embed
+     | retrieve:lexical:11 | retrieve:semantic:11
+     | fuse:11/22 | fuse:cascade:lead=semantic
+     | grade:good | hydrate:11 | rerank:skipped | finish</code></pre>
+      <p>
+        That single line answers "did both retrievers run", "how many survived
+        de-duplication", "did the rewrite fire" and "was re-ranking skipped" — without
+        attaching a debugger.
+      </p>
+      <div class="box mine">
+        <span class="box-t">In this system — a bug this method found</span>
+        <p>
+          The assistant reported "the tool could not complete the search" for every
+          similar-issue question, while the same feature worked perfectly on the ticket
+          page. The trace located it immediately: a graph invoked inside another graph's
+          node <strong>inherits the parent's checkpointer</strong>, so the chat graph's
+          Postgres saver tried to serialise the retrieval graph's state — which holds
+          <code>dict[UUID, …]</code> — and msgpack rejects non-string keys. It failed
+          gracefully, which is exactly why nobody had noticed.
+        </p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 3.16 -->
+  <article class="qa" id="q3-16">
+    <div class="qa-head"><span class="qa-n">3.16</span>
+      <h3>How would you design RAG differently for 10,000 documents versus 50 million?</h3></div>
+    <div class="tags"><span class="tag t-trap">explicitly asked</span><span class="tag t-deep">deep</span></div>
+    <div class="qa-body">
+      <p class="lede">
+        The pipeline stages are the same. <strong>What changes is which stage is allowed to
+        be expensive</strong> — at small scale you can afford exactness everywhere, at
+        large scale every stage must be approximate and the errors compound.
+      </p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th></th><th>Small (~10k)</th><th>Enterprise (10M+)</th></tr></thead>
+          <tbody>
+            <tr><td>Vector index</td><td>Flat / exact is fine</td><td>HNSW or IVF-PQ; recall becomes a tuned parameter</td></tr>
+            <tr><td>Store</td><td><code>pgvector</code> alongside your data</td><td>Dedicated, sharded, replicated</td></tr>
+            <tr><td>Re-embedding</td><td>Rebuild everything; minutes</td><td>Incremental only; a full rebuild is a migration project</td></tr>
+            <tr><td>Re-ranking</td><td>Always on</td><td>Selective — cost scales with QPS × candidates</td></tr>
+            <tr><td>Chunking</td><td>Simple; iterate freely</td><td>Expensive to change; version it</td></tr>
+            <tr><td>Filtering</td><td>Post-filter is fine</td><td>Pre-filter, partitioned; post-filter starves</td></tr>
+            <tr><td>Evaluation</td><td>50 hand-labelled pairs</td><td>Labels must come from usage, not humans</td></tr>
+            <tr><td>Freshness</td><td>Re-index on write</td><td>CDC → stream → tiered index</td></tr>
+            <tr><td>Multi-tenancy</td><td>Namespace per tenant</td><td>Shard by tenant; big tenants get their own</td></tr>
+            <tr><td>Cost driver</td><td>LLM calls</td><td>Index memory and embedding throughput</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Three things that only appear at scale</h4>
+      <p>
+        <strong>1. ANN recall becomes a real number.</strong> At 10k, exact search means
+        retrieval recall is 1.0 and your evaluation measures the embedding model. At 50M,
+        the index itself loses documents — and if your golden set was built with exact
+        search, your offline numbers are optimistic in a way they do not admit to.
+      </p>
+      <p>
+        <strong>2. Re-embedding stops being a command.</strong> Changing the embedding
+        model at 10k is <code>--reconcile</code> over lunch. At 50M it is a dual-index
+        migration with backfill, shadow traffic and a cutover — so the model choice becomes
+        semi-permanent, which changes how much you should agonise over it up front.
+      </p>
+      <p>
+        <strong>3. Labelling cannot keep up.</strong> A hand-built golden set of 50 pairs is
+        adequate at 10k and meaningless at 50M — it cannot cover the query distribution.
+        The evaluation set has to be harvested from real usage: clicks, accepts, rejects,
+        escalations.
+      </p>
+
+      <div class="box said">
+        <span class="box-t">The answer that shows judgement</span>
+        <p>
+          "At 10k I would use pgvector in the primary database — one store, transactional
+          consistency, and the existing access control already applies. The dedicated
+          vector database is a cost, not a default: it buys scale and it charges you a dual
+          write, an outbox and a reconciliation job. I would pay that when the index no
+          longer fits comfortably beside the data, and not before."
+        </p>
+      </div>
+
+      <div class="box mine">
+        <span class="box-t">In this system</span>
+        <p>
+          100 tickets — squarely small-scale, and pgvector would genuinely have been the
+          better engineering choice. A managed vector store was chosen deliberately for the
+          learning goal, and the cost is written down rather than hidden. Being able to say
+          which choice was right on the merits and which was right for the objective is
+          itself the senior answer.
+        </p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<p style="max-width:74ch;margin:64px 0 0;padding-top:22px;border-top:1px solid var(--line);color:var(--text-3);font-size:14.5px">
+  Every measurement quoted here is from a running system: 100 tickets, hybrid retrieval
+  over Pinecone and Postgres full-text search, 1024-dimension local embeddings, evaluated
+  with a free offline harness plus RAGAS. Numbers beat adjectives in an interview — and
+  the failures are worth more than the successes.
+</p>
+
+</div>
+</main>
+</div>
+
+<script>
+// Scroll-spy for the question index. The document is long and the nav is the
+// only way to keep your place in it.
+(function () {
+  var links = Array.prototype.slice.call(document.querySelectorAll(".index a"));
+  var byId = {};
+  links.forEach(function (a) { byId[a.getAttribute("href").slice(1)] = a; });
+
+  var targets = Object.keys(byId)
+    .map(function (id) { return document.getElementById(id); })
+    .filter(Boolean);
+
+  if (!("IntersectionObserver" in window) || !targets.length) return;
+
+  var visible = new Set();
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) visible.add(entry.target.id);
+      else visible.delete(entry.target.id);
+    });
+    // Highlight the first visible question in document order, so scrolling
+    // down moves the marker down rather than jumping to whatever fired last.
+    var first = targets.filter(function (t) { return visible.has(t.id); })[0];
+    links.forEach(function (a) { a.classList.remove("active"); });
+    if (first && byId[first.id]) {
+      byId[first.id].classList.add("active");
+    }
+  }, { rootMargin: "-10% 0px -70% 0px", threshold: 0 });
+
+  targets.forEach(function (t) { observer.observe(t); });
+})();
+
+// Theme cycle: auto -> light -> dark. "Auto" removes the stamp so
+// prefers-color-scheme decides, which is the three-state model the CSS expects.
+(function () {
+  var order = ["auto", "light", "dark"];
+  var label = document.getElementById("themeLabel");
+  var button = document.getElementById("themeToggle");
+  var current = "auto";
+  try {
+    var saved = localStorage.getItem("interview-theme");
+    if (saved && order.indexOf(saved) !== -1) current = saved;
+  } catch (e) {}
+
+  function apply(next) {
+    current = next;
+    if (next === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", next);
+    label.textContent = next.charAt(0).toUpperCase() + next.slice(1);
+    try { localStorage.setItem("interview-theme", next); } catch (e) {}
+  }
+  button.addEventListener("click", function () {
+    apply(order[(order.indexOf(current) + 1) % order.length]);
+  });
+  apply(current);
+})();
+</script>
+</body>
+</html>
