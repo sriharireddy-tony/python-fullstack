@@ -1,0 +1,1413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MongoDB Senior Interview Playbook</title>
+<style>
+:root{
+  --bg:#fbfaf7; --panel:#ffffff; --ink:#1c1a17; --muted:#6b6560; --line:#e5e0d8;
+  --accent:#0b7a5a; --accent-soft:#e6f3ee; --warn:#b4501a; --warn-soft:#fdf0e7;
+  --bad:#a62828; --bad-soft:#fceceb; --code-bg:#14161a; --code-ink:#e6e6e6;
+  --kw:#c792ea; --str:#a5d6a7; --num:#ffcb6b; --op:#89ddff; --cmt:#6b7280;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#131416; --panel:#1a1c1f; --ink:#e8e6e3; --muted:#9a938c; --line:#2c2f34;
+    --accent:#4ec9a0; --accent-soft:#14302a; --warn:#e0975c; --warn-soft:#2e2317;
+    --bad:#e07070; --bad-soft:#2e1a1a; --code-bg:#0d0f12;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);
+ font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+.wrap{display:flex;align-items:flex-start;max-width:1500px;margin:0 auto}
+nav{position:sticky;top:0;height:100vh;overflow-y:auto;width:290px;flex:0 0 290px;
+ padding:26px 16px 60px;border-right:1px solid var(--line);background:var(--panel)}
+nav h2{font-size:13px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px}
+nav h2:first-child{margin-top:0}
+nav a{display:block;padding:5px 9px;border-radius:6px;color:var(--ink);text-decoration:none;font-size:13.5px}
+nav a:hover{background:var(--accent-soft);color:var(--accent)}
+main{flex:1;min-width:0;padding:34px 44px 140px;max-width:1060px}
+h1{font-size:32px;line-height:1.2;margin:0 0 6px;letter-spacing:-.02em}
+.sub{color:var(--muted);margin:0 0 28px;font-size:15px}
+h2.sec{font-size:24px;margin:56px 0 6px;padding-top:18px;border-top:2px solid var(--line);letter-spacing:-.01em}
+h3{font-size:18px;margin:30px 0 8px}
+h4{font-size:13px;margin:20px 0 6px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+p{margin:8px 0}
+ul,ol{margin:8px 0;padding-left:22px}
+li{margin:4px 0}
+code{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+ font-size:13px;background:var(--accent-soft);color:var(--accent);padding:1px 5px;border-radius:4px}
+pre{background:var(--code-bg);color:var(--code-ink);padding:15px 17px;border-radius:9px;
+ overflow-x:auto;font-size:13px;line-height:1.55;margin:10px 0;
+ font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+pre code{background:none;color:inherit;padding:0;font-size:inherit}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px;display:block;overflow-x:auto}
+th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:var(--accent-soft);color:var(--accent);font-weight:600;white-space:nowrap}
+.box{border:1px solid var(--line);border-left:4px solid var(--accent);background:var(--panel);
+ padding:14px 18px;border-radius:0 9px 9px 0;margin:18px 0}
+.box.q{border-left-color:#5b7fd4}
+.box.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+.box.bad{border-left-color:var(--bad);background:var(--bad-soft)}
+.box .label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+ font-weight:700;margin-bottom:6px;display:block}
+.grade{display:grid;gap:10px;margin:10px 0}
+@media(min-width:820px){.grade{grid-template-columns:1fr 1fr}}
+.grade > div{border:1px solid var(--line);border-radius:8px;padding:11px 14px;background:var(--panel);font-size:14px}
+.grade .mid{border-top:3px solid var(--warn)}
+.grade .snr{border-top:3px solid var(--accent)}
+.grade b{display:block;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+ padding:2px 8px;border-radius:20px;background:var(--accent-soft);color:var(--accent);vertical-align:middle}
+.tag.red{background:var(--bad-soft);color:var(--bad)}
+.tag.amber{background:var(--warn-soft);color:var(--warn)}
+.c{color:var(--cmt);font-style:italic}
+.s{color:var(--str)} .n{color:var(--num)} .k{color:var(--kw)} .o{color:var(--op)}
+hr{border:none;border-top:1px solid var(--line);margin:26px 0}
+@media(max-width:900px){
+  .wrap{flex-direction:column}
+  nav{position:static;height:auto;width:100%;flex:none;border-right:none;border-bottom:1px solid var(--line)}
+  main{padding:24px 18px 90px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <h2>Start</h2>
+  <a href="#data">0. The dataset</a>
+  <h2>Core</h2>
+  <a href="#idx">1. Indexing &amp; explain</a>
+  <a href="#schema">2. Schema design patterns</a>
+  <a href="#agg">3. Aggregation at scale</a>
+  <a href="#tx">4. Transactions &amp; consistency</a>
+  <a href="#rt">5. Real-time &amp; change streams</a>
+  <a href="#shard">6. Replication &amp; sharding</a>
+  <a href="#node">7. Node / Mongoose in prod</a>
+  <a href="#ops">8. Ops, security, tuning</a>
+  <h2>Scenario rounds</h2>
+  <a href="#sc1">S1. Chat / messaging</a>
+  <a href="#sc2">S2. Notification feed</a>
+  <a href="#sc3">S3. Inventory &amp; overselling</a>
+  <a href="#sc4">S4. Multi-tenant SaaS</a>
+  <a href="#sc5">S5. Analytics dashboard</a>
+  <a href="#sc6">S6. Audit log &amp; retention</a>
+  <h2>Full reference</h2>
+  <a href="#rapid">Rapid-fire bank</a>
+  <a href="#ref-query">9. Query operators</a>
+  <a href="#ref-update">10. Update operators</a>
+  <a href="#ref-stages">11. All aggregation stages</a>
+  <a href="#ref-expr">12. Expression operators</a>
+  <a href="#ref-methods">13. Methods &amp; commands</a>
+  <h2>Final</h2>
+  <a href="#qbank">Full question bank</a>
+  <a href="#redflag">Red flags &amp; power phrases</a>
+</nav>
+<main>
+
+<h1>MongoDB Senior Interview Playbook</h1>
+<p class="sub">Production-grade MongoDB for a senior MEAN interview. Code first, theory only where it changes a decision. Every snippet runs against the e-commerce dataset below.</p>
+
+<h2 class="sec" id="data">0. The dataset used everywhere</h2>
+<p>One SaaS-flavoured e-commerce model. Seed it once and every query on this page is runnable.</p>
+
+<pre><code><span class="c">// customers</span>
+{ _id, tenantId: "acme", email: "a@x.com", name: "Ana",
+  tier: "gold", createdAt: ISODate(), addresses: [{ city: "Pune", pin: "411001" }] }
+
+<span class="c">// products</span>
+{ _id, tenantId: "acme", sku: "TSHIRT-RED-M", title: "Red Tee", price: 899,
+  categories: ["apparel","tees"], attrs: { color: "red", size: "M" },
+  available: 42, reserved: 3, ratingAvg: 4.2, ratingCount: 118 }
+
+<span class="c">// orders   -- hot collection, ~50M docs</span>
+{ _id, tenantId: "acme", customerId: ObjectId(), status: "shipped",
+  createdAt: ISODate(), total: 2497, currency: "INR",
+  items: [{ productId, sku: "TSHIRT-RED-M", qty: 2, price: 899 }],
+  shipping: { city: "Pune", pin: "411001" } }
+
+<span class="c">// events   -- clickstream, ~500M docs</span>
+{ _id, tenantId: "acme", ts: ISODate(), type: "view",
+  customerId, productId, sessionId: "s-91" }
+</code></pre>
+
+<div class="box">
+<span class="label">Thread that runs through the whole page</span>
+Every collection is multi-tenant, so <code>tenantId</code> is the first field of nearly every index and the prefix of the shard key. Forgetting it is the most common design miss in SaaS interviews.
+</div>
+
+<h2 class="sec" id="idx">1. Indexing and query performance</h2>
+
+<h3>1.1 ESR: the one rule you must recite</h3>
+<p>Compound index field order is <b>E</b>quality, then <b>S</b>ort, then <b>R</b>ange. Get this wrong and Mongo does an in-memory sort or scans far more keys than it returns.</p>
+
+<pre><code><span class="c">// Query: orders for one customer, a few statuses, newest 20</span>
+db.orders.find({
+  tenantId: "acme",                               <span class="c">// E</span>
+  customerId: ObjectId("..."),                    <span class="c">// E</span>
+  status: { $in: ["paid","packed","shipped"] }    <span class="c">// E (multi-point)</span>
+}).sort({ createdAt: -1 }).limit(20)              <span class="c">// S</span>
+
+db.orders.createIndex(
+  { tenantId: 1, customerId: 1, status: 1, createdAt: -1 },
+  { name: "ix_orders_customer_status_date" }
+)</code></pre>
+
+<p><b>Now add a range.</b> The query also filters the last 30 days. The index does not change, because <code>createdAt</code> serves as both sort and range and it is already last:</p>
+
+<pre><code>db.orders.find({
+  tenantId: "acme", customerId: ObjectId("..."),
+  status: { $in: ["paid","packed","shipped"] },
+  createdAt: { $gte: ISODate("2026-08-13") }      <span class="c">// R, same field as sort</span>
+}).sort({ createdAt: -1 }).limit(20)
+<span class="c">// same index works. IXSCAN with tight bounds, no SORT stage.</span></code></pre>
+
+<p><b>When the range is a different field, ESR bites.</b> Filter on <code>total &gt; 5000</code> and sort by <code>createdAt</code>:</p>
+
+<pre><code><span class="c">// WRONG - range before sort forces an in-memory SORT stage</span>
+{ tenantId: 1, customerId: 1, total: 1, createdAt: -1 }
+
+<span class="c">// RIGHT - sort field before the range field</span>
+{ tenantId: 1, customerId: 1, createdAt: -1, total: 1 }
+<span class="c">// total is not a tight bound here; it filters on the index (no FETCH)
+// but Mongo scans more keys. That is the accepted trade for a sorted result.</span></code></pre>
+
+<div class="box warn">
+<span class="label">Sort direction detail</span>
+An index supports a sort and its exact inverse. <code>{a:1,b:-1}</code> serves <code>sort({a:1,b:-1})</code> and <code>sort({a:-1,b:1})</code>, but not <code>sort({a:1,b:1})</code>. Single-field indexes are always reversible.
+</div>
+
+<h3>1.2 Reading explain like an SRE</h3>
+
+<pre><code>db.orders.find({ tenantId:"acme", status:"paid" })
+  .sort({ createdAt:-1 }).limit(20)
+  .explain("executionStats")</code></pre>
+
+<p>Only four numbers matter. Read them in this order:</p>
+
+<table>
+<tr><th>Field</th><th>What it means</th><th>Healthy</th></tr>
+<tr><td><code>nReturned</code></td><td>Docs the client got</td><td>your page size</td></tr>
+<tr><td><code>totalKeysExamined</code></td><td>Index entries walked</td><td>close to nReturned</td></tr>
+<tr><td><code>totalDocsExamined</code></td><td>Full docs fetched from disk</td><td>= nReturned, or 0 if covered</td></tr>
+<tr><td><code>executionTimeMillis</code></td><td>Wall clock on the server</td><td>single-digit ms for OLTP</td></tr>
+</table>
+
+<p>Stage names decode the plan instantly:</p>
+<ul>
+<li><code>COLLSCAN</code> <span class="tag red">fail</span> no usable index.</li>
+<li><code>IXSCAN</code> then <code>FETCH</code> <span class="tag">normal</span> index found the keys, then read the docs.</li>
+<li><code>PROJECTION_COVERED</code> <span class="tag">best</span> answered from the index alone, zero doc reads.</li>
+<li><code>SORT</code> with <code>SORT_KEY_GENERATOR</code> <span class="tag amber">smell</span> in-memory sort, dies at 100&nbsp;MB unless it spills.</li>
+<li><code>rejectedPlans</code> non-empty means the planner had a choice. Check the winner is what you expected.</li>
+</ul>
+
+<h4>Covered query</h4>
+<pre><code>db.orders.createIndex({ tenantId:1, customerId:1, createdAt:-1, status:1, total:1 })
+
+db.orders.find(
+  { tenantId:"acme", customerId: ObjectId("...") },
+  { _id: 0, createdAt: 1, status: 1, total: 1 }   <span class="c">// _id MUST be excluded</span>
+).sort({ createdAt:-1 })
+<span class="c">// totalDocsExamined: 0  -- the index IS the answer</span></code></pre>
+
+<div class="box bad">
+<span class="label">Covered queries break silently</span>
+A covered query stops being covered the moment someone adds a field to the projection, or the field is an array (multikey indexes can never cover), or you query on a sharded collection without the shard key in the index. Assert on it in a perf test, never assume it.
+</div>
+
+<h3>1.3 The specialist index types, and exactly when</h3>
+
+<pre><code><span class="c">// PARTIAL - index only the rows you query. Smaller, cheaper writes.</span>
+db.orders.createIndex(
+  { tenantId:1, createdAt:-1 },
+  { partialFilterExpression: { status: { $in: ["pending","paid"] } } }
+)
+<span class="c">// Caveat: the query must be provably a subset of the filter, else it is ignored.
+// find({status:"paid"})              -> uses it
+// find({status:{$ne:"shipped"}})     -> does NOT use it</span>
+
+<span class="c">// TTL - auto-delete. Single date field only, background sweep every 60s.</span>
+db.sessions.createIndex({ lastSeenAt: 1 }, { expireAfterSeconds: 1800 })
+<span class="c">// Per-document TTL: set expireAfterSeconds:0 and store the exact expiry date</span>
+db.otps.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+
+<span class="c">// UNIQUE + PARTIAL - unique email per tenant, ignoring soft-deleted rows</span>
+db.customers.createIndex(
+  { tenantId:1, email:1 },
+  { unique:true, partialFilterExpression: { deletedAt: { $exists:false } } }
+)
+
+<span class="c">// WILDCARD - unknown/user-defined attribute keys</span>
+db.products.createIndex({ "attrs.$**": 1 })
+<span class="c">// Good for ad-hoc filters on attrs.color, attrs.fabric...
+// Cannot be compound with a normal field, cannot cover, cannot support sort well.
+// If you know the top 3 attrs, index them explicitly instead.</span>
+
+<span class="c">// TEXT vs ATLAS SEARCH</span>
+db.products.createIndex({ title:"text", "categories":"text" })
+<span class="c">// One text index per collection, no fuzzy, no relevance tuning, no autocomplete.
+// Senior answer: text index for a checkbox feature; Atlas Search (Lucene) for
+// anything user-facing - fuzzy, synonyms, faceting, autocomplete, highlighting.</span>
+
+<span class="c">// COLLATION - case-insensitive search that still uses an index</span>
+db.customers.createIndex({ tenantId:1, name:1 }, { collation:{ locale:"en", strength:2 } })
+db.customers.find({ tenantId:"acme", name:"ana" }).collation({ locale:"en", strength:2 })
+<span class="c">// Beats a $regex with /i, which cannot use an index unless anchored ^</span>
+
+<span class="c">// 2DSPHERE - nearest store</span>
+db.stores.createIndex({ loc: "2dsphere" })
+db.stores.find({ loc: { $near: { $geometry:{ type:"Point", coordinates:[73.85,18.52] },
+                                 $maxDistance: 5000 } } })</code></pre>
+
+<h3>1.4 The cost side nobody mentions</h3>
+<ul>
+<li>Every index is written on every insert and on every update that touches its fields. Ten indexes means roughly ten times the index write work.</li>
+<li>Indexes must fit in RAM to be fast. <code>db.orders.stats().indexSizes</code> against your instance memory is the real capacity question.</li>
+<li>MongoDB uses <b>one index per query</b> in almost all cases. Index intersection exists but the planner rarely picks it. Build the compound index instead of hoping for intersection.</li>
+<li>Build indexes on a live system with a rolling build across replica set members, or in Atlas use a rolling index build. Never a foreground build on a primary.</li>
+<li>Find dead weight: <code>db.orders.aggregate([{ $indexStats: {} }])</code> and drop anything with <code>accesses.ops</code> near zero.</li>
+</ul>
+
+<div class="box q">
+<span class="label">Interview question</span>
+"You added an index and the query got slower. Explain."
+<div class="grade">
+<div class="mid"><b>Mid-level</b>That should not happen, maybe the cache was cold.</div>
+<div class="snr"><b>Senior</b>Three real causes. One, the planner cached a worse plan. Plans are cached per query shape and re-evaluated only after ~1000 works or a write threshold. Two, the new index has better estimated cardinality but worse real selectivity, so it scans more keys and then fetches. Three, the write amplification from the extra index slowed the whole workload. I would confirm with <code>explain</code> on both plans, then <code>hint()</code> to force a comparison, and clear the plan cache to test cleanly.</div>
+</div>
+</div>
+
+<h2 class="sec" id="schema">2. Schema design patterns</h2>
+
+<h3>2.1 Embed or reference: the actual decision table</h3>
+<table>
+<tr><th>Signal</th><th>Embed</th><th>Reference</th></tr>
+<tr><td>Read together always?</td><td>yes</td><td>no</td></tr>
+<tr><td>Child count</td><td>bounded, small</td><td>unbounded</td></tr>
+<tr><td>Child updated independently?</td><td>rarely</td><td>often</td></tr>
+<tr><td>Child queried on its own?</td><td>no</td><td>yes</td></tr>
+<tr><td>Growth over doc lifetime</td><td>none or tiny</td><td>continuous</td></tr>
+</table>
+<p>One-liner for the panel: <b>embed what you read together and bound, reference what grows or is shared.</b></p>
+
+<h3>2.2 The six patterns that get named in interviews</h3>
+
+<pre><code><span class="c">// 1. EXTENDED REFERENCE - copy the 2-3 fields you display, keep the id</span>
+order = { customerId: ObjectId(),
+          customer: { name: "Ana", email: "a@x.com", tier: "gold" } }
+<span class="c">// Kills the $lookup on every order list screen.
+// Cost: staleness. Refresh via change stream on customers, or accept it -
+// an order should show the name AS IT WAS at purchase time anyway.</span>
+
+<span class="c">// 2. COMPUTED - store the aggregate, do not recompute per read</span>
+db.products.updateOne({ _id: pid }, [{
+  $set: {
+    ratingCount: { $add: ["$ratingCount", 1] },
+    ratingAvg: { $divide: [ { $add: [ { $multiply: ["$ratingAvg","$ratingCount"] }, 5 ] },
+                            { $add: ["$ratingCount", 1] } ] }
+  }
+}])
+<span class="c">// Pipeline update = read-modify-write in one atomic server-side op.</span>
+
+<span class="c">// 3. BUCKET - collapse many small docs into one doc per window</span>
+{ tenantId:"acme", productId, day: ISODate("2026-09-12"),
+  count: 340, views: [ { ts, sessionId }, ... ] }
+<span class="c">// 500M event docs -> 5M bucket docs. Index size drops an order of magnitude.</span>
+
+<span class="c">// 4. OUTLIER - the 0.1% of docs that break your model</span>
+{ _id: celebUser, followers: [ ...first 1000... ], hasOverflow: true }
+<span class="c">// Overflow rows live in a followers_overflow collection. App checks the flag.</span>
+
+<span class="c">// 5. SCHEMA VERSIONING - ship migrations without downtime</span>
+{ _v: 2, name: { first:"Ana", last:"K" } }   <span class="c">// v1 had a single `name` string</span>
+<span class="c">// Read path handles both, a background job rewrites v1 -> v2 in batches.</span>
+
+<span class="c">// 6. SUBSET - hot slice embedded, cold tail referenced</span>
+product = { reviewsTop: [ ...10 newest... ], reviewCount: 4211 }
+<span class="c">// Product page renders with one read. "See all reviews" hits the reviews collection.</span></code></pre>
+
+<h3>2.3 Unbounded arrays: the classic trap</h3>
+
+<div class="box bad">
+<span class="label">Anti-pattern</span>
+<code>{ _id: userId, notifications: [ ...grows forever... ] }</code><br>
+Three separate failures. The document crosses 16&nbsp;MB and writes start failing. Every update rewrites the whole document, so write throughput collapses. A multikey index over that array becomes enormous and can never cover a query.
+</div>
+
+<pre><code><span class="c">// Fix A: cap the array on write, keep the overflow elsewhere</span>
+db.users.updateOne({ _id: uid }, {
+  $push: { recent: { $each: [ notif ], $position: 0, $slice: 50 } }
+})
+<span class="c">// $slice:50 keeps only the newest 50, atomically. No unbounded growth.</span>
+
+<span class="c">// Fix B: own collection + TTL (the default for feeds)</span>
+db.notifications.createIndex({ tenantId:1, userId:1, createdAt:-1 })
+db.notifications.createIndex({ createdAt:1 }, { expireAfterSeconds: 60*60*24*30 })</code></pre>
+
+<h3>2.4 Array update operators you must know cold</h3>
+<pre><code><span class="c">// positional $ - first matching element</span>
+db.orders.updateOne(
+  { _id: oid, "items.sku": "TSHIRT-RED-M" },
+  { $set: { "items.$.qty": 3 } })
+
+<span class="c">// arrayFilters - all elements matching a condition (the one people forget)</span>
+db.orders.updateOne(
+  { _id: oid },
+  { $set: { "items.$[el].price": 799 } },
+  { arrayFilters: [ { "el.price": { $gt: 799 } } ] })
+
+<span class="c">// $[] - every element</span>
+db.orders.updateMany({}, { $set: { "items.$[].currency": "INR" } })
+
+<span class="c">// $elemMatch - one array element satisfies ALL conditions</span>
+db.orders.find({ items: { $elemMatch: { sku:"TSHIRT-RED-M", qty: { $gte: 2 } } } })
+<span class="c">// Without $elemMatch, {"items.sku":"X","items.qty":{$gte:2}} matches if
+// DIFFERENT elements satisfy each clause. Classic bug, classic interview probe.</span>
+
+<span class="c">// $addToSet vs $push - set semantics vs append</span>
+db.products.updateOne({_id:pid}, { $addToSet: { categories: "sale" } })</code></pre>
+
+<div class="box q">
+<span class="label">Interview question</span>
+"Order items: embed or separate collection?"
+<div class="grade">
+<div class="mid"><b>Mid-level</b>Embed, because items belong to the order.</div>
+<div class="snr"><b>Senior</b>Embed. Items are bounded at a realistic cart size, always read with the order, and immutable after checkout, which is exactly the embed profile. I would denormalise <code>sku</code>, <code>title</code> and <code>price</code> into each item so an order is a true historical record even when the product later changes price. The one case I would reconsider is a B2B system with thousands of line items per order, where I would bucket items or move them out.</div>
+</div>
+</div>
+
+<h2 class="sec" id="agg">3. Aggregation at production scale</h2>
+
+<h3>3.1 Rewriting the pipeline you brought</h3>
+<p>Your original ran <code>$unwind</code> before <code>$lookup</code> and pushed whole child arrays into a group. Here is the same intent, production shape:</p>
+
+<pre><code><span class="c">// BEFORE (yours, ported to orders): unwind -> lookup -> group -> push everything</span>
+db.orders.aggregate([
+  { $match: { createdAt: { $gte: ISODate("2026-01-01") } } },
+  { $unwind: "$items" },                          <span class="c">// x5 fan-out</span>
+  { $lookup: { from:"products", localField:"items.productId",
+               foreignField:"_id", as:"product" } },   <span class="c">// x5 lookups</span>
+  { $group: { _id: "$shipping.city",
+              orders: { $push: "$$ROOT" },        <span class="c">// memory bomb</span>
+              count: { $sum: 1 } } },
+  { $sort: { count: -1 } }, { $limit: 5 }
+])
+
+<span class="c">// AFTER: filter early, project narrow, lookup once, never push raw docs</span>
+db.orders.aggregate([
+  { $match: { tenantId:"acme", createdAt:{ $gte: ISODate("2026-01-01") } } }, <span class="c">// IXSCAN</span>
+  { $project: { shipping:1, total:1, items:1 } },        <span class="c">// drop fat fields NOW</span>
+  { $unwind: "$items" },
+  { $group: {
+      _id: { city: "$shipping.city", sku: "$items.sku" },
+      units: { $sum: "$items.qty" },
+      revenue: { $sum: { $multiply: ["$items.qty","$items.price"] } } } },
+  { $sort: { revenue: -1 } },
+  { $limit: 50 },
+  { $lookup: { from:"products", localField:"_id.sku", foreignField:"sku",
+               as:"p", pipeline: [ { $project: { title:1, _id:0 } } ] } }, <span class="c">// 50 lookups, not 5M</span>
+  { $set: { title: { $first: "$p.title" } } },
+  { $unset: "p" }
+], { allowDiskUse: true })</code></pre>
+
+<div class="box">
+<span class="label">The five rules this demonstrates</span>
+<ol>
+<li><code>$match</code> first, on indexed fields, so stage one is an <code>IXSCAN</code> not a <code>COLLSCAN</code>.</li>
+<li><code>$project</code> or <code>$unset</code> immediately after, to shrink every document flowing downstream.</li>
+<li><code>$lookup</code> <b>after</b> reduction, never before a fan-out stage. Always index the <code>foreignField</code>.</li>
+<li>Never <code>$push: "$$ROOT"</code>. Push ids or counts. Group stages cap at 100&nbsp;MB and output docs at 16&nbsp;MB.</li>
+<li><code>$sort</code> immediately followed by <code>$limit</code> becomes a bounded top-k, which is memory-safe. Split them and it is not.</li>
+</ol>
+</div>
+
+<h3>3.2 $lookup done properly</h3>
+<pre><code><span class="c">// Pipeline form: filter and shape the joined side BEFORE it lands</span>
+{ $lookup: {
+    from: "orders",
+    let: { cid: "$_id", t: "$tenantId" },
+    pipeline: [
+      { $match: { $expr: { $and: [ { $eq: ["$customerId","$$cid"] },
+                                   { $eq: ["$tenantId","$$t"] } ] },
+                  status: "delivered" } },        <span class="c">// plain filters here use the index</span>
+      { $sort: { createdAt: -1 } },
+      { $limit: 5 },
+      { $project: { _id:1, total:1, createdAt:1 } }
+    ],
+    as: "recentOrders" } }</code></pre>
+<p>Mandatory index for that join: <code>db.orders.createIndex({ tenantId:1, customerId:1, status:1, createdAt:-1 })</code>. Without it this is one collection scan per input document. Say that out loud in the interview.</p>
+
+<div class="box warn">
+<span class="label">On a sharded cluster</span>
+<code>$lookup</code> and <code>$graphLookup</code> historically required the <code>from</code> collection to be unsharded. Modern versions relaxed this, but the merge still happens on one node and it is slow. Senior answer: on sharded data, denormalise with an extended reference instead of joining at read time.
+</div>
+
+<h3>3.3 The stages that separate mid from senior</h3>
+
+<pre><code><span class="c">// $facet - many aggregations over ONE pass. Perfect for search pages.</span>
+db.products.aggregate([
+  { $match: { tenantId:"acme", categories:"apparel" } },
+  { $facet: {
+      page:       [ { $sort:{ price:1 } }, { $skip:0 }, { $limit:20 } ],
+      byColor:    [ { $group:{ _id:"$attrs.color", n:{ $sum:1 } } } ],
+      priceBands: [ { $bucket: { groupBy:"$price",
+                                 boundaries:[0,500,1000,5000],
+                                 default:"5000+", output:{ n:{$sum:1} } } } ],
+      total:      [ { $count: "n" } ]
+  } }
+])
+<span class="c">// Caveat: each facet sub-pipeline cannot use an index - the $match already
+// materialised the set. Keep the $match selective.</span>
+
+<span class="c">// $setWindowFields - SQL window functions. Running totals, rank, moving average.</span>
+db.orders.aggregate([
+  { $match: { tenantId:"acme" } },
+  { $setWindowFields: {
+      partitionBy: "$customerId",
+      sortBy: { createdAt: 1 },
+      output: {
+        runningSpend: { $sum:"$total", window:{ documents:["unbounded","current"] } },
+        movingAvg7:   { $avg:"$total", window:{ documents:[-6,0] } },
+        orderNo:      { $rank: {} },
+        prevTotal:    { $shift: { output:"$total", by:-1 } } } } }
+])
+
+<span class="c">// $merge - incremental materialised view. THE answer to "dashboard is slow".</span>
+db.orders.aggregate([
+  { $match: { createdAt: { $gte: lastRunAt } } },          <span class="c">// incremental!</span>
+  { $group: { _id: { tenant:"$tenantId",
+                     d:{ $dateTrunc:{ date:"$createdAt", unit:"day" } } },
+              revenue:{ $sum:"$total" }, orders:{ $sum:1 } } },
+  { $merge: { into:"daily_sales", on:"_id",
+              whenMatched:"merge", whenNotMatched:"insert" } }
+])
+<span class="c">// $out replaces the whole target collection. $merge upserts. Use $merge.</span>
+
+<span class="c">// $graphLookup - recursive. Category trees, org charts, referral chains.</span>
+db.categories.aggregate([
+  { $match: { slug: "apparel" } },
+  { $graphLookup: { from:"categories", startWith:"$_id",
+      connectFromField:"_id", connectToField:"parentId",
+      as:"descendants", maxDepth: 5, depthField:"depth" } }
+])
+
+<span class="c">// $unionWith - combine collections (e.g. hot + archived orders)</span>
+db.orders.aggregate([
+  { $match:{ tenantId:"acme" } },
+  { $unionWith: { coll:"orders_archive", pipeline:[ { $match:{ tenantId:"acme" } } ] } },
+  { $group:{ _id:"$status", n:{ $sum:1 } } }
+])
+
+<span class="c">// $densify + $fill - no gaps in a time chart</span>
+{ $densify: { field:"day", range:{ step:1, unit:"day", bounds:"full" } } },
+{ $fill:    { output: { revenue: { value: 0 } } } }</code></pre>
+
+<h3>3.4 Aggregation limits to quote</h3>
+<table>
+<tr><th>Limit</th><th>Value</th><th>Escape hatch</th></tr>
+<tr><td>Stage memory</td><td>100 MB</td><td><code>allowDiskUse:true</code></td></tr>
+<tr><td>Result document</td><td>16 MB</td><td>return a cursor, or <code>$merge</code> to a collection</td></tr>
+<tr><td>Pipeline stages</td><td>1000</td><td>restructure</td></tr>
+<tr><td><code>$graphLookup</code> memory</td><td>100 MB, ignores allowDiskUse</td><td>cap <code>maxDepth</code></td></tr>
+</table>
+
+<div class="box q">
+<span class="label">Interview question</span>
+"A dashboard aggregation takes 40 seconds. Walk me through fixing it."
+<div class="grade">
+<div class="mid"><b>Mid-level</b>Add an index and enable allowDiskUse.</div>
+<div class="snr"><b>Senior</b>First I measure: <code>explain("executionStats")</code> on the pipeline, check whether stage one is an <code>IXSCAN</code> and where <code>totalDocsExamined</code> explodes. Then in order: move <code>$match</code> to the front and index it, project away unused fields before any <code>$unwind</code>, move <code>$lookup</code> after reduction. If it is still slow, the real fix is that a dashboard should not aggregate 50M rows on every page load. I precompute with <code>$merge</code> into a <code>daily_sales</code> rollup on a schedule or a change stream, and the dashboard reads that in a few milliseconds. <code>allowDiskUse</code> is a safety net, not a fix, because spilling to disk means it is already too slow.</div>
+</div>
+</div>
+
+<h2 class="sec" id="tx">4. Transactions and consistency</h2>
+
+<h3>4.1 The rule: avoid transactions by designing better</h3>
+<p>A single-document update is <b>always</b> atomic, including nested fields and arrays. Most "I need a transaction" cases are really "my data is in the wrong shape".</p>
+
+<pre><code><span class="c">// No transaction needed - one atomic conditional update</span>
+const res = await Product.updateOne(
+  { _id: pid, available: { $gte: qty } },     <span class="c">// guard in the FILTER</span>
+  { $inc: { available: -qty, reserved: +qty } }
+);
+if (res.modifiedCount === 0) throw new OutOfStockError();
+<span class="c">// The filter and the update are one atomic operation. Two concurrent
+// requests for the last item: exactly one wins. No race, no lock, no retry.</span></code></pre>
+
+<h3>4.2 When you genuinely need one</h3>
+<pre><code>const session = client.startSession();
+try {
+  await session.withTransaction(async () => {
+    const order = (await orders.insertOne(
+      { tenantId, customerId, items, status:"pending", total },
+      { session }))
+    for (const it of items) {
+      const r = await products.updateOne(
+        { _id: it.productId, available: { $gte: it.qty } },
+        { $inc: { available: -it.qty } },
+        { session });
+      if (r.modifiedCount === 0) throw new Error("OUT_OF_STOCK"); <span class="c">// aborts all</span>
+    }
+    await ledger.insertOne({ orderId: order.insertedId, amount: total }, { session });
+  }, {
+    readConcern:  { level: "snapshot" },
+    writeConcern: { w: "majority" },
+    readPreference: "primary"          <span class="c">// transactions always read the primary</span>
+  });
+} finally { await session.endSession(); }</code></pre>
+
+<div class="box warn">
+<span class="label">Five things interviewers check</span>
+<ol>
+<li>Transactions require a replica set or sharded cluster. A standalone mongod cannot run them.</li>
+<li>Default 60 second limit (<code>transactionLifetimeLimitSeconds</code>). Keep transactions short, never wrap an HTTP call inside one.</li>
+<li>Every operation must pass <code>{ session }</code>. A missed session means that write silently escapes the transaction. Most common bug.</li>
+<li><code>withTransaction</code> retries automatically on <code>TransientTransactionError</code> and <code>UnknownTransactionCommitResult</code>, so the callback must be idempotent. Never put non-database side effects inside.</li>
+<li>Write conflicts cause aborts. Under high contention on the same document, transactions perform worse than a single atomic update.</li>
+</ol>
+</div>
+
+<h3>4.3 Concerns, in one table</h3>
+<table>
+<tr><th>Setting</th><th>Option</th><th>Meaning</th><th>Use</th></tr>
+<tr><td rowspan="3">writeConcern</td><td><code>w:1</code></td><td>primary acked only</td><td>logs, metrics</td></tr>
+<tr><td><code>w:"majority"</code></td><td>survives failover <span class="tag">default</span></td><td>everything that matters</td></tr>
+<tr><td><code>j:true</code></td><td>flushed to journal on disk</td><td>payments</td></tr>
+<tr><td rowspan="4">readConcern</td><td><code>local</code></td><td>may be rolled back</td><td>fast, non-critical</td></tr>
+<tr><td><code>majority</code></td><td>durable, cannot be rolled back</td><td>read-after-write</td></tr>
+<tr><td><code>snapshot</code></td><td>consistent point in time</td><td>transactions, reports</td></tr>
+<tr><td><code>linearizable</code></td><td>strongest, slow, primary only</td><td>almost never</td></tr>
+<tr><td rowspan="3">readPreference</td><td><code>primary</code></td><td>always current <span class="tag">default</span></td><td>OLTP</td></tr>
+<tr><td><code>secondaryPreferred</code></td><td>may be stale by replication lag</td><td>reports, exports</td></tr>
+<tr><td><code>nearest</code></td><td>lowest latency member</td><td>geo-distributed reads</td></tr>
+</table>
+
+<h3>4.4 Idempotency, the question behind the question</h3>
+<pre><code><span class="c">// Client sends Idempotency-Key. Unique index makes the retry a no-op.</span>
+db.orders.createIndex({ tenantId:1, idempotencyKey:1 }, { unique:true, sparse:true })
+
+try {
+  await orders.insertOne({ tenantId, idempotencyKey: key, ...payload });
+} catch (e) {
+  if (e.code === 11000) return await orders.findOne({ tenantId, idempotencyKey: key });
+  throw e;
+}
+<span class="c">// Retryable writes (default true) already protect against a network blip
+// during a single write. This protects against a client-level retry.</span></code></pre>
+
+<h2 class="sec" id="rt">5. Real-time: change streams and time series</h2>
+
+<h3>5.1 Change stream, production shape</h3>
+<pre><code>const pipeline = [
+  { $match: {
+      "ns.coll": "orders",
+      operationType: { $in: ["insert","update","replace"] },
+      "fullDocument.tenantId": "acme",
+      "updateDescription.updatedFields.status": { $exists: true }  <span class="c">// only status flips</span>
+  } }
+];
+
+const stream = db.collection("orders").watch(pipeline, {
+  fullDocument: "updateLookup",          <span class="c">// updates carry the whole doc</span>
+  fullDocumentBeforeChange: "whenAvailable", <span class="c">// needs changeStreamPreAndPostImages</span>
+  resumeAfter: await loadToken(),        <span class="c">// survive a restart</span>
+  maxAwaitTimeMS: 1000
+});
+
+for await (const change of stream) {
+  io.to(`tenant:acme`).emit("order:update", change.fullDocument);
+  await saveToken(change._id);           <span class="c">// PERSIST the resume token</span>
+}</code></pre>
+
+<div class="box">
+<span class="label">The four facts that mark a senior answer</span>
+<ul>
+<li>Change streams read the <b>oplog</b> and only return majority-committed changes, so you never see data that later rolls back.</li>
+<li><code>resumeAfter</code> works only while the token is still in the oplog window. If the process is down longer than the oplog covers, resume fails with <code>ChangeStreamHistoryLost</code> and you must fall back to a full resync. Size the oplog for your worst expected outage.</li>
+<li><code>$match</code> inside the stream pipeline filters <b>server-side</b>. Filtering in Node means every change crosses the network.</li>
+<li>Each open stream holds a cursor and consumes connection and oplog-read resources. One stream per service, fanned out internally, not one per websocket client.</li>
+</ul>
+</div>
+
+<h3>5.2 Change streams vs the alternatives</h3>
+<table>
+<tr><th>Approach</th><th>Latency</th><th>Use when</th><th>Weakness</th></tr>
+<tr><td>Polling</td><td>seconds</td><td>tiny scale, simple</td><td>load scales with pollers, not with change rate</td></tr>
+<tr><td>Change streams</td><td>~100 ms</td><td>react to DB writes inside one service</td><td>bounded by oplog window, no replay beyond it</td></tr>
+<tr><td>Outbox + Kafka</td><td>~100 ms</td><td>fan-out to many services, replay needed</td><td>more infrastructure</td></tr>
+<tr><td>App-level pub/sub</td><td>ms</td><td>server owns every write path</td><td>misses writes from jobs, admin tools, other services</td></tr>
+</table>
+<p><b>Outbox pattern</b>: inside the same transaction as the business write, insert into an <code>outbox</code> collection. A change stream on <code>outbox</code> publishes to Kafka. This gives exactly-once-ish delivery without dual-write inconsistency.</p>
+
+<h3>5.3 Time series collections</h3>
+<pre><code>db.createCollection("events", {
+  timeseries: { timeField: "ts", metaField: "meta", granularity: "seconds" },
+  expireAfterSeconds: 60*60*24*90
+});
+<span class="c">// meta = the low-cardinality labels you filter/group by</span>
+db.events.insertOne({ ts: new Date(),
+  meta: { tenantId:"acme", type:"view", productId },
+  value: 1 });
+
+db.events.createIndex({ "meta.tenantId":1, "meta.type":1, ts:-1 });</code></pre>
+<p>Mongo buckets these internally, giving roughly 3-10x storage reduction and much faster range scans. Trade-offs to state: documents cannot be updated or deleted individually (only via the TTL or a whole-bucket delete in newer versions), and the <code>metaField</code> must be low cardinality. Do not put a session id in it.</p>
+
+<h3>5.4 Real-time counters without hammering the DB</h3>
+<pre><code><span class="c">// Bad: recount on every dashboard render</span>
+db.orders.countDocuments({ tenantId, status:"pending" })   <span class="c">// scans</span>
+
+<span class="c">// Good: maintain a counter document, one atomic $inc per transition</span>
+db.counters.updateOne(
+  { _id: { tenantId:"acme", day:"2026-09-12" } },
+  { $inc: { pending: 1, revenue: 2497 } },
+  { upsert: true });
+<span class="c">// Contention risk: one hot doc. If it becomes a bottleneck, shard the counter
+// into N sibling docs (_id suffix 0..9, random pick) and $sum them on read.</span></code></pre>
+
+<h2 class="sec" id="shard">6. Replication and sharding</h2>
+
+<h3>6.1 Replica set facts worth 30 seconds each</h3>
+<ul>
+<li>One primary, N secondaries. Secondaries replay the primary's <b>oplog</b>, a capped collection of idempotent operations.</li>
+<li>Elections need a strict majority of voting members, which is why you run an odd number. Typical failover is 10 to 12 seconds.</li>
+<li>An <b>arbiter</b> votes but holds no data. It lets a 2-node set elect, but it breaks <code>w:"majority"</code> durability. Avoid in production.</li>
+<li><b>Replication lag</b> is why <code>secondaryPreferred</code> reads can be stale. Watch it with <code>rs.printSecondaryReplicationInfo()</code>.</li>
+<li><b>Rollback</b> happens when a primary that accepted un-replicated writes rejoins as a secondary. <code>w:"majority"</code> prevents you from ever acknowledging such a write.</li>
+<li>Driver-level <b>retryable writes</b> and <b>retryable reads</b> are on by default and mask a failover for a single operation.</li>
+</ul>
+
+<h3>6.2 Shard key selection, the whole interview in one section</h3>
+<p>Judge any candidate key on four axes: <b>cardinality</b>, <b>frequency</b> (no hot value), <b>monotonicity</b> (no ever-increasing prefix), and <b>query alignment</b> (the key is in your common filters).</p>
+
+<pre><code><span class="c">// BAD: monotonic - every insert lands on the max chunk = one hot shard</span>
+sh.shardCollection("app.orders", { createdAt: 1 })
+sh.shardCollection("app.orders", { _id: 1 })          <span class="c">// ObjectId is time-ordered</span>
+
+<span class="c">// BAD: low cardinality - 5 statuses = at most 5 chunks = jumbo chunks</span>
+sh.shardCollection("app.orders", { status: 1 })
+
+<span class="c">// BAD: perfect distribution, terrible reads - every query is scatter-gather</span>
+sh.shardCollection("app.orders", { _id: "hashed" })
+
+<span class="c">// GOOD: tenant isolation + spread inside a tenant + targeted queries</span>
+sh.shardCollection("app.orders", { tenantId: 1, customerId: 1 })
+<span class="c">// find({tenantId, customerId})  -> targeted, single shard
+// find({tenantId})              -> hits only that tenant's shards
+// Risk: one giant tenant. Mitigate with zone sharding or a refined key.</span>
+
+<span class="c">// GOOD for pure time-series writes: hashed prefix spreads, time enables range scans</span>
+sh.shardCollection("app.events", { "meta.tenantId": "hashed", ts: 1 })</code></pre>
+
+<div class="box warn">
+<span class="label">Say these two things and you sound like you have run a cluster</span>
+<b>Refining a shard key</b> is possible since 4.4 by adding suffix fields (<code>refineCollectionShardKey</code>), and full <b>resharding</b> exists since 5.0, but it copies the entire collection. Plan the key properly the first time.<br><br>
+<b>Targeted vs scatter-gather</b>: a query containing the shard key prefix goes to one shard. Without it, <code>mongos</code> broadcasts to every shard and merges. Sorting a scatter-gather result makes the merge expensive. Check with <code>explain()</code> and look at <code>shards</code> in the output.
+</div>
+
+<h3>6.3 Zone sharding for data residency</h3>
+<pre><code>sh.addShardToZone("shard-eu", "EU");
+sh.updateZoneKeyRange("app.orders",
+  { tenantId: MinKey }, { tenantId: "m" }, "EU");
+<span class="c">// Pins tenant ranges to specific shards. The answer to
+// "how do you keep EU customer data in the EU?"</span></code></pre>
+
+<h2 class="sec" id="node">7. Node and Mongoose in production</h2>
+
+<h3>7.1 Connection setup that survives load</h3>
+<pre><code>await mongoose.connect(process.env.MONGO_URI, {
+  maxPoolSize: 100,          <span class="c">// per process. 4 pods x 100 = 400 conns to the cluster</span>
+  minPoolSize: 10,
+  maxIdleTimeMS: 30000,
+  serverSelectionTimeoutMS: 5000,   <span class="c">// fail fast instead of hanging the request</span>
+  socketTimeoutMS: 45000,
+  compressors: ["zstd"],
+  retryWrites: true, retryReads: true,
+  readPreference: "primary",
+  writeConcern: { w: "majority" }
+});
+
+mongoose.set("autoIndex", false);   <span class="c">// NEVER build indexes on boot in prod</span>
+mongoose.set("strictQuery", true);
+<span class="c">// Indexes ship as a migration step, not as a side effect of app startup.</span></code></pre>
+
+<h3>7.2 The four Mongoose performance wins</h3>
+<pre><code><span class="c">// 1. lean() - plain objects, no hydration. 3-5x faster on list endpoints.</span>
+const rows = await Order.find({ tenantId, status:"paid" })
+  .select("_id total createdAt").sort({ createdAt:-1 }).limit(20).lean();
+<span class="c">// You lose virtuals, getters, .save(). Fine for read-only responses.</span>
+
+<span class="c">// 2. cursor - stream large exports, constant memory</span>
+const cursor = Order.find({ tenantId }).lean().cursor({ batchSize: 1000 });
+for await (const doc of cursor) csvStream.write(toRow(doc));
+<span class="c">// NEVER .find() a million docs into an array. That is an OOM in waiting.</span>
+
+<span class="c">// 3. bulkWrite - one round trip instead of N</span>
+await Product.bulkWrite(updates.map(u => ({
+  updateOne: { filter:{ _id:u.id }, update:{ $inc:{ available: -u.qty } } }
+})), { ordered: false });   <span class="c">// unordered = parallel, continues past failures</span>
+
+<span class="c">// 4. Kill the N+1 - one $in, not one query per row</span>
+const orders = await Order.find({ tenantId }).lean();
+const ids    = [...new Set(orders.map(o => String(o.customerId)))];
+const custs  = await Customer.find({ _id: { $in: ids } }).select("name email").lean();
+const byId   = new Map(custs.map(c => [String(c._id), c]));
+orders.forEach(o => o.customer = byId.get(String(o.customerId)));
+<span class="c">// populate() does roughly this, but it is a second round trip and it is easy
+// to forget .select(), pulling entire customer docs you never use.</span></code></pre>
+
+<h3>7.3 Keyset pagination, never skip</h3>
+<pre><code><span class="c">// BAD: skip walks and discards every skipped document. Page 5000 is a scan.</span>
+Order.find({ tenantId }).sort({ createdAt:-1 }).skip(100000).limit(20)
+
+<span class="c">// GOOD: keyset / cursor pagination - constant time at any depth</span>
+const q = { tenantId };
+if (cursor) q.$or = [                          <span class="c">// tiebreak on _id for stability</span>
+  { createdAt: { $lt: cursor.createdAt } },
+  { createdAt: cursor.createdAt, _id: { $lt: cursor.id } }
+];
+const page = await Order.find(q).sort({ createdAt:-1, _id:-1 }).limit(20).lean();
+const next = page.length === 20
+  ? { createdAt: page[19].createdAt, id: page[19]._id } : null;</code></pre>
+
+<h3>7.4 Optimistic concurrency</h3>
+<pre><code><span class="c">// Mongoose: enable version-checked saves</span>
+const schema = new Schema({ ... }, { optimisticConcurrency: true, versionKey: "__v" });
+<span class="c">// .save() now includes __v in the filter and throws VersionError on conflict.</span>
+
+<span class="c">// Driver-level equivalent, explicit and portable</span>
+const r = await docs.updateOne(
+  { _id, version: expectedVersion },
+  { $set: { ...changes }, $inc: { version: 1 } });
+if (r.matchedCount === 0) throw new ConflictError("reload and retry");</code></pre>
+
+<h3>7.5 Schema and validation at the DB boundary</h3>
+<pre><code><span class="c">// Mongoose validates in the app. The DB should validate too - jobs, scripts and
+// other services bypass Mongoose entirely.</span>
+db.runCommand({ collMod: "orders",
+  validator: { $jsonSchema: {
+    bsonType: "object",
+    required: ["tenantId","customerId","status","createdAt","total"],
+    properties: {
+      tenantId: { bsonType: "string" },
+      status:   { enum: ["pending","paid","packed","shipped","delivered","cancelled"] },
+      total:    { bsonType: ["int","long","decimal"], minimum: 0 }
+    } } },
+  validationLevel: "moderate",   <span class="c">// only validate new/updated docs</span>
+  validationAction: "error" });
+
+<span class="c">// Money: never use double. Use minor units (int paise) or Decimal128.</span>
+total: mongoose.Types.Decimal128.fromString("2497.50")</code></pre>
+
+<div class="box q">
+<span class="label">Interview question</span>
+"Your Node API gets slow under load but MongoDB CPU is at 20 percent. Where do you look?"
+<div class="grade">
+<div class="mid"><b>Mid-level</b>Scale up the database or add more indexes.</div>
+<div class="snr"><b>Senior</b>Low DB CPU with slow responses points at the client, not the server. I check pool saturation first, because requests queue waiting for a connection once concurrency exceeds <code>maxPoolSize</code>. The driver emits <code>connectionCheckOutStarted</code> and <code>connectionCheckedOut</code> events, so I measure checkout wait time. Then I look for N+1 populate loops, unbounded <code>find()</code> results being hydrated by Mongoose, and missing <code>lean()</code> on list endpoints, all of which burn Node event-loop time rather than DB time. I would also confirm the slow time is not serialisation of huge documents that a projection should have trimmed.</div>
+</div>
+</div>
+
+<h2 class="sec" id="ops">8. Operations, security, tuning</h2>
+
+<h3>8.1 Finding the slow query in production</h3>
+<pre><code><span class="c">// Profiler: log every op slower than 100ms (sampled, low overhead)</span>
+db.setProfilingLevel(1, { slowms: 100, sampleRate: 0.5 });
+db.system.profile.find().sort({ millis: -1 }).limit(10);
+
+<span class="c">// Live: what is running right now, and kill the runaway</span>
+db.currentOp({ "secs_running": { $gt: 5 }, "op": "query" });
+db.killOp(opid);
+
+<span class="c">// Which indexes are dead weight</span>
+db.orders.aggregate([{ $indexStats: {} }]);
+
+<span class="c">// Cache pressure - if this is much larger than RAM, you are paging from disk</span>
+db.serverStatus().wiredTiger.cache["bytes currently in the cache"];
+
+<span class="c">// Per-query safety valve</span>
+db.orders.find(q).maxTimeMS(3000);   <span class="c">// always set this on user-facing reads</span></code></pre>
+
+<h3>8.2 Security checklist a senior is expected to list</h3>
+<ul>
+<li><b>RBAC</b>, least privilege. The app user gets <code>readWrite</code> on one database, never <code>root</code>. Analytics gets a separate read-only user pointed at a secondary.</li>
+<li><b>TLS</b> in transit, encryption at rest (WiredTiger encryption or cloud volume encryption).</li>
+<li><b>Queryable Encryption / CSFLE</b> for PII such as email or PAN. The server stores ciphertext and cannot read it, yet equality and range queries still work.</li>
+<li><b>Never build a query from raw user input.</b> Operator injection is real in Node: a JSON body of <code>{"password": {"$ne": null}}</code> bypasses a naive login. Cast to string, or validate with Zod or Joi before it reaches the query.</li>
+<li><b>Auditing</b> for compliance, <b>IP allowlist</b> or private endpoint, no public bind.</li>
+<li><b>Backups</b>: continuous cloud backup with point-in-time recovery. Test the restore. A backup you have never restored is not a backup.</li>
+</ul>
+
+<h2 class="sec" id="sc1">S1. Scenario: chat / messaging at scale</h2>
+<p><b>Ask:</b> 1-1 and group chat, 10M messages per day, load last 50 messages instantly, unread counts, typing indicators.</p>
+<pre><code><span class="c">// conversations - small, hot, bounded</span>
+{ _id, tenantId, type:"group", memberIds:[u1,u2,u3],
+  lastMessage: { text:"ok", senderId:u1, ts },        <span class="c">// extended reference</span>
+  memberState: { "u1": { lastReadAt: ISODate(), unread: 0 },
+                 "u2": { lastReadAt: ISODate(), unread: 4 } } }
+
+<span class="c">// messages - own collection, NEVER embedded in the conversation</span>
+{ _id, tenantId, conversationId, senderId, text, ts, attachments:[] }
+
+db.messages.createIndex({ conversationId: 1, ts: -1 })      <span class="c">// the only read pattern</span>
+db.conversations.createIndex({ tenantId:1, memberIds:1, "lastMessage.ts":-1 })
+sh.shardCollection("app.messages", { conversationId:"hashed" })  <span class="c">// co-locates a thread</span></code></pre>
+<ul>
+<li><b>Load history</b>: keyset paginate on <code>{conversationId, ts}</code>, never skip.</li>
+<li><b>Unread count</b>: <code>$inc</code> on <code>memberState.&lt;uid&gt;.unread</code> at send time. Never <code>countDocuments</code> per member per render.</li>
+<li><b>Delivery</b>: change stream on <code>messages</code> to Socket.IO rooms keyed by <code>conversationId</code>.</li>
+<li><b>Typing indicators</b>: do not touch MongoDB. Redis pub/sub with a 3 second TTL. Ephemeral data does not belong in your durable store.</li>
+<li><b>At 10x</b>: bucket messages into hourly documents per conversation, archive threads older than 90 days into <code>messages_archive</code>, and read both with <code>$unionWith</code> when a user scrolls deep.</li>
+</ul>
+
+<h2 class="sec" id="sc2">S2. Scenario: notification feed</h2>
+<p><b>Ask:</b> Every user has a feed, some accounts have 5M followers, feed must load in under 200 ms.</p>
+<pre><code><span class="c">// FAN-OUT ON WRITE (default): one notification doc per recipient</span>
+{ _id, tenantId, userId, type:"like", actorId, entityId, read:false, createdAt }
+db.notifications.createIndex({ tenantId:1, userId:1, createdAt:-1 })
+db.notifications.createIndex({ createdAt:1 }, { expireAfterSeconds: 60*60*24*30 })
+
+<span class="c">// Insert in batches, unordered, from a queue worker - not in the request path</span>
+await notifications.insertMany(batch, { ordered:false });</code></pre>
+<div class="box">
+<span class="label">The senior nuance</span>
+Fan-out on write gives instant reads but 5M inserts for one celebrity action. Fan-out on read is cheap to write but slow to read. The production answer is <b>hybrid</b>: fan out on write for normal accounts, and for accounts above a follower threshold, write once and merge at read time with <code>$unionWith</code>. Same pattern Twitter and Instagram use.
+</div>
+
+<h2 class="sec" id="sc3">S3. Scenario: inventory and overselling</h2>
+<p><b>Ask:</b> Flash sale, 100 units, 50,000 concurrent buyers. Zero overselling allowed.</p>
+<pre><code><span class="c">// Step 1 - RESERVE atomically. This alone prevents overselling.</span>
+const r = await products.findOneAndUpdate(
+  { _id: pid, available: { $gte: qty } },
+  { $inc: { available: -qty, reserved: qty } },
+  { returnDocument: "after" });
+if (!r) return { error: "OUT_OF_STOCK" };
+
+<span class="c">// Step 2 - reservation doc with a TTL, so abandoned carts self-heal</span>
+await reservations.insertOne({ pid, qty, orderId, expiresAt: new Date(Date.now()+15*60000) });
+db.reservations.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+<span class="c">// Step 3 - on payment success, convert reserved -> sold</span>
+await products.updateOne({ _id: pid }, { $inc: { reserved: -qty, sold: qty } });
+
+<span class="c">// Step 4 - a change stream on reservation deletes releases expired stock</span>
+reservations.watch([{ $match: { operationType: "delete" } }],
+                   { fullDocumentBeforeChange: "required" });
+<span class="c">// -> $inc available back. TTL deletes emit a delete event, so this is reliable.</span></code></pre>
+<p><b>Why no transaction:</b> the conditional <code>$inc</code> is already atomic on a single document, and a transaction would add write-conflict aborts on the single hottest document in the system. <b>At 10x</b>: this one document becomes the bottleneck, so split the 100 units into 10 sibling documents of 10 units each and have each request pick one at random, falling back to the others on failure.</p>
+
+<h2 class="sec" id="sc4">S4. Scenario: multi-tenant SaaS</h2>
+<table>
+<tr><th>Model</th><th>Isolation</th><th>Cost</th><th>Use when</th></tr>
+<tr><td>Shared collection + <code>tenantId</code></td><td>logical only</td><td>lowest</td><td>many small tenants <span class="tag">default</span></td></tr>
+<tr><td>Database per tenant</td><td>strong</td><td>high, thousands of DBs hurt</td><td>dozens of enterprise tenants</td></tr>
+<tr><td>Cluster per tenant</td><td>total</td><td>highest</td><td>regulated or whale accounts</td></tr>
+</table>
+<pre><code><span class="c">// Shared model, enforced centrally so no developer can ever forget the filter</span>
+schema.pre(/^find|^update|^delete|^count/, function () {
+  const t = als.getStore()?.tenantId;             <span class="c">// AsyncLocalStorage</span>
+  if (!t) throw new Error("no tenant in context");
+  this.where({ tenantId: t });
+});
+<span class="c">// Every index starts with tenantId. Shard key { tenantId:1, _id:1 }.
+// Noisy neighbour: zone-shard whale tenants onto dedicated shards.</span></code></pre>
+
+<h2 class="sec" id="sc5">S5. Scenario: analytics dashboard over 500M events</h2>
+<pre><code><span class="c">// Never aggregate raw events on page load. Three layers:</span>
+
+<span class="c">// L1 raw - time series collection, 90 day TTL</span>
+<span class="c">// L2 rollup - incremental $merge every 5 minutes</span>
+db.events.aggregate([
+  { $match: { ts: { $gte: lastRunAt } } },
+  { $group: { _id: { t:"$meta.tenantId", type:"$meta.type",
+                     h:{ $dateTrunc:{ date:"$ts", unit:"hour" } } },
+              n: { $sum: 1 }, users: { $addToSet: "$meta.customerId" } } },
+  { $set: { uniqueUsers: { $size: "$users" } } }, { $unset: "users" },
+  { $merge: { into:"events_hourly", on:"_id", whenMatched:"merge", whenNotMatched:"insert" } }
+]);
+<span class="c">// L3 serve - dashboard reads events_hourly, always single-digit ms</span>
+db.events_hourly.createIndex({ "_id.t":1, "_id.type":1, "_id.h":-1 });</code></pre>
+<p>Say the trade-off out loud: rollups mean the dashboard is up to 5 minutes stale, which is almost always acceptable. If "live" is a hard requirement, serve the last hour from raw events and everything older from the rollup, stitched with <code>$unionWith</code>. For exact distinct counts at scale, HyperLogLog in Redis beats <code>$addToSet</code>, which is memory-bound at 100 MB per group.</p>
+
+<h2 class="sec" id="sc6">S6. Scenario: audit log and retention</h2>
+<pre><code>{ _id, tenantId, actorId, action:"order.refund", entity:{ coll:"orders", id },
+  before:{...}, after:{...}, ip, ts }
+
+db.audit.createIndex({ tenantId:1, "entity.id":1, ts:-1 })
+db.audit.createIndex({ tenantId:1, actorId:1, ts:-1 })
+db.audit.createIndex({ ts: 1 }, { expireAfterSeconds: 60*60*24*365*7 })  <span class="c">// 7y</span></code></pre>
+<ul>
+<li>Write-once by design. Grant the app user <code>insert</code> only on this collection, no <code>update</code> or <code>remove</code>.</li>
+<li>Populate it from a <b>change stream</b> on the business collections so no code path can skip auditing.</li>
+<li><code>fullDocumentBeforeChange</code> gives you the "before" image without a read-then-write race.</li>
+<li>Compliance tiering: keep 90 days hot, then <code>$merge</code> to cold storage or S3 and let the TTL clear the hot copy.</li>
+</ul>
+
+<h2 class="sec" id="rapid">Rapid-fire bank</h2>
+<table>
+<tr><th>Question</th><th>Answer that lands</th></tr>
+<tr><td>Why is <code>_id</code> an ObjectId?</td><td>12 bytes: 4 timestamp, 5 random, 3 counter. Generated client-side so inserts need no round trip, and roughly time-sortable. That time ordering is also why it is a bad shard key.</td></tr>
+<tr><td><code>updateOne</code> vs <code>replaceOne</code></td><td><code>updateOne</code> applies operators to named fields. <code>replaceOne</code> swaps the whole document and silently drops fields you did not send.</td></tr>
+<tr><td><code>countDocuments</code> vs <code>estimatedDocumentCount</code></td><td>The first actually scans or uses an index and is accurate. The second reads collection metadata, is O(1), and is approximate. Never use the estimate with a filter, it ignores one.</td></tr>
+<tr><td>Why is <code>$regex</code> slow?</td><td>Only a left-anchored, case-sensitive pattern like <code>/^abc/</code> can use an index. Anything else scans. Use Atlas Search for real text matching.</td></tr>
+<tr><td>Why is <code>$ne</code> or <code>$nin</code> slow?</td><td>Negation cannot produce a tight index bound, so it scans the whole index. Rewrite as a positive <code>$in</code> when you can.</td></tr>
+<tr><td>Multikey index limits</td><td>An index on an array field is multikey: one index entry per element. You cannot have two array fields in one compound index, and multikey indexes can never cover a query.</td></tr>
+<tr><td>Sparse vs partial</td><td>Sparse skips docs missing the field. Partial takes an arbitrary filter expression and is strictly more powerful. Prefer partial.</td></tr>
+<tr><td>Capped collection</td><td>Fixed size, insertion order, auto-overwrites oldest, no deletes. Largely superseded by TTL indexes and time series collections.</td></tr>
+<tr><td><code>$expr</code> cost</td><td>Lets you compare two fields in a query, but it cannot use index bounds in most cases. Precompute the comparison into a stored field if it is hot.</td></tr>
+<tr><td>Why avoid <code>$where</code> and <code>mapReduce</code></td><td>Both run JavaScript on the server: slow, single-threaded, and an injection surface. The aggregation framework replaces both.</td></tr>
+<tr><td>16 MB limit workaround</td><td>GridFS for binary blobs, but the real answer is that a 16 MB document means the model is wrong. Bucket or reference instead.</td></tr>
+<tr><td>Read-your-own-write on a secondary</td><td>Use the same client session. Causal consistency guarantees the secondary read sees your prior write, or waits until it can.</td></tr>
+</table>
+
+<h2 class="sec" id="ref-query">9. Query operators, complete</h2>
+
+<h3>9.1 Comparison</h3>
+<pre><code>{ price: { $eq: 899 } }              <span class="c">// equals (implicit: { price: 899 })</span>
+{ price: { $ne: 899 } }              <span class="c">// not equal        SCANS - no tight bound</span>
+{ price: { $gt: 500, $lt: 2000 } }   <span class="c">// range, both bounds on one field</span>
+{ price: { $gte: 500, $lte: 2000 } }
+{ status: { $in: ["paid","packed"] } }   <span class="c">// multi-point, index-friendly</span>
+{ status: { $nin: ["cancelled"] } }      <span class="c">// SCANS - prefer a positive $in</span></code></pre>
+
+<h3>9.2 Logical</h3>
+<pre><code>{ $and: [ { price:{$gt:500} }, { "attrs.color":"red" } ] }   <span class="c">// implicit when keys differ</span>
+{ $or:  [ { status:"paid" }, { total:{ $gt: 10000 } } ] }    <span class="c">// needs an index on EACH branch</span>
+{ price: { $not: { $gt: 500 } } }                            <span class="c">// also matches missing field!</span>
+{ $nor: [ { status:"paid" }, { status:"packed" } ] }         <span class="c">// neither</span></code></pre>
+<div class="box warn"><span class="label">Two gotchas interviewers love</span>
+<code>$or</code> uses a separate index scan per branch and de-duplicates; if any branch lacks an index the whole query scans. <code>$not</code> and <code>$ne</code> match documents where the field is <b>absent</b>, which silently returns rows you did not expect.</div>
+
+<h3>9.3 Element and type</h3>
+<pre><code>{ deletedAt: { $exists: false } }        <span class="c">// field absent</span>
+{ deletedAt: { $exists: true, $ne: null } }  <span class="c">// present AND not null</span>
+{ total: { $type: "int" } }              <span class="c">// or numeric BSON code, or an array of types</span>
+{ year: { $type: "string" } }            <span class="c">// find the dirty rows before a migration</span></code></pre>
+
+<h3>9.4 Evaluation</h3>
+<pre><code>{ $expr: { $gt: ["$total", "$discountCap"] } }   <span class="c">// compare TWO FIELDS - no index bounds</span>
+{ sku: { $regex: "^TSHIRT", $options: "i" } }    <span class="c">// ^ anchored = index-usable, /i kills it</span>
+{ $text: { $search: "red cotton -polyester", $caseSensitive: false } }
+{ qty: { $mod: [4, 0] } }                        <span class="c">// divisible by 4</span>
+{ $jsonSchema: { required:["tenantId"] } }       <span class="c">// also used as a collection validator</span>
+{ $where: "this.a > this.b" }                    <span class="c">// NEVER. JS on server, injection risk.</span>
+
+<span class="c">// $text ranking - the score is metadata, you must project it</span>
+db.products.find({ $text:{ $search:"cotton" } }, { score:{ $meta:"textScore" } })
+          .sort({ score: { $meta:"textScore" } })</code></pre>
+
+<h3>9.5 Array query operators</h3>
+<pre><code>{ categories: "apparel" }                        <span class="c">// matches if ANY element equals</span>
+{ categories: ["apparel","tees"] }               <span class="c">// EXACT array, same order. Rarely what you want.</span>
+{ categories: { $all: ["apparel","tees"] } }     <span class="c">// contains both, any order</span>
+{ categories: { $size: 2 } }                     <span class="c">// exact length. Cannot use an index.</span>
+{ "items.2.sku": "X" }                           <span class="c">// positional access by index</span>
+
+<span class="c">// $elemMatch - ONE element satisfies ALL conditions</span>
+{ items: { $elemMatch: { sku:"TSHIRT-RED-M", qty:{ $gte:2 } } } }
+<span class="c">// vs this, where DIFFERENT elements may satisfy each clause:</span>
+{ "items.sku":"TSHIRT-RED-M", "items.qty":{ $gte:2 } }   <span class="c">// classic bug</span></code></pre>
+
+<h3>9.6 Geospatial and bitwise</h3>
+<pre><code>{ loc: { $near: { $geometry:{type:"Point",coordinates:[73.85,18.52]},
+                  $minDistance:0, $maxDistance:5000 } } }   <span class="c">// sorted by distance</span>
+{ loc: { $geoWithin: { $centerSphere: [[73.85,18.52], 5/6378.1] } } }  <span class="c">// unsorted, faster</span>
+{ loc: { $geoIntersects: { $geometry: { type:"Polygon", coordinates:[[...]] } } } }
+{ flags: { $bitsAllSet: 6 } }   <span class="c">// also $bitsAnySet / $bitsAllClear / $bitsAnyClear</span></code></pre>
+
+<h3>9.7 Projection operators</h3>
+<pre><code>db.orders.find({}, { total:1, status:1 })          <span class="c">// inclusion (+ _id by default)</span>
+db.orders.find({}, { _id:0, total:1 })             <span class="c">// drop _id - required for covered queries</span>
+db.orders.find({}, { items:0 })                    <span class="c">// exclusion (cannot mix with inclusion)</span>
+
+{ "items.$": 1 }                                   <span class="c">// FIRST matching array element only</span>
+{ items: { $elemMatch: { qty:{ $gt:1 } } } }       <span class="c">// first element matching a NEW condition</span>
+{ items: { $slice: 5 } }                           <span class="c">// first 5</span>
+{ items: { $slice: -5 } }                          <span class="c">// last 5</span>
+{ items: { $slice: [10, 5] } }                     <span class="c">// skip 10, take 5</span>
+{ score: { $meta: "textScore" } }                  <span class="c">// search relevance</span>
+
+<span class="c">// Aggregation-style projection inside find() (4.4+): computed fields</span>
+db.orders.find({}, { lineCount: { $size: "$items" } })</code></pre>
+
+<h2 class="sec" id="ref-update">10. Update operators, complete</h2>
+
+<h3>10.1 Field operators</h3>
+<pre><code>{ $set:    { status:"paid", "shipping.city":"Pune" } }   <span class="c">// creates path if missing</span>
+{ $unset:  { couponCode: "" } }                          <span class="c">// value is ignored</span>
+{ $inc:    { available:-2, reserved:2 } }                <span class="c">// atomic, negative to decrement</span>
+{ $mul:    { price: 1.18 } }
+{ $min:    { lowestPrice: 799 } }    <span class="c">// updates ONLY if new value is lower</span>
+{ $max:    { peakQty: 12 } }         <span class="c">// updates ONLY if new value is higher</span>
+{ $rename: { "name": "fullName" } }
+{ $setOnInsert: { createdAt: new Date() } }   <span class="c">// applies only when an upsert inserts</span>
+{ $currentDate: { updatedAt: true, lastTs: { $type:"timestamp" } } }
+
+<span class="c">// Upsert idiom: insert-or-update without a race</span>
+db.counters.updateOne({ _id:key },
+  { $inc:{ n:1 }, $setOnInsert:{ createdAt:new Date() } }, { upsert:true })</code></pre>
+
+<h3>10.2 Array update operators</h3>
+<pre><code>{ $push:     { items: newItem } }
+{ $push:     { recent: { $each:[a,b], $position:0, $slice:50, $sort:{ ts:-1 } } } }
+             <span class="c">// $each many, $position where, $slice cap length, $sort order the array</span>
+{ $addToSet: { categories: "sale" } }              <span class="c">// no duplicates</span>
+{ $addToSet: { categories: { $each:["sale","new"] } } }
+{ $pop:      { items: 1 } }                        <span class="c">// 1 = last, -1 = first</span>
+{ $pull:     { items: { qty: { $lt: 1 } } } }      <span class="c">// remove ALL matching a condition</span>
+{ $pullAll:  { tags: ["old","stale"] } }           <span class="c">// remove these exact values</span></code></pre>
+
+<h3>10.3 The three positional forms</h3>
+<pre><code><span class="c">// $  -- FIRST element matched by the QUERY (query must reference the array)</span>
+db.orders.updateOne({ _id, "items.sku":"X" }, { $set:{ "items.$.qty":3 } })
+
+<span class="c">// $[] -- EVERY element</span>
+db.orders.updateMany({}, { $set:{ "items.$[].currency":"INR" } })
+
+<span class="c">// $[&lt;id&gt;] -- every element matching an arrayFilter (the powerful one)</span>
+db.orders.updateOne({ _id },
+  { $set: { "items.$[el].price": 799 } },
+  { arrayFilters: [ { "el.price": { $gt: 799 } } ] })
+
+<span class="c">// Nested arrays: filters chain</span>
+db.docs.updateOne({ _id },
+  { $inc: { "a.$[i].b.$[j].n": 1 } },
+  { arrayFilters: [ { "i.id": 1 }, { "j.ok": true } ] })</code></pre>
+
+<h3>10.4 Aggregation pipeline updates (4.2+)</h3>
+<pre><code><span class="c">// Update one field USING another field - impossible with plain operators</span>
+db.orders.updateMany({}, [
+  { $set: { finalTotal: { $subtract: ["$total", "$discount"] },
+            tier: { $cond: [ { $gt:["$total", 10000] }, "vip", "std" ] } } }
+])
+<span class="c">// Also how you do conditional updates, $$NOW, and read-modify-write atomically.</span></code></pre>
+
+<h2 class="sec" id="ref-stages">11. Every aggregation stage worth knowing</h2>
+<table>
+<tr><th>Stage</th><th>Does</th><th>Minimal code</th></tr>
+<tr><td><code>$match</code></td><td>filter; put first, use an index</td><td><code>{ $match: { tenantId:"acme" } }</code></td></tr>
+<tr><td><code>$project</code></td><td>reshape, include/exclude/compute</td><td><code>{ $project: { _id:0, t:"$total" } }</code></td></tr>
+<tr><td><code>$set</code> / <code>$addFields</code></td><td>add fields, keep the rest (aliases)</td><td><code>{ $set: { n: { $size:"$items" } } }</code></td></tr>
+<tr><td><code>$unset</code></td><td>remove fields</td><td><code>{ $unset: ["tmp","p"] }</code></td></tr>
+<tr><td><code>$group</code></td><td>aggregate by key; 100 MB cap</td><td><code>{ $group:{ _id:"$status", n:{$sum:1} } }</code></td></tr>
+<tr><td><code>$sort</code></td><td>order; index-backed if early</td><td><code>{ $sort: { createdAt:-1 } }</code></td></tr>
+<tr><td><code>$limit</code> / <code>$skip</code></td><td>page; sort+limit = top-k</td><td><code>{ $limit: 20 }</code></td></tr>
+<tr><td><code>$unwind</code></td><td>array to one doc per element</td><td><code>{ $unwind:{ path:"$items", preserveNullAndEmptyArrays:true, includeArrayIndex:"i" } }</code></td></tr>
+<tr><td><code>$lookup</code></td><td>left outer join; index foreignField</td><td>see 3.2</td></tr>
+<tr><td><code>$graphLookup</code></td><td>recursive join; 100 MB, no disk</td><td><code>{ $graphLookup:{ from, startWith, connectFromField, connectToField, as, maxDepth } }</code></td></tr>
+<tr><td><code>$unionWith</code></td><td>append another collection</td><td><code>{ $unionWith:{ coll:"archive", pipeline:[...] } }</code></td></tr>
+<tr><td><code>$facet</code></td><td>many sub-pipelines, one pass</td><td><code>{ $facet:{ page:[...], counts:[...] } }</code></td></tr>
+<tr><td><code>$bucket</code></td><td>group into explicit boundaries</td><td><code>{ $bucket:{ groupBy:"$price", boundaries:[0,500,1000], default:"hi", output:{n:{$sum:1}} } }</code></td></tr>
+<tr><td><code>$bucketAuto</code></td><td>N evenly-distributed buckets</td><td><code>{ $bucketAuto:{ groupBy:"$price", buckets:5 } }</code></td></tr>
+<tr><td><code>$sortByCount</code></td><td>group + count + sort desc</td><td><code>{ $sortByCount: "$attrs.color" }</code></td></tr>
+<tr><td><code>$count</code></td><td>count remaining docs</td><td><code>{ $count: "total" }</code></td></tr>
+<tr><td><code>$replaceRoot</code> / <code>$replaceWith</code></td><td>promote a subdocument to top level</td><td><code>{ $replaceWith: "$customer" }</code></td></tr>
+<tr><td><code>$setWindowFields</code></td><td>running totals, rank, moving avg</td><td>see 3.3</td></tr>
+<tr><td><code>$densify</code> / <code>$fill</code></td><td>fill gaps in time series</td><td>see 3.3</td></tr>
+<tr><td><code>$merge</code></td><td>upsert into a collection; incremental</td><td><code>{ $merge:{ into, on, whenMatched:"merge", whenNotMatched:"insert" } }</code></td></tr>
+<tr><td><code>$out</code></td><td>REPLACE a whole collection</td><td><code>{ $out: "report" }</code></td></tr>
+<tr><td><code>$sample</code></td><td>random N docs</td><td><code>{ $sample: { size: 100 } }</code></td></tr>
+<tr><td><code>$geoNear</code></td><td>sorted-by-distance; must be FIRST stage</td><td><code>{ $geoNear:{ near, distanceField:"d", spherical:true } }</code></td></tr>
+<tr><td><code>$redact</code></td><td>field-level access control in-pipeline</td><td><code>{ $redact:{ $cond:[cond,"$$DESCEND","$$PRUNE"] } }</code></td></tr>
+<tr><td><code>$documents</code></td><td>literal docs as a pipeline source</td><td><code>{ $documents: [ {a:1},{a:2} ] }</code></td></tr>
+<tr><td><code>$indexStats</code> / <code>$collStats</code></td><td>diagnostics: index usage, size</td><td><code>{ $indexStats: {} }</code></td></tr>
+<tr><td><code>$search</code> / <code>$vectorSearch</code></td><td>Atlas Lucene / semantic search; first stage</td><td><code>{ $search:{ text:{ query, path } } }</code></td></tr>
+</table>
+
+<h2 class="sec" id="ref-expr">12. Expression operators, grouped</h2>
+
+<h3>12.1 Accumulators (in $group and $setWindowFields)</h3>
+<pre><code>$sum $avg $min $max $count $first $last $push $addToSet
+$stdDevPop $stdDevSamp $mergeObjects
+$top $topN $bottom $bottomN     <span class="c">// pick best-N by a sort, without a full $sort</span>
+
+{ $group: { _id: "$tenantId",
+    revenue:  { $sum: "$total" },
+    aov:      { $avg: "$total" },
+    best:     { $top: { output:["$_id","$total"], sortBy:{ total:-1 } } },
+    top3:     { $topN: { n:3, output:"$total", sortBy:{ total:-1 } } },
+    statuses: { $addToSet: "$status" },
+    merged:   { $mergeObjects: "$meta" } } }</code></pre>
+
+<h3>12.2 Conditional and variable</h3>
+<pre><code>{ $cond: [ { $gte:["$total",10000] }, "vip", "std" ] }
+{ $cond: { if:{...}, then:"a", else:"b" } }
+{ $ifNull: [ "$discount", 0 ] }
+{ $switch: { branches: [ { case:{ $gte:["$t",10000] }, then:"vip" },
+                         { case:{ $gte:["$t",1000] },  then:"mid" } ],
+             default: "std" } }
+{ $let: { vars:{ net:{ $subtract:["$total","$tax"] } },
+          in: { $multiply:["$$net", 0.9] } } }
+
+<span class="c">// System variables</span>
+"$$ROOT"     <span class="c">// the whole input document</span>
+"$$NOW"      <span class="c">// server time, as a Date</span>
+"$$REMOVE"   <span class="c">// conditionally drop a field in $project</span>
+"$$DESCEND" "$$PRUNE" "$$KEEP"   <span class="c">// $redact only</span>
+
+{ $project: { coupon: { $cond:[ "$isAdmin", "$coupon", "$$REMOVE" ] } } }</code></pre>
+
+<h3>12.3 Array expressions</h3>
+<pre><code>{ $size: "$items" }
+{ $arrayElemAt: [ "$items", 0 ] }          { $first: "$items" }   { $last: "$items" }
+{ $slice: [ "$items", 0, 5 ] }             { $reverseArray: "$items" }
+{ $concatArrays: [ "$a", "$b" ] }          { $in: [ "sale", "$categories" ] }
+{ $indexOfArray: [ "$skus", "X" ] }        { $isArray: "$items" }
+{ $sortArray: { input:"$items", sortBy:{ price:-1 } } }
+{ $range: [ 0, 10, 2 ] }                   { $zip: { inputs:["$a","$b"] } }
+
+{ $filter: { input:"$items", as:"i", cond:{ $gt:["$$i.qty",1] } } }
+{ $map:    { input:"$items", as:"i", in:{ $multiply:["$$i.qty","$$i.price"] } } }
+{ $reduce: { input:"$items", initialValue:0,
+             in:{ $add:["$$value", "$$this.qty"] } } }
+<span class="c">// $$this = current element, $$value = accumulator</span>
+
+{ $objectToArray: "$attrs" }   <span class="c">// { color:"red" } -> [ {k:"color", v:"red"} ]</span>
+{ $arrayToObject: "$kv" }      <span class="c">// the inverse. Together they let you query dynamic keys.</span></code></pre>
+
+<h3>12.4 String, date, arithmetic, type</h3>
+<pre><code><span class="c">// STRING</span>
+$concat $split $substrCP $strLenCP $toLower $toUpper $trim $ltrim $rtrim
+$indexOfCP $replaceOne $replaceAll $regexMatch $regexFind $regexFindAll $strcasecmp
+{ $concat: [ "$firstName", " ", "$lastName" ] }
+{ $regexMatch: { input:"$email", regex:/@keka\.com$/ } }
+
+<span class="c">// DATE</span>
+{ $dateToString: { date:"$createdAt", format:"%Y-%m-%d", timezone:"Asia/Kolkata" } }
+{ $dateTrunc:   { date:"$createdAt", unit:"day", timezone:"Asia/Kolkata" } }
+{ $dateAdd:     { startDate:"$createdAt", unit:"day", amount:7 } }
+{ $dateDiff:    { startDate:"$createdAt", endDate:"$$NOW", unit:"hour" } }
+{ $dateFromString:{ dateString:"$raw", format:"%d-%m-%Y" } }
+{ $dateToParts: { date:"$createdAt" } }
+$year $month $dayOfMonth $dayOfWeek $hour $minute $week $isoWeek $isoWeekYear
+<span class="c">// ALWAYS pass timezone. Dates are stored UTC; "daily revenue" is a local-time question.</span>
+
+<span class="c">// ARITHMETIC</span>
+$add $subtract $multiply $divide $mod $abs $ceil $floor $round $trunc $pow $sqrt $exp $ln $log $log10
+{ $round: [ "$total", 2 ] }
+
+<span class="c">// TYPE CONVERSION</span>
+{ $convert: { input:"$year", to:"int", onError:null, onNull:0 } }   <span class="c">// safe cast</span>
+$toInt $toLong $toDouble $toDecimal $toString $toBool $toDate $toObjectId $isNumber $type
+
+<span class="c">// SET</span>
+$setUnion $setIntersection $setDifference $setEquals $setIsSubset
+$anyElementTrue $allElementsTrue
+
+<span class="c">// OBJECT (dynamic field names)</span>
+{ $getField: { field:"$key", input:"$attrs" } }
+{ $setField: { field:"color", input:"$attrs", value:"red" } }</code></pre>
+
+<h3>12.5 Window operators (inside $setWindowFields)</h3>
+<pre><code>$rank $denseRank $documentNumber      <span class="c">// ranking</span>
+$shift                                 <span class="c">// previous/next row value</span>
+$derivative $integral                  <span class="c">// rate of change, area under curve</span>
+$expMovingAvg                          <span class="c">// { input:"$total", N:7 }</span>
+$locf $linearFill                      <span class="c">// carry-forward / interpolate nulls</span>
+<span class="c">// plus every accumulator: $sum $avg $min $max $count $push $stdDevPop ...</span>
+
+window: { documents: ["unbounded","current"] }    <span class="c">// running total</span>
+window: { documents: [-6, 0] }                    <span class="c">// trailing 7 rows</span>
+window: { range: [-7, 0], unit: "day" }           <span class="c">// trailing 7 DAYS (time-based)</span></code></pre>
+
+<h2 class="sec" id="ref-methods">13. Methods, cursor modifiers, commands</h2>
+
+<h3>13.1 Write methods</h3>
+<pre><code>insertOne(doc)            insertMany(docs, { ordered:false })
+updateOne(f,u,{upsert})   updateMany(f,u)      replaceOne(f,doc)
+deleteOne(f)              deleteMany(f)
+findOneAndUpdate(f,u,{ returnDocument:"after", upsert:true, sort, projection })
+findOneAndReplace(f,doc)  findOneAndDelete(f)
+<span class="c">// findOneAndX returns the document AND mutates atomically - the read-modify-write primitive.</span>
+
+bulkWrite([ { insertOne:{document} },
+            { updateOne:{ filter, update, upsert:true } },
+            { deleteMany:{ filter } } ], { ordered:false })
+<span class="c">// ordered:false = parallel, keeps going after an error. Report errors from result.</span>
+
+<span class="c">// Result fields to check (never assume success)</span>
+res.matchedCount  res.modifiedCount  res.upsertedId  res.deletedCount</code></pre>
+
+<h3>13.2 Read methods and cursor modifiers</h3>
+<pre><code>find(filter, projection)  findOne(filter)  distinct("status", filter)
+countDocuments(filter)    estimatedDocumentCount()
+aggregate(pipeline, { allowDiskUse:true, maxTimeMS:5000, collation, hint })
+watch(pipeline, options)
+
+<span class="c">// Cursor chain</span>
+.sort({ createdAt:-1 }).skip(0).limit(20).project({ total:1 })
+.hint({ tenantId:1, createdAt:-1 })   <span class="c">// force an index when the planner is wrong</span>
+.batchSize(1000)                       <span class="c">// network round-trip size</span>
+.maxTimeMS(3000)                       <span class="c">// kill runaway queries</span>
+.collation({ locale:"en", strength:2 })
+.explain("executionStats")             <span class="c">// also "queryPlanner" | "allPlansExecution"</span>
+.readConcern("majority").readPref("secondaryPreferred")</code></pre>
+
+<h3>13.3 Index and admin commands</h3>
+<pre><code>db.c.createIndex(keys, { name, unique, partialFilterExpression, expireAfterSeconds,
+                         sparse, collation, hidden:true })
+db.c.getIndexes()   db.c.dropIndex(name)   db.c.hideIndex(name)   <span class="c">// hide = test before dropping</span>
+db.c.aggregate([{ $indexStats:{} }])
+db.c.stats()        db.c.countDocuments()  db.stats()
+db.currentOp()      db.killOp(id)          db.setProfilingLevel(1,{slowms:100})
+db.runCommand({ collMod:"orders", validator:{...} })
+rs.status()  rs.printSecondaryReplicationInfo()  rs.conf()
+sh.status()  sh.shardCollection(ns,key)  sh.addShardToZone()  sh.updateZoneKeyRange()
+db.adminCommand({ setFeatureCompatibilityVersion:"7.0" })</code></pre>
+
+<h2 class="sec" id="qbank">Full question bank</h2>
+<p>Grouped by round, with the compressed answer. If you can expand any line into ninety seconds with an example, you are ready.</p>
+
+<h3>Round 1: fundamentals</h3>
+<table>
+<tr><th>Question</th><th>Compressed answer</th></tr>
+<tr><td>BSON vs JSON</td><td>Binary, typed, length-prefixed. Adds Date, ObjectId, Decimal128, Binary, and int vs long. Faster to traverse, 16 MB document cap.</td></tr>
+<tr><td>When would you pick MongoDB over Postgres?</td><td>Evolving or per-tenant-variable schema, document-shaped aggregates read as a unit, horizontal write scaling, geo-distributed data. Pick Postgres for heavy multi-table joins, strong relational constraints, and complex reporting SQL.</td></tr>
+<tr><td>Is MongoDB ACID?</td><td>Yes. Single-document always. Multi-document since 4.0 on replica sets, 4.2 across shards, with snapshot isolation.</td></tr>
+<tr><td>WiredTiger storage engine</td><td>Document-level concurrency via MVCC, compression on by default, checkpoints every 60s, journal for durability between them. Cache defaults to half of RAM minus 1 GB.</td></tr>
+<tr><td>What is the working set?</td><td>Indexes plus frequently-accessed documents. It must fit in RAM or every query pages from disk. The main capacity-planning number.</td></tr>
+<tr><td>Document vs collection vs database</td><td>Row, table, schema. Collections are lazily created and have no enforced structure unless you add a JSON schema validator.</td></tr>
+<tr><td>Null vs missing vs undefined</td><td><code>{a:null}</code> and a missing <code>a</code> both match <code>{a:null}</code>. Distinguish with <code>$exists</code>. This bites on optional fields constantly.</td></tr>
+</table>
+
+<h3>Round 2: indexing</h3>
+<table>
+<tr><th>Question</th><th>Compressed answer</th></tr>
+<tr><td>Explain the ESR rule</td><td>Equality fields, then Sort fields, then Range fields. Violating it forces an in-memory <code>SORT</code> stage or a wide index scan.</td></tr>
+<tr><td>Index prefix rule</td><td>An index on <code>{a,b,c}</code> serves queries on <code>a</code>, <code>a+b</code>, <code>a+b+c</code>, but never <code>b</code> alone. Order your compound indexes so the common prefix is shared.</td></tr>
+<tr><td>How many indexes are too many?</td><td>64 hard limit; practically, watch write latency and whether index size still fits RAM. Audit with <code>$indexStats</code> and drop unused ones, hiding first.</td></tr>
+<tr><td>What makes a query covered?</td><td>Every field in filter, sort and projection is in the index, and <code>_id</code> is excluded. <code>totalDocsExamined</code> is 0. Impossible on multikey indexes.</td></tr>
+<tr><td>Why can't a compound index have two array fields?</td><td>The cartesian product of index entries would explode. Mongo rejects it at creation.</td></tr>
+<tr><td>Index intersection, when?</td><td>Rarely chosen by the planner and usually slower than one good compound index. Mention it to show awareness, then say you would build the compound index.</td></tr>
+<tr><td>Building an index on a live 50M collection</td><td>Rolling build: one secondary at a time with the member out of the set, then step down the primary. In Atlas, use the rolling index build option. Never a foreground build.</td></tr>
+<tr><td>Query used the wrong index. Fix?</td><td>Confirm with <code>explain</code> and <code>allPlansExecution</code>, clear the plan cache, and if it is genuinely a planner mistake, pin it with <code>hint()</code> or an index filter. Fix the root cause: usually a missing or badly ordered compound index.</td></tr>
+</table>
+
+<h3>Round 3: aggregation</h3>
+<table>
+<tr><th>Question</th><th>Compressed answer</th></tr>
+<tr><td>Which stages can use an index?</td><td>Only stages before the first document-transforming stage: <code>$match</code>, <code>$sort</code>, <code>$geoNear</code>, <code>$limit</code>, <code>$skip</code> at the head. After a <code>$group</code> or <code>$unwind</code>, everything is in memory.</td></tr>
+<tr><td>Optimisations the planner does for you</td><td>Moves <code>$match</code> before <code>$sort</code> and before <code>$lookup</code> when provably safe, merges adjacent <code>$sort</code>+<code>$limit</code> into top-k, coalesces <code>$limit</code>s, pushes <code>$project</code> down. You still write it correctly, because it cannot reorder past <code>$unwind</code> on the same field.</td></tr>
+<tr><td><code>$group</code> vs <code>$bucket</code> vs <code>$facet</code></td><td>Group by key, bucket by numeric boundaries, facet runs many independent pipelines in one pass.</td></tr>
+<tr><td><code>$out</code> vs <code>$merge</code></td><td><code>$out</code> replaces the target collection entirely and drops its indexes. <code>$merge</code> upserts and supports incremental rollups. Use <code>$merge</code>.</td></tr>
+<tr><td>Aggregation vs find</td><td><code>find</code> for simple filter+sort+project; it has lower overhead. Aggregation when you need grouping, joins, reshaping or computed fields.</td></tr>
+<tr><td>How do you paginate an aggregation?</td><td>Keyset on an indexed sort field if possible. If you need a total, use <code>$facet</code> with a page branch and a <code>$count</code> branch so you scan once.</td></tr>
+<tr><td>Aggregation on a sharded cluster</td><td>Stages run on each shard in parallel, then a merge stage runs on one shard or on mongos. <code>$group</code> and <code>$sort</code> force a merge, so keep the shard-local <code>$match</code> as selective as possible.</td></tr>
+</table>
+
+<h3>Round 4: schema design</h3>
+<table>
+<tr><th>Question</th><th>Compressed answer</th></tr>
+<tr><td>How do you start a schema design?</td><td>From access patterns, not entities. List every read, its frequency, its latency budget, then shape documents so the hot reads are single-document fetches.</td></tr>
+<tr><td>One-to-few / one-to-many / one-to-squillions</td><td>Embed / reference with a child-side index / reference plus a bucket or subset pattern. Naming these three tiers signals you have read the MongoDB design guidance.</td></tr>
+<tr><td>Many-to-many</td><td>Array of ids on the side queried most, or a join collection when the relationship itself has attributes such as role or joinedAt.</td></tr>
+<tr><td>How do you keep denormalised copies fresh?</td><td>Change stream updating copies, a scheduled reconciliation job, or accept staleness where the copy is a historical snapshot. State which one and why.</td></tr>
+<tr><td>Storing money</td><td>Integer minor units or Decimal128. Never a double, because binary floating point cannot represent 0.1 exactly.</td></tr>
+<tr><td>Tree structures</td><td>Parent reference for cheap writes, array of ancestors for cheap subtree reads, materialised path for prefix queries, nested sets almost never. <code>$graphLookup</code> traverses a parent reference.</td></tr>
+<tr><td>Soft delete</td><td><code>deletedAt</code> plus a partial index that excludes deleted rows, so indexes stay small and unique constraints still work.</td></tr>
+</table>
+
+<h3>Round 5: transactions and consistency</h3>
+<table>
+<tr><th>Question</th><th>Compressed answer</th></tr>
+<tr><td>When do you NOT use a transaction?</td><td>When one atomic document update does the job, and under high contention on a hot document where write conflicts cause repeated aborts.</td></tr>
+<tr><td>What isolation do transactions give?</td><td>Snapshot isolation with <code>readConcern:"snapshot"</code>. Readers see a consistent point in time; writers conflict and abort rather than block indefinitely.</td></tr>
+<tr><td>What is a TransientTransactionError?</td><td>A retryable failure such as a write conflict or a failover. <code>withTransaction</code> retries it for you, which is why the callback must be idempotent and free of external side effects.</td></tr>
+<tr><td>Read-your-own-write on a secondary</td><td>Use the same client session for both operations. Causal consistency makes the secondary wait until it has replicated your write.</td></tr>
+<tr><td>What does <code>w:"majority"</code> actually guarantee?</td><td>The write reached a majority of data-bearing voting members, so it survives any single failover and can never be rolled back.</td></tr>
+<tr><td>Two-phase commit across services</td><td>Do not. Use the outbox pattern or a saga with compensating actions, because a MongoDB transaction cannot span an HTTP call.</td></tr>
+</table>
+
+<h3>Round 6: replication, sharding, scaling</h3>
+<table>
+<tr><th>Question</th><th>Compressed answer</th></tr>
+<tr><td>When do you shard?</td><td>When one replica set can no longer hold the working set in RAM, or write throughput exceeds one primary, or you need data residency per region. Not before: sharding adds real operational cost.</td></tr>
+<tr><td>Pick a shard key for orders</td><td><code>{tenantId:1, customerId:1}</code>. High cardinality, no monotonic prefix, aligned with the common query, and it isolates tenants. Risk is a whale tenant, mitigated by zone sharding.</td></tr>
+<tr><td>Hashed vs ranged</td><td>Hashed spreads writes perfectly but makes every range query a scatter-gather. Ranged keeps range scans targeted but risks hot chunks on monotonic keys. Compound of both is often the answer.</td></tr>
+<tr><td>What is a jumbo chunk?</td><td>A chunk that cannot be split because all its documents share one shard key value. It stops balancing. Caused by low-cardinality keys.</td></tr>
+<tr><td>What does mongos do?</td><td>Routes queries using config-server metadata, targets shards when the key is present, broadcasts and merges when it is not, and handles sorting and limiting of merged results.</td></tr>
+<tr><td>Can you change a shard key?</td><td>Refine by adding suffix fields since 4.4; full resharding since 5.0, but it rewrites the entire collection. Design it right the first time.</td></tr>
+<tr><td>Read scaling without sharding</td><td>Add secondaries and route reports to <code>secondaryPreferred</code>, accepting replication lag. Add caching. Sharding is for write and data-size scaling.</td></tr>
+</table>
+
+<h3>Round 7: Node, Mongoose, application layer</h3>
+<table>
+<tr><th>Question</th><th>Compressed answer</th></tr>
+<tr><td>How does the driver connection pool work?</td><td>One pool per process per cluster, sized by <code>maxPoolSize</code>. Requests beyond that queue for a connection. Total connections equals pods times pool size, which must stay under the cluster limit.</td></tr>
+<tr><td>Mongoose: pros and when to drop it</td><td>Schema, validation, middleware, population, typed models. Drop to the raw driver for bulk pipelines, high-throughput writes, and anywhere hydration overhead matters.</td></tr>
+<tr><td><code>lean()</code> tradeoff</td><td>Returns plain objects, three to five times faster, but you lose virtuals, getters, setters and <code>save()</code>. Always use it on read-only list endpoints.</td></tr>
+<tr><td><code>populate()</code> vs <code>$lookup</code></td><td>populate is a second query from the app; <code>$lookup</code> is a server-side join. populate is easier and lets you cache the child separately; <code>$lookup</code> avoids the round trip. Neither scales across shards.</td></tr>
+<tr><td>How do you export a million rows?</td><td>A cursor streamed to the response with backpressure, never an array in memory. Read from a secondary, use <code>lean()</code> and a projection.</td></tr>
+<tr><td>NoSQL injection in Express</td><td>A JSON body can smuggle operators, for example <code>{"password":{"$ne":null}}</code>. Validate and coerce every input with Zod or Joi before it touches a query.</td></tr>
+<tr><td>How do you handle schema migrations?</td><td>Additive changes first, dual-read with a <code>_v</code> field, backfill in batches with <code>bulkWrite</code> and a rate limit, then flip the write path, then clean up. Never a blocking <code>updateMany</code> over 50M rows.</td></tr>
+</table>
+
+<h3>Round 8: the gotcha questions</h3>
+<table>
+<tr><th>Question</th><th>Compressed answer</th></tr>
+<tr><td>Why did my <code>$ne</code> query return documents without the field?</td><td>A missing field is not equal to the value, so it matches. Add <code>$exists:true</code>.</td></tr>
+<tr><td>Why does <code>{"a.b":1,"a.c":2}</code> behave oddly on arrays?</td><td>Different array elements can satisfy each clause. Use <code>$elemMatch</code>.</td></tr>
+<tr><td>Why is my sort returning inconsistent pages?</td><td>The sort key is not unique, so ties order arbitrarily across queries. Always add <code>_id</code> as the final tiebreaker.</td></tr>
+<tr><td>Why did <code>updateMany</code> lock up the server?</td><td>It is not a single atomic operation; it yields between documents, so other writes interleave and the oplog floods. Batch it.</td></tr>
+<tr><td>Why is <code>countDocuments</code> slow?</td><td>It genuinely counts matching documents. Use a covered index, a maintained counter, or the estimate when no filter is needed.</td></tr>
+<tr><td>Why did my unique index creation fail?</td><td>Existing duplicates. Find them with a <code>$group</code> plus <code>$match: {n:{$gt:1}}</code>, resolve, then build.</td></tr>
+<tr><td>Why did the TTL not delete on time?</td><td>The sweeper runs once a minute and only on the primary, and it is best effort under load. TTL means eventually, not exactly.</td></tr>
+<tr><td>Why is an upsert inserting duplicates?</td><td>Concurrent upserts on a non-unique filter both insert. A unique index on the filter fields is what actually makes upsert safe.</td></tr>
+</table>
+
+<h3>Round 9: the open-ended design prompts</h3>
+<ol>
+<li>Design the data model for a food delivery app. Orders, live driver location, restaurant menus.</li>
+<li>Design an e-commerce catalogue with faceted search over 10M products and per-tenant custom attributes.</li>
+<li>Design a leaderboard updated in real time for 5M players.</li>
+<li>Design an HRMS leave and attendance module. Multi-tenant, audit trail, per-tenant policy rules.</li>
+<li>Your 2 TB collection needs a new required field. Zero downtime. How?</li>
+<li>Reads doubled overnight and p99 latency tripled. Walk me through the first thirty minutes.</li>
+<li>Design rate limiting backed by MongoDB. Then tell me why Redis is better.</li>
+<li>Migrate a relational orders schema with six tables into MongoDB. What merges, what stays separate.</li>
+</ol>
+<div class="box">
+<span class="label">How to answer any of these</span>
+<ol>
+<li><b>Clarify</b> scale, read/write ratio, latency budget, consistency needs. Two questions, not ten.</li>
+<li><b>List the access patterns</b> out loud before drawing a single document.</li>
+<li><b>Shape the documents</b> around the hot reads, naming the pattern you are using.</li>
+<li><b>State the indexes</b>, in ESR order, and the shard key with its four-axis justification.</li>
+<li><b>Name the trade-off and the failure mode</b>, then say what breaks at 10x and what you would change.</li>
+</ol>
+</div>
+
+<h2 class="sec" id="redflag">Red flags and power phrases</h2>
+<div class="grade">
+<div class="mid"><b>Never say</b>
+<ul style="margin:0;padding-left:18px">
+<li>"MongoDB is schemaless." It is schema-flexible, and production systems enforce a schema.</li>
+<li>"It doesn't support joins." It has <code>$lookup</code>, <code>$graphLookup</code> and <code>$unionWith</code>.</li>
+<li>"It doesn't support transactions." Multi-document ACID since 4.0, sharded since 4.2.</li>
+<li>"I'd add an index" as a complete answer, with no mention of measuring first.</li>
+<li>"I'd use skip for pagination."</li>
+</ul>
+</div>
+<div class="snr"><b>Say instead</b>
+<ul style="margin:0;padding-left:18px">
+<li>"I'd design the schema around the access patterns, so let me ask what the read path looks like first."</li>
+<li>"Let me check <code>explain</code> before I change anything."</li>
+<li>"That works, but it breaks at 10x because..."</li>
+<li>"I'd avoid the transaction here by making this a single atomic document update."</li>
+<li>"That's a denormalisation trade-off: faster reads, and here is how I keep it consistent."</li>
+</ul>
+</div>
+</div>
+
+<div class="box">
+<span class="label">The closing move</span>
+Every design answer should end with the trade-off you accepted and the failure mode you are watching. Interviewers hire the person who volunteers what breaks, not the person with the tidiest diagram.
+</div>
+
+</main>
+</div>
+</body>
+</html>
